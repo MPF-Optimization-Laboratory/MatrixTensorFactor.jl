@@ -1,7 +1,7 @@
 """
 Matrix-Tensor Factorization
 """
-module MTF
+module MatrixTensorFactor
 using LinearAlgebra: norm
 using Plots: plot
 using Statistics: mean, median
@@ -18,4 +18,4 @@ export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 include("utils.jl")
 include("matrixtensorfactorize.jl")
 
-end # MTF
+end
