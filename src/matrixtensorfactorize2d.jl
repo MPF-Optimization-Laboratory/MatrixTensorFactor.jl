@@ -1,10 +1,15 @@
 #=
 Holds the block coordinate decent factorization function
 and related helpers
+
+Temporarily make a separate BCD function so I can tweak it independently of the original
+code before merging
+# TODO merge code
+
 =#
 
 """
-    nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
+    nnmtf2d(Y::Abstract3Tensor, R::Integer; kwargs...)
 
 Non-negatively matrix-tensor factorizes an order 3 tensor Y with a given "rank" R.
 
@@ -32,7 +37,7 @@ Note there may NOT be a unique optimal solution
 - `norm_grad::Vector{Float64}`: norm of the full gradient at each iteration
 - `dist_Ncone::Vector{Float64}`: distance of the -gradient to the normal cone at each iteration
 """
-function nnmtf(
+function nnmtf2d(
     Y::Abstract3Tensor,
     R::Integer;
     maxiter::Integer=1000,
@@ -50,7 +55,7 @@ function nnmtf(
     C = init(M, R)
     F = init(R, N, P)
 
-    rescaleCF!(C, F)
+    rescaleCF2!(C, F)
 
     problem_size = R*(M + N*P)
 
@@ -67,7 +72,7 @@ function nnmtf(
     dist_Ncone = zeros(maxiter)
 
     # Calculate initial relative error and gradient
-    rel_errors[i] = mean_rel_error(Y, C*F)
+    rel_errors[i] = mean_rel_error(Y, C*F, dims=1)
     grad_C, grad_F = calc_gradient(C, F, Y)
     norm_grad[i] = combined_norm(grad_C, grad_F)
     dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
@@ -86,11 +91,11 @@ function nnmtf(
         updateC!(C, F, Y)
         updateF!(C, F, Y)
 
-        rescale_CF ? rescaleCF!(C, F) : nothing
+        rescale_CF ? rescaleCF2!(C, F) : nothing
 
         # Calculate relative error and norm of gradient
         i += 1
-        rel_errors[i] = mean_rel_error(C*F, Y)
+        rel_errors[i] = mean_rel_error(C*F, Y, dims=1)
         grad_C, grad_F = calc_gradient(C, F, Y)
         norm_grad[i] = combined_norm(grad_C, grad_F)
         dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
@@ -186,15 +191,15 @@ return grad_C, grad_F
 =#
 
 """Rescales C and F so each factor (horizontal slices) of F has similar magnitude."""
-function rescaleCF!(C, F)
-    fiber_sums = sum.(eachslice(F, dims=(1,2)))
-    avg_factor_sums = mean.(eachrow(fiber_sums))
+function rescaleCF2!(C, F)
+    fiber_sums = sum.(eachslice(F, dims=1))
+    #avg_factor_sums = mean.(eachrow(fiber_sums))
 
     F_horizontal_slices = eachslice(F, dims=1)
-    F_horizontal_slices ./= avg_factor_sums
+    F_horizontal_slices ./= fiber_sums
 
     C_rows = eachcol(C)
-    C_rows .*= avg_factor_sums
+    C_rows .*= fiber_sums
 end
 
 function rescaleY(Y)

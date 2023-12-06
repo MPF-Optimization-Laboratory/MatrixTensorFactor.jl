@@ -39,3 +39,6 @@ f = kdes[1] # the first estimated kernel
 
 p = plot(f.x, f.y, f.density)
 display(p)
+
+"""
+"""
