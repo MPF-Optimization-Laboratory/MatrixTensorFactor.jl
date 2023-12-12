@@ -47,9 +47,9 @@ end
 
 const f_tape = GradientTape(f, (a,b))
 const compiled_f_tape = compile(f_tape)
+#u,v = (similar(a), similar(b))
 
-∇f(a,b) = gradient!((similar(a), similar(b)), compiled_f_tape, (a, b))
-
+∇f(a,b) = gradient(compiled_f_tape, (a, b))
 grad_a, grad_b = ∇f(a,b)
 
 ########

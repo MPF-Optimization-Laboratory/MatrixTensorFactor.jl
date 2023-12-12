@@ -185,17 +185,23 @@ CFY = C*F .- Y
 return grad_C, grad_F
 =#
 
-"""Rescales C and F so each factor (horizontal slices) of F has similar magnitude."""
-function rescaleCF!(C, F)
-    fiber_sums = sum.(eachslice(F, dims=(1,2)))
+"""Rescales A and B so each factor (horizontal slices) of B has similar magnitude."""
+function rescaleCF!(A, B)
+    fiber_sums = sum.(eachslice(B, dims=(1,2)))
     avg_factor_sums = mean.(eachrow(fiber_sums))
 
-    F_horizontal_slices = eachslice(F, dims=1)
+    F_horizontal_slices = eachslice(B, dims=1)
     F_horizontal_slices ./= avg_factor_sums
 
-    C_rows = eachcol(C)
+    C_rows = eachcol(A)
     C_rows .*= avg_factor_sums
 end
+
+#function rescale2CF!(A, B)
+#    C = sum.(eachslice(B, dims=(1,2)))
+#    B ./= C
+#    A .= A * C
+#end
 
 function rescaleY(Y)
     fiber_sums = sum.(eachslice(Y, dims=(1,2)))
