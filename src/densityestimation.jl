@@ -30,9 +30,9 @@ function default_bandwidth(
     )
 
     # Filter outliers, remove values outside the inner percentile
-    #if inner_percentile < 100
-    #    data = _inner_percentile(data, inner_percentile)
-    #end
+    if inner_percentile < 100
+        data = _inner_percentile(data, inner_percentile)
+    end
 
     # Determine length of data
     ndata = length(data)

@@ -18,7 +18,7 @@ export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 
 export DEFAULT_ALPHA, DEFAULT_N_SAMPLES # Constants
 export default_bandwidth, make_densities, standardize_KDEs # Functions
-export repeatcoord, kde2d, coordzip # Functions
+export repeatcoord, kde2d, coordzip # 2d density estimation functions
 
 include("utils.jl")
 include("matrixtensorfactorize.jl")
