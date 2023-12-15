@@ -4,7 +4,7 @@ Matrix-Tensor Factorization
 module MatrixTensorFactor
 using LinearAlgebra: norm
 using Plots: plot
-using Statistics: mean, median
+using Statistics: mean, median, quantile, std
 using Random: randn
 using Einsum: @einsum
 using KernelDensity
