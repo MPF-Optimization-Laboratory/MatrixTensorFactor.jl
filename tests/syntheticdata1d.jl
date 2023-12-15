@@ -28,9 +28,9 @@ f = kdes[1] # the first estimated kernel
 p = plot(f.x, f.density)
 display(p)
 
-######################################
-#   NNMTF - 1 Feature - Perfect KDE  #
-######################################
+############################################
+#   NNMTF - 1 Feature - Perfect Densities  #
+############################################
 
 # Three sources, all normal
 R = 3
@@ -84,9 +84,10 @@ C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R, tol=1e-6)
 F ./= Δx # Rescale factors
 
 # Plot learned factors
-heatmap(C, yflip=true)
+heatmap(C, yflip=true, title="Learned Coefficients")
+heatmap(C, yflip=true, title="True Coefficients") # possibly permuted order
 
-p=plot(x, F[1,1,:])
+p=plot(x, F[1,1,:], title="Learned Sources")
 plot!(x, F[2, 1,:])
 plot!(x, F[3, 1,:])
 display(p)
