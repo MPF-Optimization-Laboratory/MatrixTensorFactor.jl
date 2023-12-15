@@ -65,7 +65,7 @@ distribution4 = MixtureModel([sources...], p4)
 distribution5 = MixtureModel([sources...], p5)
 
 # One mixture density
-heatmap(x,y, pdf.((distribution2,), xy)) |> display
+heatmap(x,y, pdf.((distribution5,), xy)) |> display
 
 distributions = [distribution1, distribution2, distribution3, distribution4, distribution5]
 
