@@ -17,7 +17,7 @@ export combined_norm, dist_to_Ncone, nnmtf, nnmtf2d, plot_factors, rel_error, me
 export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 
 export DEFAULT_ALPHA, DEFAULT_N_SAMPLES # Constants
-export default_bandwidth, make_densities, standardize_KDEs # Functions
+export default_bandwidth, make_densities, standardize_KDEs, filter_inner_percentile# Functions
 export repeatcoord, kde2d, coordzip # 2d density estimation functions
 
 include("utils.jl")

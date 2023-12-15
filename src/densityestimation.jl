@@ -1,7 +1,7 @@
 """
 Filters elements so only the ones in the inner P percentile remain.
 """
-_inner_percentile(v, P) = filter(_inrange(v, P), v)
+filter_inner_percentile(v, P) = filter(_inrange(v, P), v)
 
 """
 Returns a function that checks if a value is in the inner P percentile of the values in v.
@@ -31,7 +31,7 @@ function default_bandwidth(
 
     # Filter outliers, remove values outside the inner percentile
     if inner_percentile < 100
-        data = _inner_percentile(data, inner_percentile)
+        data = filter_inner_percentile(data, inner_percentile)
     end
 
     # Determine length of data
@@ -93,7 +93,7 @@ function make_densities(
     #for (i, (measurement_values, b)) in enumerate(zip(data, bandwidths))
     for (i, measurement_values) in enumerate(data)
         # Estimate density based on the inner precentile to ignore outliers
-        #measurement_values = _inner_percentile(measurement_values, inner_percentile)
+        #measurement_values = filter_inner_percentile(measurement_values, inner_percentile)
         density_estimates[i] = kde(measurement_values)#, bandwidth=b)
     end
 
