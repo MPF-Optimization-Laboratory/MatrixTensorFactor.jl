@@ -78,7 +78,7 @@ Y .*= Δx * Δy # Scale factors
 sum.(eachslice(Y, dims=1)) # should all be 1
 
 # Perform decomposition
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R, tol=1e-6)
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf2d(Y, R, tol=1e-6)
 F ./= Δx * Δy # Rescale factors
 
 # Plot learned factors
@@ -88,7 +88,6 @@ heatmap(C_true, yflip=true, title="True Coefficients") |> display # possibly per
 heatmap(x, y, F[1,:,:], title="Learned Source 1") |> display
 heatmap(x, y, F[2,:,:], title="Learned Source 2") |> display
 heatmap(x, y, F[3,:,:], title="Learned Source 3") |> display
-
 
 # Plot convergence
 plot(rel_errors[2:end], yaxis=:log10) |> display

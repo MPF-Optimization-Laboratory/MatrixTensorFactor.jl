@@ -89,6 +89,8 @@ function nnmtf2d(
     norm_grad = norm_grad[keep_slice]
     dist_Ncone = dist_Ncone[keep_slice]
 
+    # Skip rescaling to original Y since any weight is automaticaly moved to C
+    #=
     # Rescale F back if Y was initialy scaled
     if rescale_Y
         # Compare:
@@ -98,6 +100,7 @@ function nnmtf2d(
         F_lateral_slices = eachslice(F, dims=2)
         F_lateral_slices .*= slice_sums
     end
+    =#
 
     return C, F, rel_errors, norm_grad, dist_Ncone
 end
