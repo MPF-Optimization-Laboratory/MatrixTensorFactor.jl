@@ -13,29 +13,11 @@ code before merging
 
 Non-negatively matrix-tensor factorizes an order 3 tensor Y with a given "rank" R.
 
-Factorizes ``Y \\approx C F`` where ``\\displaystyle Y[i,j,k] \\approx \\sum_{r=1}^R C[i,r]*F[r,j,k]``
-and the factors ``C, F \\geq 0`` are nonnegative.
-
-Note there may NOT be a unique optimal solution
-
-# Arguments
-- `Y::Abstract3Tensor`: tensor to factorize
-- `R::Integer`: rank to factorize Y (size(C)[2] and size(F)[1])
-
-# Keywords
-- `maxiter::Integer=100`: maxmimum number of iterations
-- `tol::Real=1e-3`: desiered tolerance for the -gradient's distance to the normal cone
-- `rescale_CF::Bool=true`: scale F at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
-- `rescale_Y::Bool=true`: Preprocesses the input `Y` to have normalized 3-fiber sums (on average), and rescales the final `F` so `Y=C*F`.
-- `plot_F::Integer=0`: if not 0, plot F every plot_F iterations
-- `names::AbstractVector{String}=String[]`: names of the slices of F to use for ploting
-
-# Returns
-- `C::Matrix{Float64}`: the matrix C in the factorization Y ≈ C * F
-- `F::Array{Float64, 3}`: the tensor F in the factorization Y ≈ C * F
-- `rel_errors::Vector{Float64}`: relative errors at each iteration
-- `norm_grad::Vector{Float64}`: norm of the full gradient at each iteration
-- `dist_Ncone::Vector{Float64}`: distance of the -gradient to the normal cone at each iteration
+Similar to [`nnmtf`](@ref) but the renormalization occurs on the horizontal slices of
+the tensors Y and F, rather than the 3-fibre sums. That is,
+- sum(Y[i,:,:]) is 1 for all i
+- sum(F[r,:,:]) is 1 for all r
+rather than sum(Y[i,j,:]) being 1 for all i and j.
 """
 function nnmtf2d(
     Y::Abstract3Tensor,
@@ -62,7 +44,7 @@ function nnmtf2d(
     # Scale Y if desired
     if rescale_Y
         # Y_input = copy(Y)
-        Y, avg_fiber_sums = rescaleY(Y)
+        Y, slice_sums = rescaleY2(Y)
     end
 
     # Initialize Looping
@@ -114,12 +96,12 @@ function nnmtf2d(
         # Y_input ≈ C * F_rescaled
         #       Y ≈ C * F (Here, Y and F have normalized fibers)
         F_lateral_slices = eachslice(F, dims=2)
-        F_lateral_slices .*= avg_fiber_sums
+        F_lateral_slices .*= slice_sums
     end
 
     return C, F, rel_errors, norm_grad, dist_Ncone
 end
-
+#=
 """
     dist_to_Ncone(grad_C, grad_F, C, F)
 
@@ -180,7 +162,7 @@ function calc_gradient(C, F, Y)
     grad_F = CC*F .- C'*Y
     return grad_C, grad_F
 end
-
+=#
 # Could compute the gradients this way to reuse CF-Y,
 # but the first way is still faster!
 #=
@@ -202,11 +184,11 @@ function rescaleCF2!(C, F)
     C_rows .*= fiber_sums
 end
 
-function rescaleY(Y)
-    fiber_sums = sum.(eachslice(Y, dims=(1,2)))
-    avg_fiber_sums = mean.(eachcol(fiber_sums))
+function rescaleY2(Y)
+    slice_sums = sum.(eachslice(Y, dims=1))
+    #avg_fiber_sums = mean.(eachcol(fiber_sums))
     Yscaled = copy(Y)
-    Y_lateral_slices = eachslice(Yscaled, dims=2)
-    Y_lateral_slices ./= avg_fiber_sums
-    return Yscaled, avg_fiber_sums
+    #Y_lateral_slices = eachslice(Yscaled, dims=2)
+    Y ./= slice_sums
+    return Yscaled, slice_sums
 end
