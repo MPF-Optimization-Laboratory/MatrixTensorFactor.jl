@@ -118,7 +118,7 @@ const DEFAULT_N_SAMPLES = 64::Integer
 
 Resample the densities so they all are smapled from the same domain.
 """
-function standardize_KDEs(KDEs::AbstractVecOrMat{<:UnivariateKDE}; n_samples=DEFAULT_N_SAMPLES,)
+function standardize_KDEs(KDEs; n_samples=DEFAULT_N_SAMPLES,)
     a = minimum(d -> d.x[begin], KDEs) # smallest left endpoint
     b = maximum(d -> d.x[end]  , KDEs) # biggest right endpoint
 
