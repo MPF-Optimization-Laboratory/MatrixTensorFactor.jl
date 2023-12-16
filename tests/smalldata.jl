@@ -3,23 +3,18 @@ using SparseArrays
 using KernelDensity
 using Plots
 using MatrixTensorFactor
-#using SparseMatricesCSR
 
 include("..\\src\\densityestimation2d.jl") # TODO update to use package
 
-fid = h5open("testdata\\very_small_9_5.h5ad","r")
-coordinates = fid["obsm"]["spatial"] |> read
-count = fid["layers"]["count"] |> read
-close(fid)
+fid2 = h5open("testdata\\smalldata.h5ad","r")
+coordinates = fid2["coordinates"] |> read
+M = fid2["count_matrix"] |> read
+close(fid2)
 
-m,n = 4180,4021 # number of cells x number of genes (features)
-# Note we use n,m becuase these are stored in CSR format
-M=SparseMatrixCSC(n,m,count["indptr"] .+ 1, count["indices"] .+ 1, count["data"])
-
-V = collect(M) # Dense
-# Each row of V is the values for a gene
-# Ex. V[1,:] gives the values for the first gene
+# Each row of M is the values for a gene
+# Ex. M[1,:] gives the values for the first gene
 # The different columns corrispond to the coordinates the genes are sampled at:
+
 xs, ys = coordinates[1,:], -coordinates[2,:]
 
 begin
