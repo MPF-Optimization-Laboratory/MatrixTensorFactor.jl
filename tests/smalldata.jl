@@ -11,6 +11,9 @@ coordinates = fid2["coordinates"] |> read
 M = fid2["count_matrix"] |> read
 close(fid2)
 
+m,n = 4180,4021 # number of cells x number of genes (features)
+# Note we use n,m becuase these are stored in CSR format
+
 # Each row of M is the values for a gene
 # Ex. M[1,:] gives the values for the first gene
 # The different columns corrispond to the coordinates the genes are sampled at:
