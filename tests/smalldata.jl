@@ -11,6 +11,8 @@ coordinates = fid2["coordinates"] |> read
 M = fid2["count_matrix"] |> read
 close(fid2)
 
+M = sparse(M) #cannot store a sparse matrix with h5ad (?)
+
 m,n = 4180,4021 # number of cells x number of genes (features)
 # Note we use n,m becuase these are stored in CSR format
 
