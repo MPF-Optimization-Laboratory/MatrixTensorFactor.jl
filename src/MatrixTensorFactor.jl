@@ -13,16 +13,15 @@ using KernelDensity
 using Base: *
 
 export Abstract3Tensor # Types
-export combined_norm, dist_to_Ncone, nnmtf, nnmtf2d, plot_factors, rel_error, mean_rel_error # Functions
+export combined_norm, dist_to_Ncone, nnmtf, nnmtf2d, plot_factors, rel_error, mean_rel_error, residual # Functions
 export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 
-export DEFAULT_ALPHA, DEFAULT_N_SAMPLES # Constants
+export DEFAULT_ALPHA, DEFAULT_N_SAMPLES, IMPLIMENTED_NORMALIZATIONS, IMPLIMENTED_PROJECTIONS # Constants
 export default_bandwidth, make_densities, standardize_KDEs, filter_inner_percentile# Functions
 export repeatcoord, kde2d, coordzip # 2d density estimation functions
 
 include("utils.jl")
 include("matrixtensorfactorize.jl")
-include("matrixtensorfactorize2d.jl")
 include("densityestimation.jl")
 include("densityestimation2d.jl")
 
