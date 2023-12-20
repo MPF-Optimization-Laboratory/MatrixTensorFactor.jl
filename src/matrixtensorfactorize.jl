@@ -13,7 +13,7 @@ struct UnimplimentedError <: Exception end
 - `:slice`: set ``\\sum_{j=1}^J\\sum_{k=1}^K B[r,j,k] = 1`` for all ``r``
 - `:nothing`: does not enforce any normalization of `F`
 """
-IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
+const IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
 
 """
     IMPLIMENTED_PROJECTIONS::Set{Symbol}
@@ -22,7 +22,16 @@ IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
     orthant, 2) shift any weight from `B` to `A` according to normalization. Equivilent to
     :nonnegative when `normalization==:nothing`.
 """
-IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) # nn is nonnegative
+const IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) # nn is nonnegative
+
+"""
+    IMPLIMENTED_CRITERIONS::Set{Symbol}
+
+- `:ncone`: vector-set distance between the -gradient of the objective and the normal cone
+- `:iterates`: A,B before and after one iteration are close in L2 norm
+- `:objective`: objective before and after one iteration is close
+"""
+const IMPLIMENTED_CRITERIONS = Set{Symbol}((:ncone, :iterates, :objective))
 
 """
     nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
@@ -40,13 +49,14 @@ Note there may NOT be a unique optimal solution
 
 # Keywords
 - `maxiter::Integer=100`: maxmimum number of iterations
-- `tol::Real=1e-3`: desiered tolerance for the -gradient's distance to the normal cone
+- `tol::Real=1e-3`: desiered tolerance for the convergence criterion
 - `rescale_CF::Bool=true`: scale F at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
 - `rescale_Y::Bool=true`: Preprocesses the input `Y` to have normalized 3-fiber sums (on average), and rescales the final `F` so `Y=C*F`.
 - `plot_F::Integer=0`: if not 0, plot F every plot_F iterations
 - `names::AbstractVector{String}=String[]`: names of the slices of F to use for ploting
-- `normalize::Symbol=:fibres`: which part of F should be normalized (must be in IMPLIMENTED_NORMALIZATIONS)
-- `projection::Symbol=:nnscale`: what constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
+- `normalize::Symbol=:fibres`: part of F that should be normalized (must be in IMPLIMENTED_NORMALIZATIONS)
+- `projection::Symbol=:nnscale`: constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
+- `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIONS)
 
 # Returns
 - `C::Matrix{Float64}`: the matrix C in the factorization Y ≈ C * F
@@ -102,6 +112,7 @@ function nnmtf_proxgrad(
     names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
+    criterion::Symbol=:ncone,
     kwargs...
 )
     # Override scaling if no normalization is requested
@@ -137,13 +148,14 @@ function nnmtf_proxgrad(
     norm_grad[i] = combined_norm(grad_C, grad_F)
     dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
 
-    # Convergence criteria. We "normalize" the distance vector so the tolerance can be
-    # picked independent of the dimentions of Y and rank R
-    converged(dist_Ncone, i) = dist_Ncone[i]/sqrt(problem_size) < tol
-
+    C_last = copy(C)
+    F_last = copy(F)
     # Main Loop
     # Ensure at least 1 step is performed
-    while (i == 1) || (!converged(dist_Ncone, i) && (i < maxiter))
+    while (i == 1) || (!converged(dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion) && (i < maxiter))
+        C_last = copy(C)
+        F_last = copy(F)
+
         if (plot_F != 0) && ((i-1) % plot_F == 0)
             plot_factors(F, names, appendtitle=" at i=$i")
         end
@@ -196,6 +208,7 @@ function nnmtf_nnscale(
     plot_F::Integer=0,
     names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
+    criterion::Symbol=:ncone,
     kwargs...
 )
     # Override scaling if no normalization is requested
@@ -233,11 +246,16 @@ function nnmtf_nnscale(
 
     # Convergence criteria. We "normalize" the distance vector so the tolerance can be
     # picked independent of the dimentions of Y and rank R
-    converged(dist_Ncone, i) = dist_Ncone[i]/sqrt(problem_size) < tol
+    #converged(dist_Ncone, i) = dist_Ncone[i]/sqrt(problem_size) < tol
 
+    C_last = copy(C)
+    F_last = copy(F)
     # Main Loop
     # Ensure at least 1 step is performed
-    while (i == 1) || (!converged(dist_Ncone, i) && (i < maxiter))
+    while (i == 1) || (!converged(dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion) && (i < maxiter))
+        C_last = copy(C)
+        F_last = copy(F)
+
         if (plot_F != 0) && ((i-1) % plot_F == 0)
             plot_factors(F, names, appendtitle=" at i=$i")
         end
@@ -276,6 +294,20 @@ function nnmtf_nnscale(
     end
 
     return C, F, rel_errors, norm_grad, dist_Ncone
+end
+
+# Convergence criteria. We "normalize" the distance vector so the tolerance can be
+# picked independent of the dimentions of Y and rank R
+function converged(dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion)
+    if !(criterion in IMPLIMENTED_CRITERIONS)
+        return UnimplimentedError("criterion is not an impliment criterion")
+    elseif criterion == :ncone
+        return dist_Ncone[i]/sqrt(problem_size) < tol
+    elseif criterion == :iterates
+        return combined_norm(C - C_last, F - F_last) < tol
+    elseif criterion == :objective
+        return rel_errors[i] < tol
+    end
 end
 
 """

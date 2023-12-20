@@ -33,7 +33,7 @@ heatmap(f.x, f.y, f.density) |> display
 end
 
 # Extract all genes and compile into a tensor
-n_genes = n
+n_genes = 100 #n
 J = K = 2^5 # Number of samples in each dimention
 I = n_genes
 
@@ -60,7 +60,7 @@ Y_slices ./= slice_sums
 
 # Decomposition
 R = 10
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf2d(Y, R;tol=1e-5,maxiter=800, rescale_CF=true,rescale_Y=false);
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;tol=1e-5,maxiter=800, rescale_CF=true,rescale_Y=false);
 
 plot(rel_errors,yaxis=:log10) |> display
 plot(norm_grad,yaxis=:log10) |> display
@@ -85,7 +85,7 @@ for r1 in 1:R
 end
 
 begin
-    gene = 3807
+    gene = 50#3807
     heatmap(Y_hat[gene,:,:]) |> display
     heatmap!(Y[gene,:,:]) |> display
     scatter(Y[gene,:,:][:],Y_hat[gene,:,:][:])
