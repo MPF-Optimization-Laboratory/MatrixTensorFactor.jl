@@ -5,7 +5,6 @@ and related helpers
 
 struct UnimplimentedError <: Exception end
 
-
 """
     IMPLIMENTED_NORMALIZATIONS::Set{Symbol}
 
@@ -14,7 +13,7 @@ struct UnimplimentedError <: Exception end
 - `:slice`: set ``\\sum_{j=1}^J\\sum_{k=1}^K B[r,j,k] = 1`` for all ``r``
 - `:nothing`: does not enforce any normalization of `F`
 """
-IMPLIMENTED_NORMALIZATIONS = {:fibres, :slices, :nothing}
+IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
 
 """
     IMPLIMENTED_PROJECTIONS::Set{Symbol}
@@ -23,7 +22,7 @@ IMPLIMENTED_NORMALIZATIONS = {:fibres, :slices, :nothing}
     orthant, 2) shift any weight from `B` to `A` according to normalization. Equivilent to
     :nonnegative when `normalization==:nothing`.
 """
-IMPLIMENTED_PROJECTIONS = {:nnscale} # nn is nonnegative #:simplex, :nonnegative,
+IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) # nn is nonnegative
 
 """
     nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
@@ -80,20 +79,108 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
 
     if !(projection in IMPLIMENTED_PROJECTIONS)
         return ArgumentError("projection is not an implimented projection")
-    elseif projection == nnscale
+    elseif projection == :nnscale
         return nnmtf_nnscale(Y, R; normalize, kwargs...)
-    elseif projection in {:simplex, :nonnegative}
+    elseif projection in (:simplex, :nonnegative)
         return nnmtf_proxgrad(Y, R; normalize, projection, kwargs...)
     else
         return ErrorException("Something else went wrong")
+    end
 end
 
 """
 nnmtf using proximal (projected) gradient decent alternating through blocks (BCD)
 """
-function nnmtf_proxgrad(Y, R; kwargs...)
-    # TODO
-    return nothing
+function nnmtf_proxgrad(
+    Y::Abstract3Tensor,
+    R::Integer;
+    maxiter::Integer=1000,
+    tol::Real=1e-4,
+    #rescale_Y::Bool=true,
+    #rescale_CF::Bool=true,
+    plot_F::Integer=0,
+    names::AbstractVector{String}=String[],
+    normalize::Symbol=:fibres,
+    projection::Symbol=:nonnegative,
+    kwargs...
+)
+    # Override scaling if no normalization is requested
+    normalize == :nothing ? (rescale_CF = rescale_Y = false) : nothing
+
+    # Extract Dimentions
+    M, N, P = size(Y)
+
+    # Initialize C, F
+    init(x...) = abs.(randn(x...))
+    C = init(M, R)
+    F = init(R, N, P)
+
+    rescaleAB!(C, F; normalize)
+
+    problem_size = R*(M + N*P)
+
+    # # Scale Y if desired
+    # if rescale_Y
+    #     # Y_input = copy(Y)
+    #     Y, factor_sums = rescaleY(Y; normalize)
+    # end
+
+    # Initialize Looping
+    i = 1
+    rel_errors = zeros(maxiter)
+    norm_grad = zeros(maxiter)
+    dist_Ncone = zeros(maxiter)
+
+    # Calculate initial relative error and gradient
+    rel_errors[i] = residual(C*F, Y; normalize)
+    grad_C, grad_F = calc_gradient(C, F, Y)
+    norm_grad[i] = combined_norm(grad_C, grad_F)
+    dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
+
+    # Convergence criteria. We "normalize" the distance vector so the tolerance can be
+    # picked independent of the dimentions of Y and rank R
+    converged(dist_Ncone, i) = dist_Ncone[i]/sqrt(problem_size) < tol
+
+    # Main Loop
+    # Ensure at least 1 step is performed
+    while (i == 1) || (!converged(dist_Ncone, i) && (i < maxiter))
+        if (plot_F != 0) && ((i-1) % plot_F == 0)
+            plot_factors(F, names, appendtitle=" at i=$i")
+        end
+
+        grad_step_C!(C, F, Y)
+        proj!(C; projection, dims=1) # Always want the rows of C normalized regardless of how F is normalized
+        grad_step_F!(C, F, Y)
+        proj!(F; projection, dims=to_dims(normalize))
+
+        # rescale_CF ? rescaleAB!(C, F; normalize) : nothing
+
+        # Calculate relative error and norm of gradient
+        i += 1
+        rel_errors[i] = residual(C*F, Y; normalize)
+        grad_C, grad_F = calc_gradient(C, F, Y)
+        norm_grad[i] = combined_norm(grad_C, grad_F)
+        dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
+    end
+
+    # Chop Excess
+    keep_slice = 1:i
+    rel_errors = rel_errors[keep_slice]
+    norm_grad = norm_grad[keep_slice]
+    dist_Ncone = dist_Ncone[keep_slice]
+
+    # Rescale F back if Y was initialy scaled
+    # Only valid if we rescale fibres
+    # if rescale_Y && normalize == :fibres
+    #     # Compare:
+    #     # If F_rescaled := avg_factor_sums * F,
+    #     # Y_input ≈ C * F_rescaled
+    #     #       Y ≈ C * F (Here, Y and F have normalized fibers)
+    #     F_lateral_slices = eachslice(F, dims=2)
+    #     F_lateral_slices .*= factor_sums
+    # end
+
+    return C, F, rel_errors, norm_grad, dist_Ncone
 end
 
 """
@@ -109,6 +196,7 @@ function nnmtf_nnscale(
     plot_F::Integer=0,
     names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
+    kwargs...
 )
     # Override scaling if no normalization is requested
     normalize == :nothing ? (rescale_CF = rescale_Y = false) : nothing
@@ -154,8 +242,11 @@ function nnmtf_nnscale(
             plot_factors(F, names, appendtitle=" at i=$i")
         end
 
-        updateC!(C, F, Y)
-        updateF!(C, F, Y)
+        grad_step_C!(C, F, Y)
+        C .= ReLU.(C) # nnproject
+
+        grad_step_F!(C, F, Y)
+        F .= ReLU.(F) # nnproject
 
         rescale_CF ? rescaleAB!(C, F; normalize) : nothing
 
@@ -188,6 +279,22 @@ function nnmtf_nnscale(
 end
 
 """
+Converts the symbol normalize to the dimention(s) used to iterate or process the second
+array F.
+"""
+function to_dims(normalize::Symbol)
+    if normalize == :fibres
+        return (1, 2)
+    elseif normalize == :slices
+        return 1
+    elseif normalize == :nothing
+        return nothing
+    else
+        return UnimplimentedError("normalize is not an implimented normalization")
+    end
+end
+
+"""
     residual(Yhat, Y; normalize=:nothing)
 
 Wrapper to use the relative error calculation according to the normalization used.
@@ -199,14 +306,33 @@ Wrapper to use the relative error calculation according to the normalization use
 See also [`rel_error`](@ref), [`mean_rel_error`](@ref).
 """
 function residual(Yhat, Y; normalize=:nothing)
-    if normalize == :fibres
-        return mean_rel_error(Yhat, Y; dims=(1,2))
-    elseif normalize == :slices
-        return mean_rel_error(Yhat, Y; dims=1)
+    if normalize in (:fibres, :slices)
+        return mean_rel_error(Yhat, Y; dims=to_dims(normalize))
     elseif normalize == :nothing
         return rel_error(Yhat, Y)
     else
         return UnimplimentedError("normalize is not an implimented normalization")
+    end
+end
+
+"""
+    proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
+
+Projects X according to projection.
+
+When using the simplex projection, ensures each slice along dims is normalized.
+"""
+function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
+    if projection in (:nonnegative, :nnscale)
+        X .= ReLU.(X)
+
+    elseif projection == :simplex
+        if isnothing(dims)
+            return ArgumentError("normalize == :nothing and projection == :simplex are uncompatible. Unsure what which part of X should be projected to the simplex.")
+        else
+            X_slices = eachslice(X; dims)
+            X_slices .= projsplx.(X_slices)
+        end
     end
 end
 
@@ -243,23 +369,20 @@ function plot_factors(F, names=string.(eachindex(F[1,:,1])); appendtitle="")
     end
 end
 
-function updateC!(C, F, Y)
+function grad_step_C!(C, F, Y; step=nothing)
     @einsum FF[s,r] := F[s,j,k]*F[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*F[r,j,k]
-    L = norm(FF)
+    isnothing(step) ? step = 1/norm(FF) : nothing # Lipshitz fallback
     grad = C*FF .- GG
-    C .-= grad ./ L # gradient step
-    C .= ReLU.(C) # project
+    C .-= step .* grad # gradient step
 end
 
-function updateF!(C, F, Y)
+function grad_step_F!(C, F, Y; step=nothing)
     CC = C'C
-    L = norm(CC)
+    isnothing(step) ? step = 1/norm(CC) : nothing # Lipshitz fallback
     grad = CC*F .- C'*Y
-    F .-= grad ./ L # gradient step
-    F .= ReLU.(F) # project
-    #F_fibres = eachslice(F, dims=(1,2))
-    #F_fibres .= projsplx.(F_fibres) # Simplex projection for each fibre in stead of ReLU
+    F .-= step .* grad # gradient step
+    #F .= ReLU.(F) # project
 end
 
 function calc_gradient(C, F, Y)
@@ -284,7 +407,7 @@ return grad_C, grad_F
 function rescaleAB!(A, B; normalize)
     if normalize == :fibres
         _avg_fibre_normalize!(A, B)
-    elseif normalzie == :slices
+    elseif normalize == :slices
         _slice_normalize!(A, B)
     else
         return UnimplimentedException("Other normalizations are not implimented (YET!)")

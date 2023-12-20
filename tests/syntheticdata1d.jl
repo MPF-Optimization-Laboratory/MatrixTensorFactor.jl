@@ -79,20 +79,55 @@ Y = permutedims(Y, (2,3,1))
 Y .*= Δx # Scale factors
 sum.(eachslice(Y, dims=(1,2))) # should all be 1
 
+rel_errors=0
+rel_errors2=0
+
 # Perform decomposition
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R, tol=1e-6)
-F ./= Δx # Rescale factors
+for projection in (:simplex, :nnscale) # First the "correct" way, then our trick
+    C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R; maxiter=5000, tol=1e-8, projection, normalize=:fibres,rescale_Y=false)
+    n_iterations = length(rel_errors)
+    final_rel_error = rel_errors[end]
+    @show projection, n_iterations, final_rel_error
 
-# Plot learned factors
-heatmap(C, yflip=true, title="Learned Coefficients")
-heatmap(C, yflip=true, title="True Coefficients") # possibly permuted order
+    F ./= Δx # Rescale factors
 
-p=plot(x, F[1,1,:], title="Learned Sources")
-plot!(x, F[2, 1,:])
-plot!(x, F[3, 1,:])
-display(p)
+    # Plot learned factors
+    heatmap(C, yflip=true, title="Learned Coefficients")
+    heatmap(C, yflip=true, title="True Coefficients") # possibly permuted order
 
-# Plot convergence
-plot(rel_errors[2:end], yaxis=:log10) |> display
-plot(norm_grad[2:end], yaxis=:log10) |> display
-plot(dist_Ncone[2:end], yaxis=:log10) |> display
+    p=plot(x, F[1,1,:], title="Learned Sources")
+    plot!(x, F[2, 1,:])
+    plot!(x, F[3, 1,:])
+    display(p)
+
+    # Plot convergence
+    plot(rel_errors[2:end], yaxis=:log10) |> display
+    plot(norm_grad[2:end], yaxis=:log10) |> display
+    plot(dist_Ncone[2:end], yaxis=:log10) |> display
+end
+
+for projection in (:simplex,) # First the "correct" way, then our trick
+    C, F, rel_errors2, norm_grad, dist_Ncone = nnmtf(Y, R; maxiter=2000, tol=1e-8, projection, normalize=:fibres,rescale_Y=false)
+    n_iterations = length(rel_errors2)
+    final_rel_error = rel_errors2[end]
+    @show projection, n_iterations, final_rel_error
+
+    F ./= Δx # Rescale factors
+
+    # Plot learned factors
+    heatmap(C, yflip=true, title="Learned Coefficients")
+    heatmap(C, yflip=true, title="True Coefficients") # possibly permuted order
+
+    p=plot(x, F[1,1,:], title="Learned Sources")
+    plot!(x, F[2, 1,:])
+    plot!(x, F[3, 1,:])
+    display(p)
+
+    # Plot convergence
+    plot(rel_errors2[2:end], yaxis=:log10) |> display
+    plot(norm_grad[2:end], yaxis=:log10) |> display
+    plot(dist_Ncone[2:end], yaxis=:log10) |> display
+end
+
+plot(rel_errors[2:end], yaxis=:log10)
+plot!(rel_errors2[2:end], yaxis=:log10)
