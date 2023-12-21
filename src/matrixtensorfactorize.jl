@@ -107,7 +107,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
         return UnimplimentedError("Rank Estimation not implimented (YET!)")
     end
 
-    return _nnmtf_proxgrad(Y, R; normalize, projection, kwargs...)
+    return _nnmtf_proxgrad(Y, R; normalize, projection, criterion, stepsize, kwargs...)
 end
 
 """
@@ -128,9 +128,9 @@ function _nnmtf_proxgrad(
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
     criterion::Symbol=:ncone,
+    stepsize::Symbol=:lipshitz,
     rescale_AB::Bool = (projection == :nnscale ? true : false),
     rescale_Y::Bool = (projection == :nnscale ? true : false),
-    kwargs...
 )
     # Override scaling if no normalization is requested
     normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
@@ -167,9 +167,14 @@ function _nnmtf_proxgrad(
 
     A_last = copy(A)
     B_last = copy(B)
+
+    step = nothing
+
     # Main Loop
-    # Ensure at least 1 step is performed
-    while (i == 1) || (!converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y) && (i < maxiter))
+    while i < maxiter
+        A_last_last = copy(A_last) # for stepsizes that require the last two iterations
+        B_last_last = copy(B_last)
+
         A_last = copy(A)
         B_last = copy(B)
 
@@ -177,9 +182,23 @@ function _nnmtf_proxgrad(
             plot_factors(B, names, appendtitle=" at i=$i")
         end
 
-        grad_step_A!(A, B, Y)
+        if i > 1 && stepsize == :spg
+            grad_A_last_last, _ = calc_gradient(A_last_last, B_last_last, Y)
+            grad_A_last, _ = calc_gradient(A_last, B_last, Y)
+            step = spg_stepsize(A_last, A_last_last, grad_A_last, grad_A_last_last)
+        end
+
+        grad_step_A!(A, B, Y; step)
         proj!(A; projection, dims=1) # Want the rows of A normalized when using :simplex projection
-        grad_step_B!(A, B, Y)
+
+        if i > 1 && stepsize == :spg
+            # note the mixed gradient below because A gets updated before B
+            _, grad_B_last_last = calc_gradient(A_last, B_last_last, Y)
+            _, grad_B_last = calc_gradient(A, B_last, Y)
+            step = spg_stepsize(B_last, B_last_last, grad_B_last, grad_B_last_last)
+        end
+
+        grad_step_B!(A, B, Y; step)
         proj!(B; projection, dims=to_dims(normalize))
 
         rescale_AB ? rescaleAB!(A, B; normalize) : nothing
@@ -190,6 +209,10 @@ function _nnmtf_proxgrad(
         grad_A, grad_B = calc_gradient(A, B, Y)
         norm_grad[i] = combined_norm(grad_A, grad_B)
         dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
+
+        if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
+            break
+        end
     end
 
     # Chop Excess
@@ -336,17 +359,16 @@ end
 function grad_step_A!(A, B, Y; step=nothing)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
-    isnothing(step) ? step = 1/norm(BB) : nothing # Lipshitz fallback
     grad = A*BB .- GG
+    isnothing(step) ? step = 1/norm(BB) : nothing # Lipshitz fallback
     A .-= step .* grad # gradient step
 end
 
 function grad_step_B!(A, B, Y; step=nothing)
     AA = A'A
-    isnothing(step) ? step = 1/norm(AA) : nothing # Lipshitz fallback
     grad = AA*B .- A'*Y
+    isnothing(step) ? step = 1/norm(AA) : nothing # Lipshitz fallback
     B .-= step .* grad # gradient step
-    #B .= ReLU.(B) # project
 end
 
 function calc_gradient(A, B, Y)
