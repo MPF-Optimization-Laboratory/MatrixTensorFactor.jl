@@ -65,9 +65,9 @@ Note there may NOT be a unique optimal solution
 # Keywords
 - `maxiter::Integer=100`: maxmimum number of iterations
 - `tol::Real=1e-3`: desiered tolerance for the convergence criterion
-- `rescale_CF::Bool=true`: scale B at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
+- `rescale_AB::Bool=true`: scale B at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
 - `rescale_Y::Bool=true`: Preprocesses the input `Y` to have normalized 3-fiber sums (on average), and rescales the final `B` so `Y=A*B`.
-- `plot_F::Integer=0`: if not 0, plot B every plot_F iterations
+- `plot_B::Integer=0`: if not 0, plot B every plot_B iterations
 - `names::AbstractVector{String}=String[]`: names of the slices of B to use for ploting
 - `normalize::Symbol=:fibres`: part of B that should be normalized (must be in IMPLIMENTED_NORMALIZATIONS)
 - `projection::Symbol=:nnscale`: constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
@@ -123,17 +123,17 @@ function _nnmtf_proxgrad(
     R::Integer;
     maxiter::Integer=1000,
     tol::Real=1e-4,
-    plot_F::Integer=0,
+    plot_B::Integer=0,
     names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
     criterion::Symbol=:ncone,
-    rescale_CF::Bool = (projection == :nnscale ? true : false),
+    rescale_AB::Bool = (projection == :nnscale ? true : false),
     rescale_Y::Bool = (projection == :nnscale ? true : false),
     kwargs...
 )
     # Override scaling if no normalization is requested
-    normalize == :nothing ? (rescale_CF = rescale_Y = false) : nothing
+    normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
 
     # Extract Dimentions
     M, N, P = size(Y)
@@ -161,9 +161,9 @@ function _nnmtf_proxgrad(
 
     # Calculate initial relative error and gradient
     rel_errors[i] = residual(A*B, Y; normalize)
-    grad_C, grad_F = calc_gradient(A, B, Y)
-    norm_grad[i] = combined_norm(grad_C, grad_F)
-    dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, A, B)
+    grad_A, grad_B = calc_gradient(A, B, Y)
+    norm_grad[i] = combined_norm(grad_A, grad_B)
+    dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
 
     A_last = copy(A)
     B_last = copy(B)
@@ -173,23 +173,23 @@ function _nnmtf_proxgrad(
         A_last = copy(A)
         B_last = copy(B)
 
-        if (plot_F != 0) && ((i-1) % plot_F == 0)
+        if (plot_B != 0) && ((i-1) % plot_B == 0)
             plot_factors(B, names, appendtitle=" at i=$i")
         end
 
-        grad_step_C!(A, B, Y)
+        grad_step_A!(A, B, Y)
         proj!(A; projection, dims=1) # Want the rows of A normalized when using :simplex projection
-        grad_step_F!(A, B, Y)
+        grad_step_B!(A, B, Y)
         proj!(B; projection, dims=to_dims(normalize))
 
-        rescale_CF ? rescaleAB!(A, B; normalize) : nothing
+        rescale_AB ? rescaleAB!(A, B; normalize) : nothing
 
         # Calculate relative error and norm of gradient
         i += 1
         rel_errors[i] = residual(A*B, Y; normalize)
-        grad_C, grad_F = calc_gradient(A, B, Y)
-        norm_grad[i] = combined_norm(grad_C, grad_F)
-        dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, A, B)
+        grad_A, grad_B = calc_gradient(A, B, Y)
+        norm_grad[i] = combined_norm(grad_A, grad_B)
+        dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
     end
 
     # Chop Excess
@@ -301,13 +301,13 @@ function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
 end
 
 """
-    dist_to_Ncone(grad_C, grad_F, A, B)
+    dist_to_Ncone(grad_A, grad_B, A, B)
 
 Calculate the distance of the -gradient to the normal cone of the positive orthant.
 """
-function dist_to_Ncone(grad_C, grad_F, A, B)
-    grad_A_restricted = grad_C[(A .> 0) .|| (grad_C .< 0)]
-    grad_B_restricted = grad_F[(B .> 0) .|| (grad_F .< 0)]
+function dist_to_Ncone(grad_A, grad_B, A, B)
+    grad_A_restricted = grad_A[(A .> 0) .|| (grad_A .< 0)]
+    grad_B_restricted = grad_B[(B .> 0) .|| (grad_B .< 0)]
     return combined_norm(grad_A_restricted, grad_B_restricted)
 end
 
@@ -333,7 +333,7 @@ function plot_factors(B, names=string.(eachindex(B[1,:,1])); appendtitle="")
     end
 end
 
-function grad_step_C!(A, B, Y; step=nothing)
+function grad_step_A!(A, B, Y; step=nothing)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
     isnothing(step) ? step = 1/norm(BB) : nothing # Lipshitz fallback
@@ -341,7 +341,7 @@ function grad_step_C!(A, B, Y; step=nothing)
     A .-= step .* grad # gradient step
 end
 
-function grad_step_F!(A, B, Y; step=nothing)
+function grad_step_B!(A, B, Y; step=nothing)
     AA = A'A
     isnothing(step) ? step = 1/norm(AA) : nothing # Lipshitz fallback
     grad = AA*B .- A'*Y
@@ -353,18 +353,18 @@ function calc_gradient(A, B, Y)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
     AA = A'A
-    grad_C = A*BB .- GG
-    grad_F = AA*B .- A'*Y
-    return grad_C, grad_F
+    grad_A = A*BB .- GG
+    grad_B = AA*B .- A'*Y
+    return grad_A, grad_B
 end
 
 # Could compute the gradients this way to reuse CF-Y,
 # but the first way is still faster!
 #=
 CFY = A*B .- Y
-@einsum grad_C[i,r] := CFY[i,j,k]*B[r,j,k]
-@einsum grad_F[r,j,k] := A[i,r]*CFY[i,j,k]
-return grad_C, grad_F
+@einsum grad_A[i,r] := CFY[i,j,k]*B[r,j,k]
+@einsum grad_B[r,j,k] := A[i,r]*CFY[i,j,k]
+return grad_A, grad_B
 =#
 
 """Rescales A and B so each factor (horizontal slices) of B has similar magnitude."""
