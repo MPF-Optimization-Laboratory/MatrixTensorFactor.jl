@@ -34,6 +34,14 @@ const IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) 
 const IMPLIMENTED_CRITERIONS = Set{Symbol}((:ncone, :iterates, :objective))
 
 """
+    IMPLIMENTED_STEPSIZES::Set{Symbol}
+
+- `:lipshitz`: gradient step 1/L for lipshitz constant L
+- `:spg`: spectral projected gradient stepsize
+"""
+const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipshitz, :spg))
+
+"""
     nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
 
 Non-negatively matrix-tensor factorizes an order 3 tensor Y with a given "rank" R.
@@ -77,42 +85,35 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
         return UnimplimentedError("Rank Estimation not implimented (YET!)")
     end
 
-    # if !(normalize in IMPLIMENTED_NORMALIZATIONS)
-    #     return ArgumentError("normalize is not an implimented normalization")
-    # elseif normalize == :fibres
-    #     return nnmtf_fibre(Y, R; kwargs...)
-    # elseif normalize == :slices
-    #     return nnmtf2d(Y, R; kwargs...)
-    # else
-    #     return ErrorException("Something went wrong.")
-    # end
-
     if !(projection in IMPLIMENTED_PROJECTIONS)
         return ArgumentError("projection is not an implimented projection")
-    elseif projection == :nnscale
-        return nnmtf_nnscale(Y, R; normalize, kwargs...)
-    elseif projection in (:simplex, :nonnegative)
-        return nnmtf_proxgrad(Y, R; normalize, projection, kwargs...)
+    elseif !(normalize in IMPLIMENTED_NORMALIZATIONS)
+            return ArgumentError("normalize is not an implimented normalization")
     else
-        return ErrorException("Something else went wrong")
+        return _nnmtf_proxgrad(Y, R; normalize, projection, kwargs...)
     end
 end
 
 """
 nnmtf using proximal (projected) gradient decent alternating through blocks (BCD)
+
+Explination of argument handeling:
+- if normalize == :nothing, we do not want any rescaling at all
+- if projection == :nnscale, we should by default, rescale the factors
+- if projection is anything else, we should not, by default, rescale the factors
 """
-function nnmtf_proxgrad(
+function _nnmtf_proxgrad(
     Y::Abstract3Tensor,
     R::Integer;
     maxiter::Integer=1000,
     tol::Real=1e-4,
-    #rescale_Y::Bool=true,
-    #rescale_CF::Bool=true,
     plot_F::Integer=0,
     names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
     criterion::Symbol=:ncone,
+    rescale_CF::Bool = (projection == :nnscale ? true : false),
+    rescale_Y::Bool = (projection == :nnscale ? true : false),
     kwargs...
 )
     # Override scaling if no normalization is requested
@@ -131,102 +132,6 @@ function nnmtf_proxgrad(
     problem_size = R*(M + N*P)
 
     # # Scale Y if desired
-    # if rescale_Y
-    #     # Y_input = copy(Y)
-    #     Y, factor_sums = rescaleY(Y; normalize)
-    # end
-
-    # Initialize Looping
-    i = 1
-    rel_errors = zeros(maxiter)
-    norm_grad = zeros(maxiter)
-    dist_Ncone = zeros(maxiter)
-
-    # Calculate initial relative error and gradient
-    rel_errors[i] = residual(C*F, Y; normalize)
-    grad_C, grad_F = calc_gradient(C, F, Y)
-    norm_grad[i] = combined_norm(grad_C, grad_F)
-    dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
-
-    C_last = copy(C)
-    F_last = copy(F)
-    # Main Loop
-    # Ensure at least 1 step is performed
-    while (i == 1) || (!converged(dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion) && (i < maxiter))
-        C_last = copy(C)
-        F_last = copy(F)
-
-        if (plot_F != 0) && ((i-1) % plot_F == 0)
-            plot_factors(F, names, appendtitle=" at i=$i")
-        end
-
-        grad_step_C!(C, F, Y)
-        proj!(C; projection, dims=1) # Always want the rows of C normalized regardless of how F is normalized
-        grad_step_F!(C, F, Y)
-        proj!(F; projection, dims=to_dims(normalize))
-
-        # rescale_CF ? rescaleAB!(C, F; normalize) : nothing
-
-        # Calculate relative error and norm of gradient
-        i += 1
-        rel_errors[i] = residual(C*F, Y; normalize)
-        grad_C, grad_F = calc_gradient(C, F, Y)
-        norm_grad[i] = combined_norm(grad_C, grad_F)
-        dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
-    end
-
-    # Chop Excess
-    keep_slice = 1:i
-    rel_errors = rel_errors[keep_slice]
-    norm_grad = norm_grad[keep_slice]
-    dist_Ncone = dist_Ncone[keep_slice]
-
-    # Rescale F back if Y was initialy scaled
-    # Only valid if we rescale fibres
-    # if rescale_Y && normalize == :fibres
-    #     # Compare:
-    #     # If F_rescaled := avg_factor_sums * F,
-    #     # Y_input ≈ C * F_rescaled
-    #     #       Y ≈ C * F (Here, Y and F have normalized fibers)
-    #     F_lateral_slices = eachslice(F, dims=2)
-    #     F_lateral_slices .*= factor_sums
-    # end
-
-    return C, F, rel_errors, norm_grad, dist_Ncone
-end
-
-"""
-nnmtf using the nnscale method to enforce (encourage?) the constraint
-"""
-function nnmtf_nnscale(
-    Y::Abstract3Tensor,
-    R::Integer;
-    maxiter::Integer=1000,
-    tol::Real=1e-4,
-    rescale_Y::Bool=true,
-    rescale_CF::Bool=true,
-    plot_F::Integer=0,
-    names::AbstractVector{String}=String[],
-    normalize::Symbol=:fibres,
-    criterion::Symbol=:ncone,
-    kwargs...
-)
-    # Override scaling if no normalization is requested
-    normalize == :nothing ? (rescale_CF = rescale_Y = false) : nothing
-
-    # Extract Dimentions
-    M, N, P = size(Y)
-
-    # Initialize C, F
-    init(x...) = abs.(randn(x...))
-    C = init(M, R)
-    F = init(R, N, P)
-
-    rescaleAB!(C, F; normalize)
-
-    problem_size = R*(M + N*P)
-
-    # Scale Y if desired
     if rescale_Y
         # Y_input = copy(Y)
         Y, factor_sums = rescaleY(Y; normalize)
@@ -244,15 +149,11 @@ function nnmtf_nnscale(
     norm_grad[i] = combined_norm(grad_C, grad_F)
     dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
 
-    # Convergence criteria. We "normalize" the distance vector so the tolerance can be
-    # picked independent of the dimentions of Y and rank R
-    #converged(dist_Ncone, i) = dist_Ncone[i]/sqrt(problem_size) < tol
-
     C_last = copy(C)
     F_last = copy(F)
     # Main Loop
     # Ensure at least 1 step is performed
-    while (i == 1) || (!converged(dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion) && (i < maxiter))
+    while (i == 1) || (!converged(; dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion) && (i < maxiter))
         C_last = copy(C)
         F_last = copy(F)
 
@@ -261,10 +162,9 @@ function nnmtf_nnscale(
         end
 
         grad_step_C!(C, F, Y)
-        C .= ReLU.(C) # nnproject
-
+        proj!(C; projection, dims=1) # Always want the rows of C normalized regardless of how F is normalized
         grad_step_F!(C, F, Y)
-        F .= ReLU.(F) # nnproject
+        proj!(F; projection, dims=to_dims(normalize))
 
         rescale_CF ? rescaleAB!(C, F; normalize) : nothing
 
@@ -298,7 +198,7 @@ end
 
 # Convergence criteria. We "normalize" the distance vector so the tolerance can be
 # picked independent of the dimentions of Y and rank R
-function converged(dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion)
+function converged(; dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion)
     if !(criterion in IMPLIMENTED_CRITERIONS)
         return UnimplimentedError("criterion is not an impliment criterion")
     elseif criterion == :ncone
@@ -345,6 +245,15 @@ function residual(Yhat, Y; normalize=:nothing)
     else
         return UnimplimentedError("normalize is not an implimented normalization")
     end
+end
+
+"""
+spectral projected gradient stepsize
+"""
+function spg_stepsize(x, x_last, grad_x, grad_x_last)
+    s = x - x_last
+    y = grad_x - grad_x_last
+    return sum(s[:] .^ 2) / sum(s[:] .* y[:])
 end
 
 """
