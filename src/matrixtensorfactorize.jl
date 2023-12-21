@@ -11,7 +11,7 @@ struct UnimplimentedError <: Exception end
 - `:fibre`: set ``\\sum_{k=1}^K B[r,j,k] = 1`` for all ``r, j``, or when `projection==:nnscale`,
     set ``\\sum_{j=1}^J\\sum_{k=1}^K B[r,j,k] = J`` for all ``r``
 - `:slice`: set ``\\sum_{j=1}^J\\sum_{k=1}^K B[r,j,k] = 1`` for all ``r``
-- `:nothing`: does not enforce any normalization of `F`
+- `:nothing`: does not enforce any normalization of `B`
 """
 const IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
 
@@ -25,13 +25,13 @@ const IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
 const IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) # nn is nonnegative
 
 """
-    IMPLIMENTED_CRITERIONS::Set{Symbol}
+    IMPLIMENTED_CRITERIA::Set{Symbol}
 
 - `:ncone`: vector-set distance between the -gradient of the objective and the normal cone
 - `:iterates`: A,B before and after one iteration are close in L2 norm
 - `:objective`: objective before and after one iteration is close
 """
-const IMPLIMENTED_CRITERIONS = Set{Symbol}((:ncone, :iterates, :objective))
+const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective))
 
 """
     IMPLIMENTED_STEPSIZES::Set{Symbol}
@@ -41,57 +41,73 @@ const IMPLIMENTED_CRITERIONS = Set{Symbol}((:ncone, :iterates, :objective))
 """
 const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipshitz, :spg))
 
+const IMPLIMENTED_OPTIONS = Dict(
+    "normalizations" => IMPLIMENTED_NORMALIZATIONS,
+    "projections" => IMPLIMENTED_PROJECTIONS,
+    "criteria" => IMPLIMENTED_CRITERIA,
+    "stepsizes" => IMPLIMENTED_STEPSIZES,
+)
+
 """
     nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
 
 Non-negatively matrix-tensor factorizes an order 3 tensor Y with a given "rank" R.
 
-Factorizes ``Y \\approx C F`` where ``\\displaystyle Y[i,j,k] \\approx \\sum_{r=1}^R C[i,r]*F[r,j,k]``
-and the factors ``C, F \\geq 0`` are nonnegative.
+Factorizes ``Y \\approx A B`` where ``\\displaystyle Y[i,j,k] \\approx \\sum_{r=1}^R A[i,r]*B[r,j,k]``
+and the factors ``A, B \\geq 0`` are nonnegative.
 
 Note there may NOT be a unique optimal solution
 
 # Arguments
 - `Y::Abstract3Tensor`: tensor to factorize
-- `R::Integer`: rank to factorize Y (size(C)[2] and size(F)[1])
+- `R::Integer`: rank to factorize Y (size(A)[2] and size(B)[1])
 
 # Keywords
 - `maxiter::Integer=100`: maxmimum number of iterations
 - `tol::Real=1e-3`: desiered tolerance for the convergence criterion
-- `rescale_CF::Bool=true`: scale F at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
-- `rescale_Y::Bool=true`: Preprocesses the input `Y` to have normalized 3-fiber sums (on average), and rescales the final `F` so `Y=C*F`.
-- `plot_F::Integer=0`: if not 0, plot F every plot_F iterations
-- `names::AbstractVector{String}=String[]`: names of the slices of F to use for ploting
-- `normalize::Symbol=:fibres`: part of F that should be normalized (must be in IMPLIMENTED_NORMALIZATIONS)
+- `rescale_CF::Bool=true`: scale B at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
+- `rescale_Y::Bool=true`: Preprocesses the input `Y` to have normalized 3-fiber sums (on average), and rescales the final `B` so `Y=A*B`.
+- `plot_F::Integer=0`: if not 0, plot B every plot_F iterations
+- `names::AbstractVector{String}=String[]`: names of the slices of B to use for ploting
+- `normalize::Symbol=:fibres`: part of B that should be normalized (must be in IMPLIMENTED_NORMALIZATIONS)
 - `projection::Symbol=:nnscale`: constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
-- `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIONS)
+- `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIA)
+- `stepsize::Symbol=:lipshitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
 
 # Returns
-- `C::Matrix{Float64}`: the matrix C in the factorization Y ≈ C * F
-- `F::Array{Float64, 3}`: the tensor F in the factorization Y ≈ C * F
+- `A::Matrix{Float64}`: the matrix A in the factorization Y ≈ A * B
+- `B::Array{Float64, 3}`: the tensor B in the factorization Y ≈ A * B
 - `rel_errors::Vector{Float64}`: relative errors at each iteration
 - `norm_grad::Vector{Float64}`: norm of the full gradient at each iteration
 - `dist_Ncone::Vector{Float64}`: distance of the -gradient to the normal cone at each iteration
 """
 function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
-    normalize=:fibres,
+    normalize::Symbol=:fibres,
     projection::Symbol=:nnscale,
+    criterion::Symbol=:ncone,
+    stepsize::Symbol=:lipshitz,
     kwargs...
 )
-    if isnothing(R)
+
+    # Iteration option checking
+    if !(projection in IMPLIMENTED_PROJECTIONS)
+        return ArgumentError("projection is not an implimented projection")
+    elseif !(normalize in IMPLIMENTED_NORMALIZATIONS)
+        return ArgumentError("normalize is not an implimented normalization")
+    elseif !(criterion in IMPLIMENTED_CRITERIA)
+        return ArgumentError("criterion is not an implimented criterion")
+    elseif !(stepsize in IMPLIMENTED_STEPSIZES)
+        return ArgumentError("stepsize is not an implimented stepsize")
+    end
+
+    if isnothing(R) # TODO automatically estimate the rank
         # Run nnmtf with R from 1 to size(Y)[1]
         # Compare fit ||Y - AB||_F^2 across all R
         # Return the output at the maximum positive curavature of ||Y - AB||_F^2
         return UnimplimentedError("Rank Estimation not implimented (YET!)")
     end
 
-    if !(projection in IMPLIMENTED_PROJECTIONS)
-        return ArgumentError("projection is not an implimented projection")
-    elseif !(normalize in IMPLIMENTED_NORMALIZATIONS)
-            return ArgumentError("normalize is not an implimented normalization")
-    else
-        return _nnmtf_proxgrad(Y, R; normalize, projection, kwargs...)
-    end
+    return _nnmtf_proxgrad(Y, R; normalize, projection, kwargs...)
 end
 
 """
@@ -122,12 +138,12 @@ function _nnmtf_proxgrad(
     # Extract Dimentions
     M, N, P = size(Y)
 
-    # Initialize C, F
+    # Initialize A, B
     init(x...) = abs.(randn(x...))
-    C = init(M, R)
-    F = init(R, N, P)
+    A = init(M, R)
+    B = init(R, N, P)
 
-    rescaleAB!(C, F; normalize)
+    rescaleAB!(A, B; normalize)
 
     problem_size = R*(M + N*P)
 
@@ -144,36 +160,36 @@ function _nnmtf_proxgrad(
     dist_Ncone = zeros(maxiter)
 
     # Calculate initial relative error and gradient
-    rel_errors[i] = residual(C*F, Y; normalize)
-    grad_C, grad_F = calc_gradient(C, F, Y)
+    rel_errors[i] = residual(A*B, Y; normalize)
+    grad_C, grad_F = calc_gradient(A, B, Y)
     norm_grad[i] = combined_norm(grad_C, grad_F)
-    dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
+    dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, A, B)
 
-    C_last = copy(C)
-    F_last = copy(F)
+    A_last = copy(A)
+    B_last = copy(B)
     # Main Loop
     # Ensure at least 1 step is performed
-    while (i == 1) || (!converged(; dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion) && (i < maxiter))
-        C_last = copy(C)
-        F_last = copy(F)
+    while (i == 1) || (!converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y) && (i < maxiter))
+        A_last = copy(A)
+        B_last = copy(B)
 
         if (plot_F != 0) && ((i-1) % plot_F == 0)
-            plot_factors(F, names, appendtitle=" at i=$i")
+            plot_factors(B, names, appendtitle=" at i=$i")
         end
 
-        grad_step_C!(C, F, Y)
-        proj!(C; projection, dims=1) # Always want the rows of C normalized regardless of how F is normalized
-        grad_step_F!(C, F, Y)
-        proj!(F; projection, dims=to_dims(normalize))
+        grad_step_C!(A, B, Y)
+        proj!(A; projection, dims=1) # Want the rows of A normalized when using :simplex projection
+        grad_step_F!(A, B, Y)
+        proj!(B; projection, dims=to_dims(normalize))
 
-        rescale_CF ? rescaleAB!(C, F; normalize) : nothing
+        rescale_CF ? rescaleAB!(A, B; normalize) : nothing
 
         # Calculate relative error and norm of gradient
         i += 1
-        rel_errors[i] = residual(C*F, Y; normalize)
-        grad_C, grad_F = calc_gradient(C, F, Y)
+        rel_errors[i] = residual(A*B, Y; normalize)
+        grad_C, grad_F = calc_gradient(A, B, Y)
         norm_grad[i] = combined_norm(grad_C, grad_F)
-        dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, C, F)
+        dist_Ncone[i] = dist_to_Ncone(grad_C, grad_F, A, B)
     end
 
     # Chop Excess
@@ -182,37 +198,44 @@ function _nnmtf_proxgrad(
     norm_grad = norm_grad[keep_slice]
     dist_Ncone = dist_Ncone[keep_slice]
 
-    # Rescale F back if Y was initialy scaled
+    # Rescale B back if Y was initialy scaled
     # Only valid if we rescale fibres
     if rescale_Y && normalize == :fibres
         # Compare:
-        # If F_rescaled := avg_factor_sums * F,
-        # Y_input ≈ C * F_rescaled
-        #       Y ≈ C * F (Here, Y and F have normalized fibers)
-        F_lateral_slices = eachslice(F, dims=2)
-        F_lateral_slices .*= factor_sums
+        # If B_rescaled := avg_factor_sums * B,
+        # Y_input ≈ A * B_rescaled
+        #       Y ≈ A * B (Here, Y and B have normalized fibers)
+        B_lateral_slices = eachslice(B, dims=2)
+        B_lateral_slices .*= factor_sums
     end
 
-    return C, F, rel_errors, norm_grad, dist_Ncone
+    return A, B, rel_errors, norm_grad, dist_Ncone
 end
 
-# Convergence criteria. We "normalize" the distance vector so the tolerance can be
-# picked independent of the dimentions of Y and rank R
-function converged(; dist_Ncone, i, C, F, C_last, F_last, tol, problem_size, criterion)
-    if !(criterion in IMPLIMENTED_CRITERIONS)
+"""
+Convergence criteria function.
+
+When using :ncone, we "normalize" the distance vector so the tolerance can be picked
+independent of the dimentions of Y and rank R.
+
+Note the use of `;` in the function definition so that order of arguments does not matter,
+and keyword assignment can be ignored if the input variables are named exactly as below.
+"""
+function converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
+    if !(criterion in IMPLIMENTED_CRITERIA)
         return UnimplimentedError("criterion is not an impliment criterion")
     elseif criterion == :ncone
         return dist_Ncone[i]/sqrt(problem_size) < tol
     elseif criterion == :iterates
-        return combined_norm(C - C_last, F - F_last) < tol
+        return combined_norm(A - A_last, B - B_last) < tol
     elseif criterion == :objective
-        return rel_errors[i] < tol
+        return 0.5 * norm(A*B - Y)^2 < tol
     end
 end
 
 """
 Converts the symbol normalize to the dimention(s) used to iterate or process the second
-array F.
+array B.
 """
 function to_dims(normalize::Symbol)
     if normalize == :fibres
@@ -278,31 +301,31 @@ function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
 end
 
 """
-    dist_to_Ncone(grad_C, grad_F, C, F)
+    dist_to_Ncone(grad_C, grad_F, A, B)
 
 Calculate the distance of the -gradient to the normal cone of the positive orthant.
 """
-function dist_to_Ncone(grad_C, grad_F, C, F)
-    grad_C_restricted = grad_C[(C .> 0) .|| (grad_C .< 0)]
-    grad_F_restricted = grad_F[(F .> 0) .|| (grad_F .< 0)]
-    return combined_norm(grad_C_restricted, grad_F_restricted)
+function dist_to_Ncone(grad_C, grad_F, A, B)
+    grad_A_restricted = grad_C[(A .> 0) .|| (grad_C .< 0)]
+    grad_B_restricted = grad_F[(B .> 0) .|| (grad_F .< 0)]
+    return combined_norm(grad_A_restricted, grad_B_restricted)
 end
 
 # TODO move this ploting function to SedimentTools? Or seperate viz.jl file?
 """
-    plot_factors(F, names; appendtitle="")
+    plot_factors(B, names; appendtitle="")
 
-Plot each horizontal slice of F. Names give the name of each vertical slice.
+Plot each horizontal slice of B. Names give the name of each vertical slice.
 """
-function plot_factors(F, names=string.(eachindex(F[1,:,1])); appendtitle="")
-    size(F)[2] == length(names) || ArgumentError("names should have the same length as size(F)[2]")
-    fiber_sums = sum.(eachslice(F,dims=(1,2)))
+function plot_factors(B, names=string.(eachindex(B[1,:,1])); appendtitle="")
+    size(B)[2] == length(names) || ArgumentError("names should have the same length as size(B)[2]")
+    fiber_sums = sum.(eachslice(B,dims=(1,2)))
     avg_factor_sums = Diagonal(mean.(eachrow(fiber_sums)))
-    F_temp = avg_factor_sums^(-1) * F
-    for (j, F_slice) ∈ enumerate(eachslice(F_temp,dims=1))
-        p = heatmap(F_slice,
-            yticks=(eachindex(F_slice[:,1]), names),
-            xticks=([1, length(F_slice[1,:])],["0", "1"]),
+    B_temp = avg_factor_sums^(-1) * B
+    for (j, B_slice) ∈ enumerate(eachslice(B_temp,dims=1))
+        p = heatmap(B_slice,
+            yticks=(eachindex(B_slice[:,1]), names),
+            xticks=([1, length(B_slice[1,:])],["0", "1"]),
             xlabel="Normalized Range of Values",
             title = "Learned Distributions for Factor $j" * appendtitle,
         )
@@ -310,37 +333,37 @@ function plot_factors(F, names=string.(eachindex(F[1,:,1])); appendtitle="")
     end
 end
 
-function grad_step_C!(C, F, Y; step=nothing)
-    @einsum FF[s,r] := F[s,j,k]*F[r,j,k]
-    @einsum GG[i,r] := Y[i,j,k]*F[r,j,k]
-    isnothing(step) ? step = 1/norm(FF) : nothing # Lipshitz fallback
-    grad = C*FF .- GG
-    C .-= step .* grad # gradient step
+function grad_step_C!(A, B, Y; step=nothing)
+    @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
+    @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
+    isnothing(step) ? step = 1/norm(BB) : nothing # Lipshitz fallback
+    grad = A*BB .- GG
+    A .-= step .* grad # gradient step
 end
 
-function grad_step_F!(C, F, Y; step=nothing)
-    CC = C'C
-    isnothing(step) ? step = 1/norm(CC) : nothing # Lipshitz fallback
-    grad = CC*F .- C'*Y
-    F .-= step .* grad # gradient step
-    #F .= ReLU.(F) # project
+function grad_step_F!(A, B, Y; step=nothing)
+    AA = A'A
+    isnothing(step) ? step = 1/norm(AA) : nothing # Lipshitz fallback
+    grad = AA*B .- A'*Y
+    B .-= step .* grad # gradient step
+    #B .= ReLU.(B) # project
 end
 
-function calc_gradient(C, F, Y)
-    @einsum FF[s,r] := F[s,j,k]*F[r,j,k]
-    @einsum GG[i,r] := Y[i,j,k]*F[r,j,k]
-    CC = C'C
-    grad_C = C*FF .- GG
-    grad_F = CC*F .- C'*Y
+function calc_gradient(A, B, Y)
+    @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
+    @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
+    AA = A'A
+    grad_C = A*BB .- GG
+    grad_F = AA*B .- A'*Y
     return grad_C, grad_F
 end
 
 # Could compute the gradients this way to reuse CF-Y,
 # but the first way is still faster!
 #=
-CFY = C*F .- Y
-@einsum grad_C[i,r] := CFY[i,j,k]*F[r,j,k]
-@einsum grad_F[r,j,k] := C[i,r]*CFY[i,j,k]
+CFY = A*B .- Y
+@einsum grad_C[i,r] := CFY[i,j,k]*B[r,j,k]
+@einsum grad_F[r,j,k] := A[i,r]*CFY[i,j,k]
 return grad_C, grad_F
 =#
 
@@ -380,9 +403,9 @@ function _slice_normalize!(A::AbstractMatrix, B::AbstractArray) # B could be hig
 end
 
 #function rescale2CF!(A, B)
-#    C = sum.(eachslice(B, dims=(1,2)))
-#    B ./= C
-#    A .= A * C
+#    A = sum.(eachslice(B, dims=(1,2)))
+#    B ./= A
+#    A .= A * A
 #end
 
 function rescaleY(Y; normalize=:fibres)
