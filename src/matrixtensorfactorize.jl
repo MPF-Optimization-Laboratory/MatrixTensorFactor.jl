@@ -41,6 +41,11 @@ const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective))
 """
 const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipshitz, :spg))
 
+"""Minimum step size allowed for spg stepsize method"""
+const MIN_STEP = 1e-10
+"""Maximum step size allowed for spg stepsize method"""
+const MAX_STEP = 1e10
+
 const IMPLIMENTED_OPTIONS = Dict(
     "normalizations" => IMPLIMENTED_NORMALIZATIONS,
     "projections" => IMPLIMENTED_PROJECTIONS,
@@ -127,8 +132,8 @@ function _nnmtf_proxgrad(
     names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
-    criterion::Symbol=:ncone,
     stepsize::Symbol=:lipshitz,
+    criterion::Symbol=:ncone,
     rescale_AB::Bool = (projection == :nnscale ? true : false),
     rescale_Y::Bool = (projection == :nnscale ? true : false),
 )
@@ -186,6 +191,7 @@ function _nnmtf_proxgrad(
             grad_A_last_last, _ = calc_gradient(A_last_last, B_last_last, Y)
             grad_A_last, _ = calc_gradient(A_last, B_last, Y)
             step = spg_stepsize(A_last, A_last_last, grad_A_last, grad_A_last_last)
+            #!isfinite(step) ? println(A_last, A_last_last, grad_A_last, grad_A_last_last) : nothing
         end
 
         grad_step_A!(A, B, Y; step)
@@ -296,10 +302,11 @@ end
 """
 spectral projected gradient stepsize
 """
-function spg_stepsize(x, x_last, grad_x, grad_x_last)
+function spg_stepsize(x, x_last, grad_x, grad_x_last; min_step=MIN_STEP, max_step=MAX_STEP)
     s = x - x_last
     y = grad_x - grad_x_last
-    return sum(s[:] .^ 2) / sum(s[:] .* y[:])
+    step = sum(s[:] .^ 2) / sum(s[:] .* y[:])
+    return max(min_step, min(step, max_step)) # safeguards to ensure step is within reasonable bounds
 end
 
 """
@@ -310,8 +317,25 @@ Projects X according to projection.
 When using the simplex projection, ensures each slice along dims is normalized.
 """
 function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
-    if projection in (:nonnegative, :nnscale)
+    if projection == :nonnegative
         X .= ReLU.(X)
+
+    elseif projection == :nnscale
+        if isnothing(dims)
+            return ArgumentError("normalize == :nothing and projection == :nnscale are uncompatible. Unsure what which part of X should be normalized.")
+        else
+            X_slices = eachslice(X; dims)
+            for slice in X_slices
+                # slices which contain exclusively nonpositive values should be projected using simplex
+                # this ensures we don't project a slice to the origin, which cannot be normalized
+                if all(slice .<= 0)
+                    slice .= projsplx(slice)
+                # otherwise only use ReLU and worry about normalization later
+                else
+                    slice .= ReLU.(slice)
+                end
+            end
+        end
 
     elseif projection == :simplex
         if isnothing(dims)

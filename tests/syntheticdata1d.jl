@@ -81,26 +81,28 @@ sum.(eachslice(Y, dims=(1,2))) # should all be 1
 
 function nnmtf_test(projection)
     C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
-        maxiter=5000, tol=1e-8, projection, normalize=:fibres, rescale_Y=false, stepsize=:spg)
+        maxiter=1000, tol=1e-9, projection, normalize=:fibres, rescale_Y=false, stepsize=:lipshitz)
+
     n_iterations = length(rel_errors)
     final_rel_error = rel_errors[end]
     @show projection, n_iterations, final_rel_error
 
+    F = dropdims(F; dims=2)
     F ./= Δx # Rescale factors
 
     # Plot learned factors
-    heatmap(C, yflip=true, title="Learned Coefficients")
-    heatmap(C, yflip=true, title="True Coefficients") # possibly permuted order
+    heatmap(C, yflip=true, title="Learned Coefficients with $projection")
+    heatmap(C, yflip=true, title="True Coefficients with $projection") # possibly permuted order
 
-    p=plot(x, F[1,1,:], title="Learned Sources")
-    plot!(x, F[2, 1,:])
-    plot!(x, F[3, 1,:])
+    p=plot(x, F[1,:], title="Learned Sources")
+    plot!(x, F[2,:])
+    plot!(x, F[3,:])
     display(p)
 
     # Plot convergence
-    plot(rel_errors[2:end], yaxis=:log10) |> display
-    plot(norm_grad[2:end], yaxis=:log10) |> display
-    plot(dist_Ncone[2:end], yaxis=:log10) |> display
+    plot(rel_errors[2:end], yaxis=:log10, title="Relative Error with $projection") |> display
+    plot(norm_grad[2:end], yaxis=:log10, title="Norm of Gradient with $projection") |> display
+    plot(dist_Ncone[2:end], yaxis=:log10, title="Distance between -Gradient\n and Normal Cone with $projection") |> display
 
     return rel_errors
 end
@@ -108,5 +110,6 @@ end
 objective_simplex = nnmtf_test(:simplex) # standard proxgrad
 objective_nnscale = nnmtf_test(:nnscale) # our rescaling trick
 
-plot(objective_simplex[2:end], yaxis=:log10)
-plot!(objective_nnscale[2:end], yaxis=:log10)
+plot(objective_simplex[2:end], yaxis=:log10, label="simplex",
+    xlabel="iteration", ylabel="relative error")
+plot!(objective_nnscale[2:end], yaxis=:log10, label="nnscale")
