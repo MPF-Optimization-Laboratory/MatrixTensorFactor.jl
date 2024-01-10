@@ -78,6 +78,8 @@ Note there may NOT be a unique optimal solution
 - `projection::Symbol=:nnscale`: constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
 - `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIA)
 - `stepsize::Symbol=:lipshitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
+- `momentum::Bool=false`: use momentum updates
+- `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq 3.5 Xu & Yin 2013)
 
 # Returns
 - `A::Matrix{Float64}`: the matrix A in the factorization Y ≈ A * B
@@ -91,6 +93,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
     projection::Symbol=:nnscale,
     criterion::Symbol=:ncone,
     stepsize::Symbol=:lipshitz,
+    momentum::Bool=false,
     kwargs...
 )
 
@@ -105,6 +108,10 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
         return ArgumentError("stepsize is not an implimented stepsize")
     end
 
+    if momentum && stepsize != :lipshitz
+        return ArgumentError("Momentum is only compatible with lipshitz stepsize")
+    end
+
     if isnothing(R) # TODO automatically estimate the rank
         # Run nnmtf with R from 1 to size(Y)[1]
         # Compare fit ||Y - AB||_F^2 across all R
@@ -112,7 +119,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
         return UnimplimentedError("Rank Estimation not implimented (YET!)")
     end
 
-    return _nnmtf_proxgrad(Y, R; normalize, projection, criterion, stepsize, kwargs...)
+    return _nnmtf_proxgrad(Y, R; normalize, projection, criterion, stepsize, momentum, kwargs...)
 end
 
 """
@@ -134,6 +141,8 @@ function _nnmtf_proxgrad(
     projection::Symbol=:nonnegative,
     stepsize::Symbol=:lipshitz,
     criterion::Symbol=:ncone,
+    momentum::Bool=false,
+    delta::Real=0.9999,
     rescale_AB::Bool = (projection == :nnscale ? true : false),
     rescale_Y::Bool = (projection == :nnscale ? true : false),
 )
@@ -175,6 +184,11 @@ function _nnmtf_proxgrad(
 
     step = nothing
 
+    # Momentum variables
+    t = 1
+    LA = lipshitzA(B)
+    LB = lipshitzB(A)
+
     # Main Loop
     while i < maxiter
         A_last_last = copy(A_last) # for stepsizes that require the last two iterations
@@ -183,22 +197,39 @@ function _nnmtf_proxgrad(
         A_last = copy(A)
         B_last = copy(B)
 
+        LA_last = LA
+        LB_last = LB
+
         if (plot_B != 0) && ((i-1) % plot_B == 0)
             plot_factors(B, names, appendtitle=" at i=$i")
         end
 
+        if momentum
+            t_last = t
+            t = 0.5*(1 + sqrt(1 + 4*t_last^2))
+            omegahat = (t_last - 1) / t # Candidate momentum step
+            LA = lipshitzA(B)
+            omegaA = min(omegahat, delta*sqrt(LA_last/LA)) # Safeguarded momentum step
+            A = A_last + omegaA * (A_last - A_last_last)
+        end
+
         if i > 1 && stepsize == :spg
-            grad_A_last_last, _ = calc_gradient(A_last_last, B_last_last, Y)
+            grad_A_last_last, _ = calc_gradient(A_last_last, B_last_last, Y) #TODO only calculate one gradient wrt A
             grad_A_last, _ = calc_gradient(A_last, B_last, Y)
             step = spg_stepsize(A_last, A_last_last, grad_A_last, grad_A_last_last)
-            #!isfinite(step) ? println(A_last, A_last_last, grad_A_last, grad_A_last_last) : nothing
         end
 
         grad_step_A!(A, B, Y; step)
         proj!(A; projection, dims=1) # Want the rows of A normalized when using :simplex projection
 
+        if momentum
+            LB = lipshitzB(A)
+            omegaB = min(omegahat, delta*sqrt(LB_last/LB))
+            B = B_last + omegaB * (B_last - B_last_last)
+        end
+
         if i > 1 && stepsize == :spg
-            # note the mixed gradient below because A gets updated before B
+            # note the mixed gradient below (A_last with B_last_last) because A gets updated before B
             _, grad_B_last_last = calc_gradient(A_last, B_last_last, Y)
             _, grad_B_last = calc_gradient(A, B_last, Y)
             step = spg_stepsize(B_last, B_last_last, grad_B_last, grad_B_last_last)
@@ -380,18 +411,28 @@ function plot_factors(B, names=string.(eachindex(B[1,:,1])); appendtitle="")
     end
 end
 
+function lipshitzA(B)
+    @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
+    return opnorm(BB)
+end
+
+function lipshitzB(A)
+    AA = A'A
+    return opnorm(AA)
+end
+
 function grad_step_A!(A, B, Y; step=nothing)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
     grad = A*BB .- GG
-    isnothing(step) ? step = 1/norm(BB) : nothing # Lipshitz fallback
+    isnothing(step) ? step = 1/opnorm(BB) : nothing # Lipshitz fallback
     A .-= step .* grad # gradient step
 end
 
 function grad_step_B!(A, B, Y; step=nothing)
     AA = A'A
     grad = AA*B .- A'*Y
-    isnothing(step) ? step = 1/norm(AA) : nothing # Lipshitz fallback
+    isnothing(step) ? step = 1/opnorm(AA) : nothing # Lipshitz fallback
     B .-= step .* grad # gradient step
 end
 

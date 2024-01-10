@@ -81,7 +81,7 @@ sum.(eachslice(Y, dims=(1,2))) # should all be 1
 
 function nnmtf_test(projection)
     C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
-        maxiter=1000, tol=1e-9, projection, normalize=:fibres, rescale_Y=false, stepsize=:lipshitz)
+        maxiter=1000, tol=1e-9, momentum=true,projection, normalize=:fibres, rescale_Y=false, stepsize=:lipshitz)
 
     n_iterations = length(rel_errors)
     final_rel_error = rel_errors[end]
