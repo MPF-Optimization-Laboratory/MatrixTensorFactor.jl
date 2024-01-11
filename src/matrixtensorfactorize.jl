@@ -230,8 +230,8 @@ function _nnmtf_proxgrad(
         end
 
         if i > 1 && stepsize == :spg
-            grad_A_last_last, _ = calc_gradient(A_last_last, B_last_last, Y) #TODO only calculate one gradient wrt A
-            grad_A_last, _ = calc_gradient(A_last, B_last, Y)
+            grad_A_last_last = calc_gradientA(A_last_last, B_last_last, Y)
+            grad_A_last = calc_gradientA(A_last, B_last, Y)
             step = spg_stepsize(A_last, A_last_last, grad_A_last, grad_A_last_last)
         end
 
@@ -246,8 +246,8 @@ function _nnmtf_proxgrad(
 
         if i > 1 && stepsize == :spg
             # note the mixed gradient below (A_last with B_last_last) because A gets updated before B
-            _, grad_B_last_last = calc_gradient(A_last, B_last_last, Y)
-            _, grad_B_last = calc_gradient(A, B_last, Y)
+            grad_B_last_last = calc_gradientB(A_last, B_last_last, Y)
+            grad_B_last = calc_gradientB(A, B_last, Y)
             step = spg_stepsize(B_last, B_last_last, grad_B_last, grad_B_last_last)
         end
 
@@ -437,7 +437,7 @@ function lipshitzB(A)
     return opnorm(AA)
 end
 
-function grad_step_A!(A, B, Y; step=nothing)
+function grad_step_A!(A, B, Y; step=nothing) # not using calc_gradientA and lipshitzA so that BB only needs to be computed once
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
     grad = A*BB .- GG
@@ -453,12 +453,20 @@ function grad_step_B!(A, B, Y; step=nothing)
 end
 
 function calc_gradient(A, B, Y)
+    return calc_gradientA(A, B, Y), calc_gradientB(A, B, Y)
+end
+
+function calc_gradientA(A, B, Y)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
-    AA = A'A
     grad_A = A*BB .- GG
+    return grad_A
+end
+
+function calc_gradientB(A, B, Y)
+    AA = A'A
     grad_B = AA*B .- A'*Y
-    return grad_A, grad_B
+    return grad_B
 end
 
 # Could compute the gradients this way to reuse CF-Y,
