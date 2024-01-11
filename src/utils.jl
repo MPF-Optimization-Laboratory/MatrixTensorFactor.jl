@@ -100,10 +100,10 @@ Note the approximation uses centered three point finite differences for the
 next-to-end points, and foward/backward three point differences for the begining/end points
 respectively. The remaining interior points use five point differences.
 
-Force only the third order approximation with third_order=true.
+Force only the third order approximation with the keyword `third_order=true`.
 See [`d_dx`](@ref).
 """
-function d2_dx2(y::AbstractVector{<:Real}, third_order::Bool=false)
+function d2_dx2(y::AbstractVector{<:Real}; third_order::Bool=false)
     length(y) < 5 ? third_order=true : nothing
     return third_order ? _d2_dx2_3(y) : _d2_dx2_5(y)
 end
@@ -151,10 +151,10 @@ Note the approximation uses centered three point finite differences for the
 next-to-end points, and foward/backward three point differences for the begining/end points
 respectively. The remaining interior points use five point differences.
 
-Force only the third order approximation with third_order=true.
+Force only the third order approximation with the keyword `third_order=true`.
 See [`d2_dx2`](@ref).
 """
-function d_dx(y::AbstractVector{<:Real}, third_order::Bool=false)
+function d_dx(y::AbstractVector{<:Real}; third_order::Bool=false)
     length(y) < 5 ? third_order=true : nothing
     return third_order ? _d_dx_3(y) : _d_dx_5(y)
 end
