@@ -110,7 +110,7 @@ end
 # TODO is there a package that does this? The ones I've seen require the forward function.
 
 function _d2_dx2_3(y::AbstractVector{<:Real})
-    d = zero(y)
+    d = similar(y)
     for i in eachindex(y)[begin+1:end-1]
         d[i] = y[i-1] - 2*y[i] + y[i+1]
     end
@@ -121,7 +121,7 @@ function _d2_dx2_3(y::AbstractVector{<:Real})
 end
 
 function _d2_dx2_5(y::AbstractVector{<:Real})
-    d = zero(y)
+    d = similar(y)
     each_i = eachindex(y)
 
     # Interior Ppints
@@ -160,7 +160,7 @@ function d_dx(y::AbstractVector{<:Real}, third_order::Bool=false)
 end
 
 function _d_dx_3(y::AbstractVector{<:Real})
-    d = zero(y)
+    d = similar(y)
     each_i = eachindex(y)
 
     for i in each_i[begin+1:end-1]
@@ -176,7 +176,7 @@ function _d_dx_3(y::AbstractVector{<:Real})
 end
 
 function _d_dx_5(y::AbstractVector{<:Real})
-    d = zero(y)
+    d = similar(y)
     each_i = eachindex(y)
 
     # Interior Ppints
@@ -232,8 +232,13 @@ Projects (in Euclidian distance) the vector y into the simplex.
 [1] Yunmei Chen and Xiaojing Ye, "Projection Onto A Simplex", 2011
 """
 function projsplx(y)
-    y_sorted = sort(y[:]) # Vectorize/extract input and sort all entries
     n = length(y)
+
+    if n==1 # quick exit for trivial length-1 "vectors" (i.e. scalars)
+        return [one(typeof(y[1]))]
+    end
+
+    y_sorted = sort(y[:]) # Vectorize/extract input and sort all entries
     i = n - 1
     t = 0 # need to ensure t has scope outside the while loop
     while true

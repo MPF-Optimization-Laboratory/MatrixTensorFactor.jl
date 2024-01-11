@@ -80,8 +80,8 @@ Y .*= Δx # Scale factors
 sum.(eachslice(Y, dims=(1,2))) # should all be 1
 
 function nnmtf_test(projection)
-    C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
-        maxiter=1000, tol=1e-9, momentum=true,projection, normalize=:fibres, rescale_Y=false, stepsize=:lipshitz)
+    C, F, rel_errors, norm_grad, dist_Ncone, R = nnmtf(Y;
+        maxiter=500, tol=1e-10, momentum=true,projection, normalize=:fibres, rescale_Y=false, stepsize=:lipshitz)
 
     n_iterations = length(rel_errors)
     final_rel_error = rel_errors[end]
@@ -91,12 +91,13 @@ function nnmtf_test(projection)
     F ./= Δx # Rescale factors
 
     # Plot learned factors
-    heatmap(C, yflip=true, title="Learned Coefficients with $projection")
-    heatmap(C, yflip=true, title="True Coefficients with $projection") # possibly permuted order
+    heatmap(C, yflip=true, title="Learned Coefficients with $projection") |> display
+    heatmap(C_true, yflip=true, title="True Coefficients with $projection") |> display # possibly permuted order
 
     p=plot(x, F[1,:], title="Learned Sources")
-    plot!(x, F[2,:])
-    plot!(x, F[3,:])
+    for r in 2:R
+        plot!(x, F[r,:])
+    end
     display(p)
 
     # Plot convergence

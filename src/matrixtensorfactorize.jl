@@ -80,6 +80,7 @@ Note there may NOT be a unique optimal solution
 - `stepsize::Symbol=:lipshitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
 - `momentum::Bool=false`: use momentum updates
 - `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq 3.5 Xu & Yin 2013)
+- `R_max::Integer=size(Y)[1]`: maximum rank to try if R is not given
 
 # Returns
 - `A::Matrix{Float64}`: the matrix A in the factorization Y ≈ A * B
@@ -87,6 +88,7 @@ Note there may NOT be a unique optimal solution
 - `rel_errors::Vector{Float64}`: relative errors at each iteration
 - `norm_grad::Vector{Float64}`: norm of the full gradient at each iteration
 - `dist_Ncone::Vector{Float64}`: distance of the -gradient to the normal cone at each iteration
+- If R was estimated, also returns the optimal `R::Integer`
 """
 function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
     normalize::Symbol=:fibres,
@@ -94,6 +96,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
     criterion::Symbol=:ncone,
     stepsize::Symbol=:lipshitz,
     momentum::Bool=false,
+    R_max::Integer=size(Y)[1],
     kwargs...
 )
 
@@ -112,11 +115,24 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
         return ArgumentError("Momentum is only compatible with lipshitz stepsize")
     end
 
-    if isnothing(R) # TODO automatically estimate the rank
+    if isnothing(R)
         # Run nnmtf with R from 1 to size(Y)[1]
         # Compare fit ||Y - AB||_F^2 across all R
         # Return the output at the maximum positive curavature of ||Y - AB||_F^2
-        return UnimplimentedError("Rank Estimation not implimented (YET!)")
+        all_outputs = []
+        final_rel_errors = Real[]
+        @info "Estimating Rank"
+        for r in 1:R_max
+            @info "Trying rank=$r..."
+            output = _nnmtf_proxgrad(Y, r; normalize, projection, criterion, stepsize, momentum, kwargs...)
+            push!(all_outputs, output)
+            final_rel_error = output[3][end]
+            push!(final_rel_errors, final_rel_error)
+            @info "Final relative error = $final_rel_error"
+        end
+        R = argmax(standard_curvature(final_rel_errors))
+        @info "Optimal rank found: $R"
+        return ((all_outputs[R])..., R)
     end
 
     return _nnmtf_proxgrad(Y, R; normalize, projection, criterion, stepsize, momentum, kwargs...)
