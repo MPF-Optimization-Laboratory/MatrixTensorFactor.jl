@@ -1,4 +1,7 @@
 # Exported Terms
+```@docs
+MatrixTensorFactor
+```
 
 ## Types
 ```@docs
@@ -12,17 +15,25 @@ nnmtf
 
 ### Implimented Factorization Options
 ```@docs
-IMPLIMENTED_OPTIONS
-IMPLIMENTED_NORMALIZATIONS IMPLIMENTED_PROJECTIONS IMPLIMENTED_CRITERIA IMPLIMENTED_STEPSIZES
-MIN_STEP
-MAX_STEP
+IMPLIMENTED_NORMALIZATIONS
+IMPLIMENTED_PROJECTIONS
+IMPLIMENTED_CRITERIA
+IMPLIMENTED_STEPSIZES
 ```
 
 ## Kernel Density Estimation
+### Constants
+```@docs
+DEFAULT_N_SAMPLES
+DEFAULT_ALPHA
+```
+
 ### 1D
 ```@docs
 default_bandwidth
-make_densities standardize_KDEs filter_inner_percentile
+make_densities
+standardize_KDEs
+filter_inner_percentile
 ```
 
 ## 2D

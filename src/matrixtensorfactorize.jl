@@ -21,6 +21,8 @@ const IMPLIMENTED_NORMALIZATIONS = Set{Symbol}((:fibres, :slices, :nothing))
 - `:nnscale`: Two stage block coordinate decent; 1) projected gradient decent onto nonnegative
     orthant, 2) shift any weight from `B` to `A` according to normalization. Equivilent to
     :nonnegative when `normalization==:nothing`.
+- `:simplex`: Euclidian projection onto the simplex blocks accoring to `normalization`
+- `:nonnegative`: zero out negative entries
 """
 const IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) # nn is nonnegative
 
@@ -41,11 +43,21 @@ const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective))
 """
 const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipshitz, :spg))
 
-"""Minimum step size allowed for spg stepsize method"""
+"""
+    MIN_STEP = 1e-10
+
+Minimum step size allowed for spg stepsize method.
+"""
 const MIN_STEP = 1e-10
-"""Maximum step size allowed for spg stepsize method"""
+
+"""
+    MAX_STEP = 1e10
+
+Maximum step size allowed for spg stepsize method.
+"""
 const MAX_STEP = 1e10
 
+"""Lists all implimented options"""
 const IMPLIMENTED_OPTIONS = Dict(
     "normalizations" => IMPLIMENTED_NORMALIZATIONS,
     "projections" => IMPLIMENTED_PROJECTIONS,

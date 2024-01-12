@@ -19,7 +19,7 @@ function Base.:*(A::AbstractMatrix, B::Abstract3Tensor)
     return C
 end
 
-
+#=
 """
     ×₂₃(A::Abstract3Tensor, B::Abstract3Tensor)
 
@@ -29,6 +29,7 @@ function ×₂₃(A::Abstract3Tensor, B::Abstract3Tensor)
     @einsum C[i,j,k] := A[i,l,k] * B[i,j,l]
     return C
 end
+=#
 
 """
     combined_norm(u, v, ...)

@@ -8,10 +8,10 @@ using MatrixTensorFactor
 #using SedimentAnalysis.MTF
 #using SedimentAnalysis.SedimentTools
 #using NamedArrays
-using Plots
+#using Plots
 
 DocMeta.setdocmeta!(
-    SedimentAnalysis,
+    MatrixTensorFactor,
     :DocTestSetup,
     :(using MatrixTensorFactor;);
     recursive=true
@@ -20,6 +20,7 @@ DocMeta.setdocmeta!(
 makedocs(
     sitename="Matrix Tensor Factorization",
     modules = [MatrixTensorFactor,], #MTF
+    checkdocs=:exports,
 )
 
 deploydocs(

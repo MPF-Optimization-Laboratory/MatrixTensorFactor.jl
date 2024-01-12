@@ -13,7 +13,11 @@ function _inrange(v, P)
     return x -> (a ≤ x ≤ b)
 end
 
-"""Smoothing parameter for calculating a kernel's bandwidth"""
+"""
+    DEFAULT_ALPHA = 0.9::Real
+
+Smoothing parameter for calculating a kernel's bandwidth.
+"""
 global DEFAULT_ALPHA = 0.9::Real
 
 """
@@ -110,7 +114,11 @@ end
 #    return KDEs_new
 #end
 
-"""Number of samples to use when standardizing a vector of density estimates."""
+"""
+    DEFAULT_N_SAMPLES = 64::Integer
+
+Number of samples to use when standardizing a vector of density estimates.
+"""
 const DEFAULT_N_SAMPLES = 64::Integer
 
 """
