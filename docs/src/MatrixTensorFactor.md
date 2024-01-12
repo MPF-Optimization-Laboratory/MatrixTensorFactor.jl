@@ -15,10 +15,17 @@ nnmtf
 
 ### Implimented Factorization Options
 ```@docs
+IMPLIMENTED_OPTIONS
 IMPLIMENTED_NORMALIZATIONS
 IMPLIMENTED_PROJECTIONS
 IMPLIMENTED_CRITERIA
 IMPLIMENTED_STEPSIZES
+```
+
+## Constants
+```@docs
+MAX_STEP
+MIN_STEP
 ```
 
 ## Kernel Density Estimation
