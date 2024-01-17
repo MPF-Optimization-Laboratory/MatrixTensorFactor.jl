@@ -4,8 +4,6 @@ using KernelDensity
 using Plots
 using MatrixTensorFactor
 
-include("..\\src\\densityestimation2d.jl") # TODO update to use package
-
 fid2 = h5open("testdata\\smalldata.h5ad","r")
 coordinates = fid2["coordinates"] |> read
 M = fid2["count_matrix"] |> read
