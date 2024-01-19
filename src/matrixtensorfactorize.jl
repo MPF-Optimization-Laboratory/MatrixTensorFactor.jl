@@ -416,7 +416,7 @@ function dist_to_Ncone(grad_A, grad_B, A, B)
     grad_B_restricted = grad_B[(B .> 0) .|| (grad_B .< 0)]
     return combined_norm(grad_A_restricted, grad_B_restricted)
 end
-
+#=
 # TODO remove plotting feature so Plots.jl is not required?
 """
     plot_factors(B, names; appendtitle="")
@@ -438,6 +438,7 @@ function plot_factors(B, names=string.(eachindex(B[1,:,1])); appendtitle="")
         display(p)
     end
 end
+=#
 
 function lipshitzA(B)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]

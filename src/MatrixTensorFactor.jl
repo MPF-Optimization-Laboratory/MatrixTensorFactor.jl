@@ -3,7 +3,7 @@ Matrix-Tensor Factorization
 """
 module MatrixTensorFactor
 using LinearAlgebra: norm, opnorm
-using Plots: plot
+#using Plots: plot, heatmap
 using Statistics: mean, median, quantile, std
 using Random: randn
 using Einsum: @einsum
