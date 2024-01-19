@@ -105,7 +105,11 @@ Force only the third order approximation with the keyword `third_order=true`.
 See [`d_dx`](@ref).
 """
 function d2_dx2(y::AbstractVector{<:Real}; third_order::Bool=false)
-    length(y) < 5 ? third_order=true : nothing
+    if length(y) < 3
+        return ArgumentError("input $y must have at least length 3")
+    elseif length(y) < 5
+        third_order=true
+    end
     return third_order ? _d2_dx2_3(y) : _d2_dx2_5(y)
 end
 # TODO is there a package that does this? The ones I've seen require the forward function.
@@ -156,7 +160,11 @@ Force only the third order approximation with the keyword `third_order=true`.
 See [`d2_dx2`](@ref).
 """
 function d_dx(y::AbstractVector{<:Real}; third_order::Bool=false)
-    length(y) < 5 ? third_order=true : nothing
+    if length(y) < 2
+        return ArgumentError("input $y must have at least length 2")
+    elseif length(y) < 5
+        third_order=true
+    end
     return third_order ? _d_dx_3(y) : _d_dx_5(y)
 end
 
@@ -204,9 +212,9 @@ Approximates the signed curvature of a function given evenly spaced samples.
 
 Uses [`d_dx`](@ref) and [`d2_dx2`](@ref) to approximate the first two derivatives.
 """
-function curvature(y::AbstractVector{<:Real})
-    dy_dx = d_dx(y)
-    dy2_dx2 = d2_dx2(y)
+function curvature(y::AbstractVector{<:Real}; kwargs...)
+    dy_dx = d_dx(y; kwargs...)
+    dy2_dx2 = d2_dx2(y; kwargs...)
     return @. dy2_dx2 / (1 + dy_dx^2)^1.5
 end
 
@@ -217,11 +225,11 @@ Approximates the signed curvature of a function, scaled to the unit box ``[0,1]^
 
 See [`curvature`](@ref).
 """
-function standard_curvature(y::AbstractVector{<:Real})
+function standard_curvature(y::AbstractVector{<:Real}; kwargs...)
     Δx = 1/length(y)
     y_max = maximum(y)
-    dy_dx = d_dx(y) / (Δx * y_max)
-    dy2_dx2 = d2_dx2(y) / (Δx^2 * y_max)
+    dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
+    dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
     return @. dy2_dx2 / (1 + dy_dx^2)^1.5
 end
 
