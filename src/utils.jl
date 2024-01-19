@@ -92,7 +92,7 @@ function mean_rel_error(Xhat, X; dims=(1,2))
 end
 
 """
-    d2_dx2(y::AbstractVector{<:Real})
+    d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
 
 Approximates the 2nd derivative of a function using only given samples y of that function.
 
@@ -101,16 +101,27 @@ Note the approximation uses centered three point finite differences for the
 next-to-end points, and foward/backward three point differences for the begining/end points
 respectively. The remaining interior points use five point differences.
 
-Force only the third order approximation with the keyword `third_order=true`.
+Will use the largest order method possible by defult (currently 5 points), but can force
+a specific order method with the keyword `order`.
 See [`d_dx`](@ref).
 """
-function d2_dx2(y::AbstractVector{<:Real}; third_order::Bool=false)
-    if length(y) < 3
+function d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
+    n = length(y)
+    if n < 3
         return ArgumentError("input $y must have at least length 3")
-    elseif length(y) < 5
-        third_order=true
+    elseif order <= 2
+        return ArgumentError("order $order must be at least 3")
     end
-    return third_order ? _d2_dx2_3(y) : _d2_dx2_5(y)
+
+    if order == 3
+        return _d2_dx2_3(y)
+    elseif order == 4
+        return _d2_dx2_4(y)
+    elseif order >= 5
+        return _d2_dx2_5(y)
+    else
+        return ErrorException("Something went wrong with the order $order.")
+    end
 end
 # TODO is there a package that does this? The ones I've seen require the forward function.
 
@@ -122,6 +133,23 @@ function _d2_dx2_3(y::AbstractVector{<:Real})
     # Assume the same curvature at the end points
     d[begin] = d[begin+1]
     d[end] = d[end-1]
+    return d
+end
+
+function _d2_dx2_4(y::AbstractVector{<:Real})
+    d = similar(y)
+    each_i = eachindex(y)
+
+    for i in each_i[begin+1:end-1]
+        d[i] = y[i-1] - 2*y[i] + y[i+1] # Note this is the same estimate as _d2_dx2_3
+    end
+
+    # Four point forward/backwards estimate at end points
+    i = each_i[begin]
+    d[i] = (6*y[i] - 15*y[i+1] + 12*y[i+2] - 3*y[i+3])/3
+
+    i = each_i[end]
+    d[i] = (-3*y[i-3] + 12*y[i-2] -15*y[i-1] +6*y[i])/3
     return d
 end
 
@@ -156,16 +184,27 @@ Note the approximation uses centered three point finite differences for the
 next-to-end points, and foward/backward three point differences for the begining/end points
 respectively. The remaining interior points use five point differences.
 
-Force only the third order approximation with the keyword `third_order=true`.
+Will use the largest order method possible by defult (currently 5 points), but can force
+a specific order method with the keyword `order`.
 See [`d2_dx2`](@ref).
 """
-function d_dx(y::AbstractVector{<:Real}; third_order::Bool=false)
-    if length(y) < 2
-        return ArgumentError("input $y must have at least length 2")
-    elseif length(y) < 5
-        third_order=true
+function d_dx(y::AbstractVector{<:Real}; order::Integer=length(y))
+    n = length(y)
+    if n < 3
+        return ArgumentError("input $y must have at least length 3")
+    elseif order <= 2
+        return ArgumentError("order $order must be at least 3")
     end
-    return third_order ? _d_dx_3(y) : _d_dx_5(y)
+
+    if order == 3
+        return _d_dx_3(y)
+    elseif order == 4
+        return _d_dx_4(y)
+    elseif order >= 5
+        return _d_dx_5(y)
+    else
+        return ErrorException("Something went wrong with the order $order.")
+    end
 end
 
 function _d_dx_3(y::AbstractVector{<:Real})
@@ -173,14 +212,32 @@ function _d_dx_3(y::AbstractVector{<:Real})
     each_i = eachindex(y)
 
     for i in each_i[begin+1:end-1]
-        d[i] = -y[i-1] + y[i+1]
+        d[i] = (-y[i-1] + y[i+1])/2
     end
 
     i = each_i[begin+1]
-    d[begin] = -3*y[i-1] + 4*y[i] - y[i+1]
+    d[begin] = (-3*y[i-1] + 4*y[i] - y[i+1])/2
 
     i = each_i[end-1]
-    d[end] = y[i-1] - 4*y[i] + 3*y[i+1]
+    d[end] = (y[i-1] - 4*y[i] + 3*y[i+1])/2
+    return d
+end
+
+function _d_dx_4(y::AbstractVector{<:Real})
+    d = similar(y)
+    each_i = eachindex(y)
+
+    for i in each_i[begin+1:end-2]
+        d[i] = (-2*y[i-1] - 3*y[i] + 6*y[i+1] - y[i+2])/6 # four points is odd so using a half forward estimate
+    end
+
+    i = each_i[begin]
+    d[i] = (-11*y[i] + 18*y[i+1] - 9*y[i+2] + 2*y[i+3])/6
+
+    i = each_i[end]
+    d[i-1] = (y[i-3] - 6*y[i-2] + 3*y[i-1] + 2*y[i])/6
+    d[i]   = (-2*y[i-3] + 9*y[i-2] - 18*y[i-1] + 11*y[i])/6
+
     return d
 end
 
