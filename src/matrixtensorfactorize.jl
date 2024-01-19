@@ -417,7 +417,7 @@ function dist_to_Ncone(grad_A, grad_B, A, B)
     return combined_norm(grad_A_restricted, grad_B_restricted)
 end
 
-# TODO move this ploting function to SedimentTools? Or seperate viz.jl file?
+# TODO remove plotting feature so Plots.jl is not required?
 """
     plot_factors(B, names; appendtitle="")
 
