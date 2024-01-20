@@ -109,6 +109,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
     stepsize::Symbol=:lipshitz,
     momentum::Bool=false,
     R_max::Integer=size(Y)[1],
+    online_rank_estimation::Bool=false,
     kwargs...
 )
 
@@ -127,7 +128,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
         return ArgumentError("Momentum is only compatible with lipshitz stepsize")
     end
 
-    if isnothing(R)
+    if isnothing(R) && (online_rank_estimation == false)
         # Run nnmtf with R from 1 to size(Y)[1]
         # Compare fit ||Y - AB||_F^2 across all R
         # Return the output at the maximum positive curavature of ||Y - AB||_F^2
@@ -143,6 +144,34 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
             @info "Final relative error = $final_rel_error"
         end
         R = argmax(standard_curvature(final_rel_errors))
+        @info "Optimal rank found: $R"
+        return ((all_outputs[R])..., R)
+
+    elseif isnothing(R) && (online_rank_estimation == true)
+        # Run nnmtf with R from 1 to size(Y)[1]
+        # Compare fit ||Y - AB||_F^2 across all R
+        # Return the output at the maximum positive curavature of ||Y - AB||_F^2
+        all_outputs = []
+        final_rel_errors = Real[]
+        @info "Estimating Rank"
+        for r in 1:R_max
+            @info "Trying rank=$r..."
+            output = _nnmtf_proxgrad(Y, r; normalize, projection, criterion, stepsize, momentum, kwargs...)
+            push!(all_outputs, output)
+            final_rel_error = output[3][end]
+            push!(final_rel_errors, final_rel_error)
+            @info "Final relative error = $final_rel_error"
+
+            curvatures = standard_curvature(final_rel_errors)
+            if curvatures[end] ≈ maximum(curvatures) # want the last curvature to be significantly smaller than the max
+                continue
+            else
+                R = argmax(curvatures)
+                @info "Optimal rank found: $R"
+                return ((all_outputs[R])..., R)
+            end
+        end
+        R = argmax(curvatures)
         @info "Optimal rank found: $R"
         return ((all_outputs[R])..., R)
     end
