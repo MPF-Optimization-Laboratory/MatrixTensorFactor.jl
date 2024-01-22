@@ -64,7 +64,6 @@ standard_curvature
 *(::AbstractMatrix, ::Abstract3Tensor)
 combined_norm
 dist_to_Ncone
-plot_factors
 rel_error
 mean_rel_error
 residual

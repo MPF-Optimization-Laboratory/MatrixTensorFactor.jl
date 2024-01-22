@@ -240,9 +240,9 @@ function _nnmtf_proxgrad(
         LA_last = LA
         LB_last = LB
 
-        if (plot_B != 0) && ((i-1) % plot_B == 0)
-            plot_factors(B, names, appendtitle=" at i=$i")
-        end
+        #if (plot_B != 0) && ((i-1) % plot_B == 0)
+        #    plot_factors(B, names, appendtitle=" at i=$i")
+        #end
 
         if momentum
             t_last = t
