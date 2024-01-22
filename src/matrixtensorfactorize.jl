@@ -115,39 +115,20 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
 
     # Iteration option checking
     if !(projection in IMPLIMENTED_PROJECTIONS)
-        return ArgumentError("projection is not an implimented projection")
+        throw(ArgumentError("projection is not an implimented projection"))
     elseif !(normalize in IMPLIMENTED_NORMALIZATIONS)
-        return ArgumentError("normalize is not an implimented normalization")
+        throw(ArgumentError("normalize is not an implimented normalization"))
     elseif !(criterion in IMPLIMENTED_CRITERIA)
-        return ArgumentError("criterion is not an implimented criterion")
+        throw(ArgumentError("criterion is not an implimented criterion"))
     elseif !(stepsize in IMPLIMENTED_STEPSIZES)
-        return ArgumentError("stepsize is not an implimented stepsize")
+        throw(ArgumentError("stepsize is not an implimented stepsize"))
     end
 
     if momentum && stepsize != :lipshitz
-        return ArgumentError("Momentum is only compatible with lipshitz stepsize")
+        throw(ArgumentError("Momentum is only compatible with lipshitz stepsize"))
     end
 
-    if isnothing(R) && (online_rank_estimation == false)
-        # Run nnmtf with R from 1 to size(Y)[1]
-        # Compare fit ||Y - AB||_F^2 across all R
-        # Return the output at the maximum positive curavature of ||Y - AB||_F^2
-        all_outputs = []
-        final_rel_errors = Real[]
-        @info "Estimating Rank"
-        for r in 1:R_max
-            @info "Trying rank=$r..."
-            output = _nnmtf_proxgrad(Y, r; normalize, projection, criterion, stepsize, momentum, kwargs...)
-            push!(all_outputs, output)
-            final_rel_error = output[3][end]
-            push!(final_rel_errors, final_rel_error)
-            @info "Final relative error = $final_rel_error"
-        end
-        R = argmax(standard_curvature(final_rel_errors))
-        @info "Optimal rank found: $R"
-        return ((all_outputs[R])..., R)
-
-    elseif isnothing(R) && (online_rank_estimation == true)
+    if isnothing(R) #&& (online_rank_estimation == true)
         # Run nnmtf with R from 1 to size(Y)[1]
         # Compare fit ||Y - AB||_F^2 across all R
         # Return the output at the maximum positive curavature of ||Y - AB||_F^2
@@ -162,16 +143,18 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
             push!(final_rel_errors, final_rel_error)
             @info "Final relative error = $final_rel_error"
 
-            curvatures = standard_curvature(final_rel_errors)
-            if curvatures[end] ≈ maximum(curvatures) # want the last curvature to be significantly smaller than the max
-                continue
-            else
-                R = argmax(curvatures)
-                @info "Optimal rank found: $R"
-                return ((all_outputs[R])..., R)
+            if (online_rank_estimation == true) && length(final_rel_errors) >= 3 # Need at least 3 points to evaluate curvature
+                curvatures = standard_curvature(final_rel_errors)
+                if curvatures[end] ≈ maximum(curvatures) # want the last curvature to be significantly smaller than the max
+                    continue
+                else
+                    R = argmax(curvatures)
+                    @info "Optimal rank found: $R"
+                    return ((all_outputs[R])..., R)
+                end
             end
         end
-        R = argmax(curvatures)
+        R = argmax(standard_curvature(final_rel_errors))
         @info "Optimal rank found: $R"
         return ((all_outputs[R])..., R)
     end
@@ -410,7 +393,7 @@ function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
 
     elseif projection == :nnscale
         if isnothing(dims)
-            return ArgumentError("normalize == :nothing and projection == :nnscale are uncompatible. Unsure what which part of X should be normalized.")
+            throw(ArgumentError("normalize == :nothing and projection == :nnscale are uncompatible. Unsure what which part of X should be normalized."))
         else
             X_slices = eachslice(X; dims)
             for slice in X_slices
@@ -427,7 +410,7 @@ function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
 
     elseif projection == :simplex
         if isnothing(dims)
-            return ArgumentError("normalize == :nothing and projection == :simplex are uncompatible. Unsure what which part of X should be projected to the simplex.")
+            throw(ArgumentError("normalize == :nothing and projection == :simplex are uncompatible. Unsure what which part of X should be projected to the simplex."))
         else
             X_slices = eachslice(X; dims)
             X_slices .= projsplx.(X_slices)

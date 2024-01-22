@@ -108,9 +108,9 @@ See [`d_dx`](@ref).
 function d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
     n = length(y)
     if n < 3
-        return ArgumentError("input $y must have at least length 3")
+        throw(ArgumentError("input $y must have at least length 3"))
     elseif order <= 2
-        return ArgumentError("order $order must be at least 3")
+        throw(ArgumentError("order $order must be at least 3"))
     end
 
     if order == 3
@@ -120,7 +120,7 @@ function d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
     elseif order >= 5
         return _d2_dx2_5(y)
     else
-        return ErrorException("Something went wrong with the order $order.")
+        throw(ErrorException("Something went wrong with the order $order."))
     end
 end
 # TODO is there a package that does this? The ones I've seen require the forward function.
@@ -191,9 +191,9 @@ See [`d2_dx2`](@ref).
 function d_dx(y::AbstractVector{<:Real}; order::Integer=length(y))
     n = length(y)
     if n < 3
-        return ArgumentError("input $y must have at least length 3")
+        throw(ArgumentError("input $y must have at least length 3"))
     elseif order <= 2
-        return ArgumentError("order $order must be at least 3")
+        throw(ArgumentError("order $order must be at least 3"))
     end
 
     if order == 3
@@ -203,7 +203,7 @@ function d_dx(y::AbstractVector{<:Real}; order::Integer=length(y))
     elseif order >= 5
         return _d_dx_5(y)
     else
-        return ErrorException("Something went wrong with the order $order.")
+        throw(ErrorException("Something went wrong with the order $order."))
     end
 end
 

@@ -78,7 +78,14 @@ Y .*= Δx * Δy # Scale factors
 sum.(eachslice(Y, dims=1)) # should all be 1
 
 # Perform decomposition
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R, tol=1e-6, projection=:nnscale, normalize=:slices, stepsize=:lipshitz, momentum=true, criterion=:ncone)
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y;
+    tol=1e-6,
+    projection=:nnscale,
+    normalize=:slices,
+    stepsize=:lipshitz,
+    momentum=true,
+    criterion=:ncone,
+    online_rank_estimation=true)
 F ./= Δx * Δy # Rescale factors
 
 # Plot learned factors
