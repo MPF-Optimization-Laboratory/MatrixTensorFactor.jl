@@ -6,11 +6,6 @@ using Distributions
 using MatrixTensorFactor
 using Plots
 
-
-
-J = 1000 # Number of samples in the x dimention
-K = 1000 # Number of samples in the y dimention
-
 Random.seed!(123)
 
 #############################################
@@ -20,10 +15,10 @@ Random.seed!(123)
 # Three sources, product distributions
 R = 3
 source1a = Normal(5, 1)
-source2a = Normal(-2, 3)
-source3a = Normal(0, 1)
 source1b = Uniform(-7, 2)
+source2a = Normal(-2, 3)
 source2b = Exponential(2)
+source3a = Normal(0, 1)
 source3b = Normal(0, 3)
 
 source1 = product_distribution([source1a, source1b])
@@ -33,15 +28,15 @@ source3 = product_distribution([source3a, source3b])
 sources = (source1, source2, source3)
 
 # x values to sample the densities at
-x = range(-10,10,length=J)
+x = range(-10,10,length=30)
 Δx = x[2] - x[1]
 
 # y values to sample the densities at
-y = range(-10,10,length=K)
+y = range(-10,10,length=30)
 Δy = y[2] - y[1]
 
 # Collect sample points into a matrix
-xy = Matrix{Vector{Float64}}(undef, length(y),length(x))
+xy = Matrix{Vector{Float64}}(undef, length(x),length(y))
 for (i, x) in enumerate(x)
     for (j, y) in enumerate(y)
         xy[j, i] = [x, y]
@@ -69,47 +64,61 @@ distribution3 = MixtureModel([sources...], p3)
 distribution4 = MixtureModel([sources...], p4)
 distribution5 = MixtureModel([sources...], p5)
 
-# One mixture density
-heatmap(x,y, pdf.((distribution5,), xy)) |> display
+make_samples(distribution, N=1000) = [rand(distribution) for _ in 1:N]
 
+# Example heatmap from distribution5
+samples1 = make_samples(distribution5)
+f = kde(hcat(samples5...)')
+heatmap(f.x, f.y, f.density')
+
+# True pdf of same mixture
+heatmap(x,y, pdf.((distribution1,), xy)) |> display
+
+# Make an initial Y with limited number of samples
+N = 500 # number of distribution samples in batch
+K = 128 # number of KDE samples in both x & y dimentions
 distributions = [distribution1, distribution2, distribution3, distribution4, distribution5]
-I = length(distributions)
+
+xs = range(-10, 10, length=K)
+ys = range(-10, 10, length=K)
+Δx = xs[2]-xs[1]
+Δy = ys[2]-ys[1]
+
+samples = make_samples.(distributions, N)
+fs = [kde(hcat(x...)', (xs, ys); bandwidth=(0.5,0.5)).density' for x in samples] # Need to sample at the same place with the sample bandwith
+
+heatmap(fs[1])
 
 # Collect into a tensor that is size(Y) == (Sinks x Features x Samples)
-sinks = [pdf.((d,), xy) for d in distributions]
-Y = hcat(sinks...)
-Y = reshape(Y, (length(x),length(y),length(distributions)))
+Y = cat(fs...;dims=3)
 Y = permutedims(Y, (3,1,2))
-Y .*= Δx * Δy # Scale factors
-sum.(eachslice(Y, dims=1)) # should all be 1
+Y .*= Δx * Δy
+sum.(eachslice(Y, dims=1))
+heatmap(Y[1,:,:])
+
+# May have to extent KernelDensity so I can add one sample to an estimate (with appropriate bandwidth)
+
+# Make function that takes one more sample from a distribution,
+# and updates Y, the current best guess for the KDE
 
 # Perform decomposition
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
-    tol=1e-5 / sqrt(R*(I+J*K)),
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, 3;
+    tol=1e-8,
     projection=:nnscale,
     normalize=:slices,
     stepsize=:lipshitz,
     momentum=true,
-    delta=0.8,
     criterion=:ncone,
-    online_rank_estimation=true)
-
-@show (I, R, J, K)
-@show length(rel_errors)
-@show mean_rel_error(Y, C*F; dims=1)
-
-heatmap(x, y, Y[1,:,:], title="True Y slice 1") |> display
-heatmap(x, y, (C*F)[1,:,:], title="learned Y slice 1") |> display
-
+    online_rank_estimation=false)
 F ./= Δx * Δy # Rescale factors
 
 # Plot learned factors
-heatmap(C, yflip=true, title="Learned Coefficients", clims=(0,1)) |> display
-heatmap(C_true, yflip=true, title="True Coefficients", clims=(0,1)) |> display # possibly permuted order
+heatmap(C, yflip=true, title="Learned Coefficients") |> display
+heatmap(C_true, yflip=true, title="True Coefficients") |> display # possibly permuted order
 
-heatmap(x, y, F[1,:,:], title="Learned Source 1") |> display
-heatmap(x, y, F[2,:,:], title="Learned Source 2") |> display
-heatmap(x, y, F[3,:,:], title="Learned Source 3") |> display
+heatmap(xs, ys, F[1,:,:], title="Learned Source 1") |> display
+heatmap(xs, ys, F[2,:,:], title="Learned Source 2") |> display
+heatmap(xs, ys, F[3,:,:], title="Learned Source 3") |> display
 
 # Plot convergence
 plot(rel_errors[2:end], yaxis=:log10) |> display

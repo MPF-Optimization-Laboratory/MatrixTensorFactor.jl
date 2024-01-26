@@ -569,3 +569,174 @@ function _slice_rescale(Y)
     Y ./= slice_sums
     return Yscaled, slice_sums
 end
+
+
+"""
+nnmtf using Online proximal (projected) gradient decent alternating through blocks (BCD)
+
+Updates Y each iteration with a new sample
+
+"""
+function nnmtf_proxgrad_online(
+    Y::Abstract3Tensor,
+    R::Integer,
+    distributions,
+    number_of_samples;
+    xs,
+    ys,
+    maxiter::Integer=1000,
+    tol::Real=1e-4,
+    plot_B::Integer=0,
+    names::AbstractVector{String}=String[],
+    normalize::Symbol=:fibres,
+    projection::Symbol=:nonnegative,
+    stepsize::Symbol=:lipshitz,
+    criterion::Symbol=:ncone,
+    momentum::Bool=false,
+    delta::Real=0.9999,
+    rescale_AB::Bool = (projection == :nnscale ? true : false),
+    rescale_Y::Bool = (projection == :nnscale ? true : false),
+)
+    # Override scaling if no normalization is requested
+    normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
+
+    # Extract Dimentions
+    M, N, P = size(Y)
+
+    # Initialize A, B
+    init(x...) = abs.(randn(x...))
+    A = init(M, R)
+    B = init(R, N, P)
+
+    rescaleAB!(A, B; normalize)
+
+    problem_size = R*(M + N*P)
+
+    # # Scale Y if desired
+    if rescale_Y
+        # Y_input = copy(Y)
+        Y, factor_sums = rescaleY(Y; normalize)
+    end
+
+    # Initialize Looping
+    i = 1
+    rel_errors = zeros(maxiter)
+    norm_grad = zeros(maxiter)
+    dist_Ncone = zeros(maxiter)
+
+    # Calculate initial relative error and gradient
+    rel_errors[i] = residual(A*B, Y; normalize)
+    grad_A, grad_B = calc_gradient(A, B, Y)
+    norm_grad[i] = combined_norm(grad_A, grad_B)
+    dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
+
+    A_last = copy(A)
+    B_last = copy(B)
+
+    step = nothing
+
+    # Momentum variables
+    t = 1
+    LA = lipshitzA(B)
+    LB = lipshitzB(A)
+
+    # Main Loop
+    while i < maxiter
+        A_last_last = copy(A_last) # for stepsizes that require the last two iterations
+        B_last_last = copy(B_last)
+
+        A_last = copy(A)
+        B_last = copy(B)
+
+        LA_last = LA
+        LB_last = LB
+
+        #if (plot_B != 0) && ((i-1) % plot_B == 0)
+        #    plot_factors(B, names, appendtitle=" at i=$i")
+        #end
+
+        if momentum
+            t_last = t
+            t = 0.5*(1 + sqrt(1 + 4*t_last^2))
+            omegahat = (t_last - 1) / t # Candidate momentum step
+            LA = lipshitzA(B)
+            omegaA = min(omegahat, delta*sqrt(LA_last/LA)) # Safeguarded momentum step
+            A = A_last + omegaA * (A_last - A_last_last)
+        end
+
+        if i > 1 && stepsize == :spg
+            grad_A_last_last = calc_gradientA(A_last_last, B_last_last, Y)
+            grad_A_last = calc_gradientA(A_last, B_last, Y)
+            step = spg_stepsize(A_last, A_last_last, grad_A_last, grad_A_last_last)
+        end
+
+        grad_step_A!(A, B, Y; step)
+        proj!(A; projection, dims=1) # Want the rows of A normalized when using :simplex projection
+
+        if momentum
+            LB = lipshitzB(A)
+            omegaB = min(omegahat, delta*sqrt(LB_last/LB))
+            B = B_last + omegaB * (B_last - B_last_last)
+        end
+
+        if i > 1 && stepsize == :spg
+            # note the mixed gradient below (A_last with B_last_last) because A gets updated before B
+            grad_B_last_last = calc_gradientB(A_last, B_last_last, Y)
+            grad_B_last = calc_gradientB(A, B_last, Y)
+            step = spg_stepsize(B_last, B_last_last, grad_B_last, grad_B_last_last)
+        end
+
+        grad_step_B!(A, B, Y; step)
+        proj!(B; projection, dims=to_dims(normalize))
+
+        rescale_AB ? rescaleAB!(A, B; normalize) : nothing
+
+        # Calculate relative error and norm of gradient
+        i += 1
+        rel_errors[i] = residual(A*B, Y; normalize)
+        grad_A, grad_B = calc_gradient(A, B, Y)
+        norm_grad[i] = combined_norm(grad_A, grad_B)
+        dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
+
+        if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
+            break
+        end
+
+        # Update Y using a new sample from distributions
+
+        for i in 1:M
+            new_sample = rand(distributions[i])
+            updateY!(Y, new_sample; N=number_of_samples, I=i, xs, ys)
+        end
+        number_of_samples += 1
+    end
+
+    # Chop Excess
+    keep_slice = 1:i
+    rel_errors = rel_errors[keep_slice]
+    norm_grad = norm_grad[keep_slice]
+    dist_Ncone = dist_Ncone[keep_slice]
+
+    # Rescale B back if Y was initialy scaled
+    # Only valid if we rescale fibres
+    if rescale_Y && normalize == :fibres
+        # Compare:
+        # If B_rescaled := avg_factor_sums * B,
+        # Y_input ≈ A * B_rescaled
+        #       Y ≈ A * B (Here, Y and B have normalized fibers)
+        B_lateral_slices = eachslice(B, dims=2)
+        B_lateral_slices .*= factor_sums
+    end
+
+    return A, B, rel_errors, norm_grad, dist_Ncone
+end
+
+function updateY!(Y, new_sample; N, I, xs, ys)
+    # Turn new_sample point into a gaussian over xs, ys
+    a, b = new_sample
+    σ = N^(-0.2) #bandwidth should get small as N gets big
+    kernel = @. (2π*σ^2)^(-1)*exp(-0.5*((xs'-a)^2 + (ys-b)^2)/σ^2)
+    kernel ./= sum(kernel)
+
+    Y[I, :, :] .= (Y[I, :, :] .* N .+ kernel) ./ (N+1)
+end
