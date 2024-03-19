@@ -77,18 +77,21 @@ Y = hcat(sinks...)
 Y = reshape(Y, (size(Y)...,1))
 Y = permutedims(Y, (2,3,1))
 Y .*= Δx # Scale factors
-sum.(eachslice(Y, dims=(1,2))) # should all be 1
+@show sum.(eachslice(Y, dims=(1,2))) # should all be 1
 
-function nnmtf_test(projection)
-    C, F, rel_errors, norm_grad, dist_Ncone, R = nnmtf(Y;
-        maxiter=500,
-        tol=1e-10,
+function nnmtf_test(projection; projectionA=projection, projectionB=projection)
+    C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, 3;
+        maxiter=1500,
+        tol=1e-15,
         momentum=true,
         projection,
         normalize=:fibres,
         rescale_Y=false,
-        stepsize=:lipshitz,
-        online_rank_estimation=true)
+        stepsize=:lipshitz, #:lipshitz
+        online_rank_estimation=false,
+        projectionA,
+        projectionB,
+        delta=0.9) # momentum parameter between 0 and 1
 
     n_iterations = length(rel_errors)
     final_rel_error = rel_errors[end]
@@ -98,8 +101,8 @@ function nnmtf_test(projection)
     F ./= Δx # Rescale factors
 
     # Plot learned factors
-    heatmap(C, yflip=true, title="Learned Coefficients with $projection") |> display
-    heatmap(C_true, yflip=true, title="True Coefficients with $projection") |> display # possibly permuted order
+    heatmap(C, yflip=true, title="Learned C with ($projectionA, $projectionB)") |> display
+    heatmap(C_true, yflip=true, title="True C") |> display # possibly permuted order
 
     p=plot(x, F[1,:], title="Learned Sources")
     for r in 2:R
@@ -108,16 +111,21 @@ function nnmtf_test(projection)
     display(p)
 
     # Plot convergence
-    plot(rel_errors[2:end], yaxis=:log10, title="Relative Error with $projection") |> display
-    plot(norm_grad[2:end], yaxis=:log10, title="Norm of Gradient with $projection") |> display
-    plot(dist_Ncone[2:end], yaxis=:log10, title="Distance between -Gradient\n and Normal Cone with $projection") |> display
+    plot(rel_errors[2:end], yaxis=:log10, title="Relative Error with ($projectionA, $projectionB)") |> display
+    plot(norm_grad[2:end], yaxis=:log10, title="Norm of Gradient with ($projectionA, $projectionB)") |> display
+    plot(dist_Ncone[2:end], yaxis=:log10, title="Distance between -Gradient\n and Normal Cone with ($projectionA, $projectionB)") |> display
 
     return rel_errors
 end
 
 objective_simplex = nnmtf_test(:simplex) # standard proxgrad
 objective_nnscale = nnmtf_test(:nnscale) # our rescaling trick
+objective_simplexB = nnmtf_test(:simplex; projectionA=:nonnegative) # proxgrad only enforce B is in simplex
+objective_simplexA = nnmtf_test(:simplex; projectionB=:nonnegative) # proxgrad only enforce A is in simplex
 
-plot(objective_simplex[2:end], yaxis=:log10, label="simplex",
+
+plot(objective_nnscale[2:end], yaxis=:log10, label="nnscale",
     xlabel="iteration", ylabel="relative error")
-plot!(objective_nnscale[2:end], yaxis=:log10, label="nnscale")
+plot!(objective_simplex[2:end], yaxis=:log10, label="simplex A & B")
+plot!(objective_simplexA[2:end], yaxis=:log10, label="simplex A only")
+plot!(objective_simplexB[2:end], yaxis=:log10, label="simplex B only")

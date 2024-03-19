@@ -93,6 +93,8 @@ Note there may NOT be a unique optimal solution
 - `momentum::Bool=false`: use momentum updates
 - `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq 3.5 Xu & Yin 2013)
 - `R_max::Integer=size(Y)[1]`: maximum rank to try if R is not given
+- `projectionA::Symbol=projection`: projection to use on factor A (must be in IMPLIMENTED_PROJECTIONS)
+- `projectionB::Symbol=projection`: projection to use on factor B (must be in IMPLIMENTED_PROJECTIONS)
 
 # Returns
 - `A::Matrix{Float64}`: the matrix A in the factorization Y ≈ A * B
@@ -185,6 +187,8 @@ function _nnmtf_proxgrad(
     delta::Real=0.9999,
     rescale_AB::Bool = (projection == :nnscale ? true : false),
     rescale_Y::Bool = (projection == :nnscale ? true : false),
+    projectionA::Symbol = projection,
+    projectionB::Symbol = projection,
 )
     # Override scaling if no normalization is requested
     normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
@@ -260,7 +264,7 @@ function _nnmtf_proxgrad(
         end
 
         grad_step_A!(A, B, Y; step)
-        proj!(A; projection, dims=1) # Want the rows of A normalized when using :simplex projection
+        proj!(A; projection=projectionA, dims=1) # Want the rows of A normalized when using :simplex projection
 
         if momentum
             LB = lipshitzB(A)
@@ -276,7 +280,7 @@ function _nnmtf_proxgrad(
         end
 
         grad_step_B!(A, B, Y; step)
-        proj!(B; projection, dims=to_dims(normalize))
+        proj!(B; projection=projectionB, dims=to_dims(normalize))
 
         rescale_AB ? rescaleAB!(A, B; normalize) : nothing
 
