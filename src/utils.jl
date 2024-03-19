@@ -325,3 +325,28 @@ function projsplx(y)
     end
     return ReLU.(y .- t)
 end
+
+"""
+Finds the radius of the circumscribed circle between points (a,f), (b,g), (c,h)
+"""
+function circumscribed_radius((a,f),(b,g),(c,h))
+    d = 2*(a*(g-h)+b*(h-f)+c*(f-g))
+    p = ((a^2+f^2)*(g-h)+(b^2+g^2)*(h-f)+(c^2+h^2)*(f-g)) / d
+    q = ((a^2+f^2)*(b-c)+(b^2+g^2)*(c-a)+(c^2+h^2)*(a-b)) / d
+    r = sqrt((a-p)^2+(f-q)^2)
+    return r
+end
+
+function circumscribed_standard_curvature(y)
+    n = length(v)
+    ymax = maximum(y)
+    y = y / ymax
+    k = zero(ymax)
+    a, b, c = 0, 1/n, 2/n
+    for i in eachindex(k)[2:end-1]
+        k[i] = 1 / circumscribed_radius((a,y[i-1]),(b,y[i]),(c,y[i+1]))
+    end
+    k[1] = k[2]
+    k[end] = k[end-1]
+    return k
+end

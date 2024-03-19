@@ -7,9 +7,9 @@ using MatrixTensorFactor
 using Plots
 
 
-
-J = 64 # Number of samples in the x dimention
-K = 64 # Number of samples in the y dimention
+I = 5 # number mixtures
+J = 32 # Number of samples in the x dimention
+K = 32 # Number of samples in the y dimention
 
 #Random.seed!(123)
 
@@ -83,7 +83,33 @@ Y = permutedims(Y, (3,1,2))
 Y .*= Δx * Δy # Scale factors
 sum.(eachslice(Y, dims=1)) # should all be 1
 
+# get singular values to find optimal rank
+Y_mat = reshape(Y, I, :)
+σ = svdvals(Y_mat)
+plot(σ)
+partial_sum = [sum(σ[i:I].^2) .^ 0.5 for i in 2:I]
+push!(partial_sum, 0)
+plot(partial_sum, label="I-r smallest singular values norm", xlabel="rank", linewidth=2)
+
 # Perform decomposition
+final_loss = zeros(I)
+for r in 1:I
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, r;
+    tol=1e-5 / sqrt(R*(I+J*K)),
+    projection=:nnscale,
+    normalize=:slices,
+    stepsize=:lipshitz,
+    momentum=true,
+    delta=0.8,
+    criterion=:ncone,
+    online_rank_estimation=true)
+
+    final_loss[r] = norm(Y - C*F)
+end
+
+plot!(final_loss, label="Frobenius norm of residual tensor")
+
+R = 3 # Can see that R=3 is optimal
 C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
     tol=1e-5 / sqrt(R*(I+J*K)),
     projection=:nnscale,
@@ -115,17 +141,3 @@ end
 plot(rel_errors[2:end], yaxis=:log10) |> display
 plot(norm_grad[2:end], yaxis=:log10) |> display
 plot(dist_Ncone[2:end], yaxis=:log10) |> display
-
-
-########## tucker-2 decomposition
-B_permuted = permutedims(F, (3,1,2))
-
-CB, FB, rel_errors, norm_grad, dist_Ncone = nnmtf(B_permuted, 32;
-    tol=1e-5 / sqrt(R*(I+J*K)),
-    projection=:nnscale,
-    normalize=:slices,
-    stepsize=:lipshitz,
-    momentum=true,
-    delta=0.8,
-    criterion=:ncone,
-    online_rank_estimation=true)

@@ -108,7 +108,7 @@ function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
     criterion::Symbol=:ncone,
     stepsize::Symbol=:lipshitz,
     momentum::Bool=false,
-    R_max::Integer=size(Y)[1],
+    R_max::Integer=size(Y)[1], # Number of observed mixtures
     online_rank_estimation::Bool=false,
     kwargs...
 )
@@ -325,7 +325,7 @@ function converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, cri
     if !(criterion in IMPLIMENTED_CRITERIA)
         return UnimplimentedError("criterion is not an impliment criterion")
     elseif criterion == :ncone
-        return dist_Ncone[i]/sqrt(problem_size) < tol
+        return dist_Ncone[i]/sqrt(problem_size) < tol #TODO remove root problem size dependence
     elseif criterion == :iterates
         return combined_norm(A - A_last, B - B_last) < tol
     elseif criterion == :objective
