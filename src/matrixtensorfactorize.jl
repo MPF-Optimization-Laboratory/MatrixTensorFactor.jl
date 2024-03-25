@@ -65,13 +65,13 @@ const IMPLIMENTED_OPTIONS = Dict(
     "stepsizes" => IMPLIMENTED_STEPSIZES,
 )
 
-"""
+@doc raw"""
     nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
 
 Non-negatively matrix-tensor factorizes an order 3 tensor Y with a given "rank" R.
 
-Factorizes ``Y \\approx A B`` where ``\\displaystyle Y[i,j,k] \\approx \\sum_{r=1}^R A[i,r]*B[r,j,k]``
-and the factors ``A, B \\geq 0`` are nonnegative.
+Factorizes ``Y \approx A B`` where ``\displaystyle Y[i,j,k] \approx \sum_{r=1}^R A[i,r]*B[r,j,k]``
+and the factors ``A, B \geq 0`` are nonnegative.
 
 Note there may NOT be a unique optimal solution
 
@@ -103,6 +103,44 @@ Note there may NOT be a unique optimal solution
 - `norm_grad::Vector{Float64}`: norm of the full gradient at each iteration
 - `dist_Ncone::Vector{Float64}`: distance of the -gradient to the normal cone at each iteration
 - If R was estimated, also returns the optimal `R::Integer`
+
+# Implimentation of block coordinate decent updates
+We calculate the partial gradients and corresponding Lipshitz constants like so:
+
+```math
+\begin{align}
+  \boldsymbol{P}^{t}[q,r] &=\textstyle{\sum}_{jk} \boldsymbol{\mathscr{B}}^n[q,j,k] \boldsymbol{\mathscr{B}}^n[r,j,k]\\
+  \boldsymbol{Q}^{t}[i,r] &=\textstyle{\sum}_{jk}\boldsymbol{\mathscr{Y}}[i,j,k] \boldsymbol{\mathscr{B}}^n[r,j,k] \\
+  \nabla_{A} f(\boldsymbol{A}^{t},\boldsymbol{\mathscr{B}}^{t}) &= \boldsymbol{A}^{t} \boldsymbol{P}^{t} - \boldsymbol{Q}^{t} \\
+  L_{A} &= \left\lVert \boldsymbol{P}^{t} \right\rVert_{2}.
+\end{align}
+```
+
+Similarly for `` \boldsymbol{\mathscr{B}}``:
+```math
+\begin{align}
+  \boldsymbol{T}^{t+1}&=(\boldsymbol{A}^{t+\frac12})^\top \boldsymbol{A}^{t+\frac12}\\
+  \boldsymbol{\mathscr{U}}^{t+1}&=(\boldsymbol{A}^{t+\frac12})^\top \boldsymbol{\mathscr{Y}} \\
+  \nabla_\boldsymbol{\mathscr{B}} f(\boldsymbol{A}^{t+\frac12},\boldsymbol{\mathscr{B}}^{t}) &=  \boldsymbol{T}^{t+1} \boldsymbol{\mathscr{B}}^{t} - \boldsymbol{\mathscr{U}}^{t+1} \\
+  L_B &= \left\lVert \boldsymbol{T}^{t+1} \right\rVert_{2}.
+\end{align}
+```
+
+To ensure the iterates stay "close" to normalized, we introduce a renormalization step after
+the projected gradient updates:
+
+```math
+\begin{align}
+    \boldsymbol{C} [r,r]&=\frac{1}{J}\textstyle{\sum}_{jk} \boldsymbol{\mathscr{B}}^{t+\frac12}[r,j,k]\\
+    \boldsymbol{A}^{t+1}&= \boldsymbol{A}^{t+\frac12} \boldsymbol{C}\\
+    \boldsymbol{\mathscr{B}}^{t+1}&= (\boldsymbol{C}^{t+1})^{-1}\boldsymbol{\mathscr{B}}^{t+\frac12}.
+\end{align}
+```
+
+We typicaly use the following convergence criterion:
+```math
+d(-\nabla \ell(\boldsymbol{A}^{t},\boldsymbol{\mathscr{B}}^{t}), N_{\mathcal{C}}(\boldsymbol{A}^{t},\boldsymbol{\mathscr{B}}^{t}))^2\leq\delta^2 R(I+JK).
+```
 """
 function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
     normalize::Symbol=:fibres,
