@@ -283,7 +283,7 @@ Approximates the signed curvature of a function, scaled to the unit box ``[0,1]^
 See [`curvature`](@ref).
 """
 function standard_curvature(y::AbstractVector{<:Real}; kwargs...)
-    Δx = 1/length(y)
+    Δx = 1 / (length(y) - 1) # An interval 0:10 has length(0:10) = 11, but measure 10-0 = 10
     y_max = maximum(y)
     dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
     dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
