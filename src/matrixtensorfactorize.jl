@@ -340,6 +340,13 @@ function _nnmtf_proxgrad(
     norm_grad = norm_grad[keep_slice]
     dist_Ncone = dist_Ncone[keep_slice]
 
+    # If using nnscale, A and B may only be aproximatly normalized. So we need to project A
+    # and B to the simplex to ensure they are exactly normalized.
+    if projection == :nnscale
+        proj!(A; projection=:simplex, dims=1)
+        proj!(B; projection=:simplex, dims=to_dims(normalize))
+    end
+
     # Rescale B back if Y was initialy scaled
     # Only valid if we rescale fibres
     if rescale_Y && normalize == :fibres
