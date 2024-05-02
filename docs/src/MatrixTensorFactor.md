@@ -11,6 +11,7 @@ Abstract3Tensor
 ## Nonnegative Matrix-Tensor Factorization
 ```@docs
 nnmtf
+nnmtf_proxgrad_online
 ```
 
 ### Implimented Factorization Options
