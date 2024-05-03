@@ -6,7 +6,7 @@ using LinearAlgebra: norm, opnorm
 #using Plots: plot, heatmap
 using Statistics: mean, median, quantile, std
 using Random: randn
-using Einsum: @einsum
+using Tullio: @einsum
 using KernelDensity
 
 # Method extentions
