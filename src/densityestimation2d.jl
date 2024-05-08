@@ -3,6 +3,70 @@ Holds functions relevent for making 2D kernel density estimation
 """
 
 """
+Filters 2d elements so only the ones in the inner P percentile remain. See [`filter_inner_percentile`](@ref).
+"""
+filter_2d_inner_percentile(vs, P) = filter(_in2drange(vs, P), vs)
+
+"""
+Returns a function that checks if each coordinate is in the inner P percentile of the values in vs.
+"""
+function _in2drange(vs, P)
+    p_low = (100 - P) / 2
+    p_high = 100 - p_low
+    a, b = quantile([v[1] for v in vs], [p_low, p_high] ./ 100)
+    c, d = quantile([v[2] for v in vs], [p_low, p_high] ./ 100)
+    return x -> ((a ≤ x[1] ≤ b) && (c ≤ x[2] ≤ d))
+end
+
+# TODO extend this to arbitrary number of dimentions
+
+"""
+make_densities2d(s::Sink; kwargs...)
+make_densities2d(s::Sink, domains::AbstractVector{<:AbstractVector}; kwargs...)
+
+Similar to [`make_densities`](@ref) but performs the KDE on 2 measurements jointly.
+"""
+function make_densities2d(
+data::AbstractVector{T};
+inner_percentile::Integer=100,
+#bandwidths::AbstractVector{<:Real}=default_bandwidth.(
+#    collect(eachmeasurement(s)),DEFAULT_ALPHA,inner_percentile),
+) where T
+# Argument Handeling: check inner_percentile is a percentile
+(0 < inner_percentile <= 100) ||
+    ArgumentError("inner_percentile must be between 0 and 100, got $inner_percentile")
+
+#(length(data[begin]) == 2) ||
+#    ArgumentError("should only be 2 measurements for the grain in s, got $length(getmeasurements(s))")
+
+#data = filter_2d_inner_percentile(data)
+
+KDE = kde(hcat(collect(array(g) for g in data)...)'; bandwidth=tuple(bandwidths...))
+return KDE
+end
+
+"""
+    standardize_2d_KDEs(KDEs::AbstractVector{BivariateKDE}; n_samples=DEFAULT_N_SAMPLES,)
+
+Resample the densities so they all are sampled from the same x and y coordinates.
+"""
+function standardize_2d_KDEs(KDEs; n_samples=DEFAULT_N_SAMPLES,)
+    a = minimum(f -> f.x[begin], KDEs) # smallest left endpoint
+    b = maximum(f -> f.x[end]  , KDEs) # biggest right endpoint
+    c = minimum(f -> f.y[begin], KDEs) # smallest left endpoint
+    d = maximum(f -> f.y[end]  , KDEs) # biggest right endpoint
+
+    x_new = range(a, b, length=n_samples) # make the (larger) x-values range
+    y_new = range(c, d, length=n_samples) # make the (larger) y-values range
+    KDEs_new = pdf.(KDEs, (x_new,), (y_new,)) # Resample the densities on the new domain.
+                                    # Note the second argument is a 1-tuple so that we can
+                                    # broadcast over the first argument only, i.e.
+                                    # KDEs_new[i] = pdf(KDEs[i], x_new)
+    return KDEs_new, x_new, y_new
+end
+
+
+"""
     repeatcoord(coordinates, values)
 
 Repeates coordinates the number of times given by values.

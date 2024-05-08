@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "49de629289277247d16c6846b32eb296b8facd17"
+project_hash = "71f408cd0b90fec1446e7c41f51cc12750942e43"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1125,6 +1125,12 @@ version = "7.2.1+1"
 deps = ["Dates"]
 uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 version = "1.0.3"
+
+[[deps.TSVD]]
+deps = ["Adapt", "LinearAlgebra"]
+git-tree-sha1 = "c39caef6bae501e5607a6caf68dd9ac6e8addbcb"
+uuid = "9449cd9e-2762-5aa3-a617-5413e99d722e"
+version = "0.4.4"
 
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]

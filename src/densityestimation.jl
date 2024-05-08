@@ -1,5 +1,5 @@
 """
-Filters elements so only the ones in the inner P percentile remain.
+Filters elements so only the ones in the inner P percentile remain. See [`filter_2d_inner_percentile`](@ref).
 """
 filter_inner_percentile(v, P) = filter(_inrange(v, P), v)
 
@@ -97,7 +97,7 @@ function make_densities(
     #for (i, (measurement_values, b)) in enumerate(zip(data, bandwidths))
     for (i, measurement_values) in enumerate(data)
         # Estimate density based on the inner precentile to ignore outliers
-        #measurement_values = filter_inner_percentile(measurement_values, inner_percentile)
+        measurement_values = filter_inner_percentile(measurement_values, inner_percentile)
         density_estimates[i] = kde(measurement_values)#, bandwidth=b)
     end
 
@@ -124,7 +124,7 @@ const DEFAULT_N_SAMPLES = 64::Integer
 """
     standardize_KDEs(KDEs::AbstractVector{UnivariateKDE}; n_samples=DEFAULT_N_SAMPLES,)
 
-Resample the densities so they all are smapled from the same domain.
+Resample the densities so they all are sampled from the same domain.
 """
 function standardize_KDEs(KDEs; n_samples=DEFAULT_N_SAMPLES,)
     a = minimum(d -> d.x[begin], KDEs) # smallest left endpoint
