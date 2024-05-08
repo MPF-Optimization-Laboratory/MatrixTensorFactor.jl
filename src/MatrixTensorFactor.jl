@@ -19,7 +19,7 @@ export nnmtf_proxgrad_online
 
 export DEFAULT_ALPHA, DEFAULT_N_SAMPLES, MIN_STEP, MAX_STEP # Constants
 export IMPLIMENTED_OPTIONS, IMPLIMENTED_NORMALIZATIONS, IMPLIMENTED_PROJECTIONS, IMPLIMENTED_CRITERIA, IMPLIMENTED_STEPSIZES # implimented options
-export default_bandwidth, make_densities, standardize_KDEs, standardize_2d_KDEs, filter_inner_percentile, filter_2d_inner_percentile # Functions
+export default_bandwidth, make_densities, make_densities2d, standardize_KDEs, standardize_2d_KDEs, filter_inner_percentile, filter_2d_inner_percentile # Functions
 export repeatcoord, kde2d, coordzip # 2d density estimation functions
 
 include("utils.jl")

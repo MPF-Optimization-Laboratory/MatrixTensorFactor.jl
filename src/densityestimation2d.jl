@@ -27,22 +27,22 @@ make_densities2d(s::Sink, domains::AbstractVector{<:AbstractVector}; kwargs...)
 Similar to [`make_densities`](@ref) but performs the KDE on 2 measurements jointly.
 """
 function make_densities2d(
-data::AbstractVector{T};
-inner_percentile::Integer=100,
-#bandwidths::AbstractVector{<:Real}=default_bandwidth.(
-#    collect(eachmeasurement(s)),DEFAULT_ALPHA,inner_percentile),
-) where T
-# Argument Handeling: check inner_percentile is a percentile
-(0 < inner_percentile <= 100) ||
-    ArgumentError("inner_percentile must be between 0 and 100, got $inner_percentile")
+    data::AbstractVector{T};
+    inner_percentile::Integer=100,
+    #bandwidths::AbstractVector{<:Real}=default_bandwidth.(
+    #    collect(eachmeasurement(s)),DEFAULT_ALPHA,inner_percentile),
+    ) where T
+    # Argument Handeling: check inner_percentile is a percentile
+    (0 < inner_percentile <= 100) ||
+        ArgumentError("inner_percentile must be between 0 and 100, got $inner_percentile")
 
-#(length(data[begin]) == 2) ||
-#    ArgumentError("should only be 2 measurements for the grain in s, got $length(getmeasurements(s))")
+    #(length(data[begin]) == 2) ||
+    #    ArgumentError("should only be 2 measurements for the grain in s, got $length(getmeasurements(s))")
 
-#data = filter_2d_inner_percentile(data)
+    #data = filter_2d_inner_percentile(data)
 
-KDE = kde(hcat(collect(array(g) for g in data)...)'; bandwidth=tuple(bandwidths...))
-return KDE
+    KDE = kde(hcat(collect(array(g) for g in data)...)'; bandwidth=tuple(bandwidths...))
+    return KDE
 end
 
 """
