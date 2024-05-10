@@ -84,7 +84,7 @@ Y .*= Δx * Δy # Scale factors
 sum.(eachslice(Y, dims=1)) # should all be 1
 
 # Perform decomposition
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
+@time @profile C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
     tol=1e-5 / sqrt(R*(I+J*K)),
     projection=:nnscale,
     normalize=:slices,
@@ -93,7 +93,7 @@ C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
     delta=0.8,
     criterion=:ncone,
     online_rank_estimation=true)
-
+#@time @profile
 @show (I, R, J, K)
 @show length(rel_errors)
 @show mean_rel_error(Y, C*F; dims=1)

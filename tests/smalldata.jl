@@ -58,7 +58,7 @@ Y_slices ./= slice_sums
 
 # Decomposition
 R = 10
-C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;tol=1e-5,maxiter=800, rescale_CF=true,rescale_Y=false);
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;tol=1e-6,maxiter=150, rescale_Y=false);
 
 plot(rel_errors,yaxis=:log10) |> display
 plot(norm_grad,yaxis=:log10) |> display
