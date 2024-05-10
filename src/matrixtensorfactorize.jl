@@ -264,23 +264,20 @@ function _nnmtf_proxgrad(
     A_last = copy(A)
     B_last = copy(B)
 
+    A_last_last = copy(A_last) # for stepsizes that require the last two iterations
+    B_last_last = copy(B_last)
+
     step = nothing
 
     # Momentum variables
     t = 1
     LA = lipshitzA(B)
     LB = lipshitzB(A)
+    LA_last = LA
+    LB_last = LB
 
     # Main Loop
     while i < maxiter
-        A_last_last = copy(A_last) # for stepsizes that require the last two iterations
-        B_last_last = copy(B_last)
-
-        A_last = copy(A)
-        B_last = copy(B)
-
-        LA_last = LA
-        LB_last = LB
 
         #if (plot_B != 0) && ((i-1) % plot_B == 0)
         #    plot_factors(B, names, appendtitle=" at i=$i")
@@ -332,6 +329,15 @@ function _nnmtf_proxgrad(
         if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
             break
         end
+
+        A_last_last .= A_last #copy(A_last) # for stepsizes that require the last two iterations
+        B_last_last .= B_last #copy(B_last)
+
+        A_last .= A #copy(A)
+        B_last .= B #copy(B)
+
+        LA_last = LA
+        LB_last = LB
     end
 
     # Chop Excess

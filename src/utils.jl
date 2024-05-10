@@ -309,7 +309,7 @@ function projsplx(y)
     i = n - 1
     t = 0 # need to ensure t has scope outside the while loop
     while true
-        t = (sum(y_sorted[i+1:end]) - 1) / (n-i)
+        t = (sum(@view y_sorted[i+1:end]) - 1) / (n-i)
         if t >= y_sorted[i]
             break
         else
