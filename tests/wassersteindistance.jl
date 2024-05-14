@@ -1,3 +1,9 @@
+using Pkg
+Pkg.add("ReverseDiff")
+Pkg.add("OptimalTransport")
+Pkg.add("Distributions")
+Pkg.add("Plots")
+
 using ReverseDiff: gradient, GradientTape, compile, gradient!
 using Plots
 #using Einsum

@@ -84,8 +84,6 @@ Note there may NOT be a unique optimal solution
 - `tol::Real=1e-3`: desiered tolerance for the convergence criterion
 - `rescale_AB::Bool=true`: scale B at each iteration so that the factors (horizontal slices) have similar 3-fiber sums.
 - `rescale_Y::Bool=true`: Preprocesses the input `Y` to have normalized 3-fiber sums (on average), and rescales the final `B` so `Y=A*B`.
-- `plot_B::Integer=0`: if not 0, plot B every plot_B iterations
-- `names::AbstractVector{String}=String[]`: names of the slices of B to use for ploting
 - `normalize::Symbol=:fibres`: part of B that should be normalized (must be in IMPLIMENTED_NORMALIZATIONS)
 - `projection::Symbol=:nnscale`: constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
 - `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIA)
@@ -215,8 +213,6 @@ function _nnmtf_proxgrad(
     R::Integer;
     maxiter::Integer=1000,
     tol::Real=1e-4,
-    plot_B::Integer=0,
-    names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
     stepsize::Symbol=:lipshitz,
@@ -256,7 +252,8 @@ function _nnmtf_proxgrad(
     dist_Ncone = zeros(maxiter)
 
     # Calculate initial relative error and gradient
-    rel_errors[i] = residual(A*B, Y; normalize)
+    Yhat = A*B
+    rel_errors[i] = residual(Yhat, Y; normalize)
     grad_A, grad_B = calc_gradient(A, B, Y)
     norm_grad[i] = combined_norm(grad_A, grad_B)
     dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
@@ -279,17 +276,14 @@ function _nnmtf_proxgrad(
     # Main Loop
     while i < maxiter
 
-        #if (plot_B != 0) && ((i-1) % plot_B == 0)
-        #    plot_factors(B, names, appendtitle=" at i=$i")
-        #end
-
         if momentum
             t_last = t
             t = 0.5*(1 + sqrt(1 + 4*t_last^2))
             omegahat = (t_last - 1) / t # Candidate momentum step
             LA = lipshitzA(B)
             omegaA = min(omegahat, delta*sqrt(LA_last/LA)) # Safeguarded momentum step
-            A = A_last + omegaA * (A_last - A_last_last)
+            #A = A_last + omegaA * (A_last - A_last_last)
+            @. A += omegaA * (A_last - A_last_last)
         end
 
         if i > 1 && stepsize == :spg
@@ -304,7 +298,8 @@ function _nnmtf_proxgrad(
         if momentum
             LB = lipshitzB(A)
             omegaB = min(omegahat, delta*sqrt(LB_last/LB))
-            B = B_last + omegaB * (B_last - B_last_last)
+            #B = B_last + omegaB * (B_last - B_last_last)
+            @. B += omegaB * (B_last - B_last_last)
         end
 
         if i > 1 && stepsize == :spg
@@ -321,9 +316,13 @@ function _nnmtf_proxgrad(
 
         # Calculate relative error and norm of gradient
         i += 1
-        rel_errors[i] = residual(A*B, Y; normalize)
-        grad_A, grad_B = calc_gradient(A, B, Y)
+        Yhat .= A*B
+        rel_errors[i] = residual(Yhat, Y; normalize)
+#        grad_A, grad_B = calc_gradient(A, B, Y)
+        grad_A .= calc_gradientA(A, B, Y)
+        grad_B .= calc_gradientB(A, B, Y)
         norm_grad[i] = combined_norm(grad_A, grad_B)
+        #        norm_grad[i] = combined_norm(grad_A, grad_B)
         dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
 
         if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
@@ -454,7 +453,7 @@ function proj!(X::AbstractArray; projection=:nonnegative, dims=nothing)
             for slice in X_slices
                 # slices which contain exclusively nonpositive values should be projected using simplex
                 # this ensures we don't project a slice to the origin, which cannot be normalized
-                if all(slice .<= 0)
+                if all(x -> x <= 0, slice) #all(slice .<= 0)
                     slice .= projsplx(slice)
                 # otherwise only use ReLU and worry about normalization later
                 else
@@ -479,33 +478,10 @@ end
 Calculate the distance of the -gradient to the normal cone of the positive orthant.
 """
 function dist_to_Ncone(grad_A, grad_B, A, B)
-    grad_A_restricted = grad_A[(A .> 0) .|| (grad_A .< 0)]
-    grad_B_restricted = grad_B[(B .> 0) .|| (grad_B .< 0)]
+    grad_A_restricted = grad_A[@. (A > 0) | (grad_A < 0)]
+    grad_B_restricted = grad_B[@. (B > 0) | (grad_B < 0)]
     return combined_norm(grad_A_restricted, grad_B_restricted)
 end
-#=
-# TODO remove plotting feature so Plots.jl is not required?
-"""
-    plot_factors(B, names; appendtitle="")
-
-Plot each horizontal slice of B. Names give the name of each vertical slice.
-"""
-function plot_factors(B, names=string.(eachindex(B[1,:,1])); appendtitle="")
-    size(B)[2] == length(names) || ArgumentError("names should have the same length as size(B)[2]")
-    fiber_sums = sum.(eachslice(B,dims=(1,2)))
-    avg_factor_sums = Diagonal(mean.(eachrow(fiber_sums)))
-    B_temp = avg_factor_sums^(-1) * B
-    for (j, B_slice) ∈ enumerate(eachslice(B_temp,dims=1))
-        p = heatmap(B_slice,
-            yticks=(eachindex(B_slice[:,1]), names),
-            xticks=([1, length(B_slice[1,:])],["0", "1"]),
-            xlabel="Normalized Range of Values",
-            title = "Learned Distributions for Factor $j" * appendtitle,
-        )
-        display(p)
-    end
-end
-=#
 
 function lipshitzA(B)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
@@ -520,16 +496,16 @@ end
 function grad_step_A!(A, B, Y; step=nothing) # not using calc_gradientA and lipshitzA so that BB only needs to be computed once
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
-    grad = A*BB .- GG
+    grad = A*BB - GG
     isnothing(step) ? step = 1/opnorm(BB) : nothing # Lipshitz fallback
-    A .-= step .* grad # gradient step
+    @. A -= step * grad # gradient step
 end
 
 function grad_step_B!(A, B, Y; step=nothing)
     AA = A'A
-    grad = AA*B .- A'*Y
+    grad = AA*B - A'*Y
     isnothing(step) ? step = 1/opnorm(AA) : nothing # Lipshitz fallback
-    B .-= step .* grad # gradient step
+    @. B -= step * grad # gradient step
 end
 
 function calc_gradient(A, B, Y)
@@ -539,13 +515,13 @@ end
 function calc_gradientA(A, B, Y)
     @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
-    grad_A = A*BB .- GG
+    grad_A = A*BB - GG
     return grad_A
 end
 
 function calc_gradientB(A, B, Y)
     AA = A'A
-    grad_B = AA*B .- A'*Y
+    grad_B = AA*B - A'*Y
     return grad_B
 end
 
@@ -641,8 +617,6 @@ function nnmtf_proxgrad_online(
     ys,
     maxiter::Integer=1000,
     tol::Real=1e-4,
-    plot_B::Integer=0,
-    names::AbstractVector{String}=String[],
     normalize::Symbol=:fibres,
     projection::Symbol=:nonnegative,
     stepsize::Symbol=:lipshitz,
@@ -705,10 +679,6 @@ function nnmtf_proxgrad_online(
 
         LA_last = LA
         LB_last = LB
-
-        #if (plot_B != 0) && ((i-1) % plot_B == 0)
-        #    plot_factors(B, names, appendtitle=" at i=$i")
-        #end
 
         if momentum
             t_last = t

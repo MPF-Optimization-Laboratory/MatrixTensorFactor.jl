@@ -1,3 +1,8 @@
+using Pkg
+
+Pkg.add("HDF5")
+Pkg.add("SparseArrays")
+
 using HDF5
 using SparseArrays
 using KernelDensity

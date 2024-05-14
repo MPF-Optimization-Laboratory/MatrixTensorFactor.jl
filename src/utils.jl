@@ -19,18 +19,6 @@ function Base.:*(A::AbstractMatrix, B::Abstract3Tensor)
     return C
 end
 
-#=
-"""
-    ×₂₃(A::Abstract3Tensor, B::Abstract3Tensor)
-
-Computes the Abstract3Tensor C where ``C_{ijk} = \\sum_{l=1}^L A_{ilk} * B_{ijl}``.
-"""
-function ×₂₃(A::Abstract3Tensor, B::Abstract3Tensor)
-    @einsum C[i,j,k] := A[i,l,k] * B[i,j,l]
-    return C
-end
-=#
-
 """
     combined_norm(u, v, ...)
 

@@ -2,6 +2,10 @@
 
 using Random
 using KernelDensity
+using Pkg
+Pkg.add("Distributions")
+Pkg.add("Plots")
+
 using Distributions
 using MatrixTensorFactor
 using Plots

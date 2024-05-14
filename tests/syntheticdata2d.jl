@@ -2,11 +2,13 @@
 
 using Random
 using KernelDensity
+using Pkg
+Pkg.add("Distributions")
+Pkg.add("Plots")
+
 using Distributions
 using MatrixTensorFactor
 using Plots
-
-
 
 J = 64 # Number of samples in the x dimention
 K = 64 # Number of samples in the y dimention
@@ -84,16 +86,17 @@ Y .*= Δx * Δy # Scale factors
 sum.(eachslice(Y, dims=1)) # should all be 1
 
 # Perform decomposition
-@time @profile C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
+C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
     tol=1e-5 / sqrt(R*(I+J*K)),
     projection=:nnscale,
     normalize=:slices,
     stepsize=:lipshitz,
     momentum=true,
+    #momentum=false,
     delta=0.8,
     criterion=:ncone,
     online_rank_estimation=true)
-#@time @profile
+
 @show (I, R, J, K)
 @show length(rel_errors)
 @show mean_rel_error(Y, C*F; dims=1)
