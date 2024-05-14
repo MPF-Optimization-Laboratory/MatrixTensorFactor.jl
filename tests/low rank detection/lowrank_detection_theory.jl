@@ -1,4 +1,6 @@
 using LinearAlgebra
+using Pkg
+Pkg.add("Plots")
 using Plots
 
 I, J = 100, 80

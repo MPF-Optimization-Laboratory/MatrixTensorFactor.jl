@@ -6,7 +6,7 @@ being factored is very tall, very wide, or square.
 
 using Random
 using MatrixTensorFactor
-using Plots
+using Pkg; Pkg.add("Plots"); using Plots
 using Statistics
 
 sizes = [
