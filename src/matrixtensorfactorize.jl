@@ -115,6 +115,7 @@ We calculate the partial gradients and corresponding Lipshitz constants like so:
 ```
 
 Similarly for `` \boldsymbol{\mathscr{B}}``:
+
 ```math
 \begin{align}
   \boldsymbol{T}^{t+1}&=(\boldsymbol{A}^{t+\frac12})^\top \boldsymbol{A}^{t+\frac12}\\
