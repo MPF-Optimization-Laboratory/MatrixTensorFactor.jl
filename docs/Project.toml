@@ -5,4 +5,3 @@ version = "0.1.0"
 
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-MatrixTensorFactor = "b7339fc4-c5a0-4c8f-934d-9fd05475ae37"
