@@ -485,7 +485,7 @@ function dist_to_Ncone(grad_A, grad_B, A, B)
 end
 
 function lipshitzA(B)
-    @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
+    BB = slicewise_dot(B, B) #@einsum BB[s,r] := B[s,j,k]*B[r,j,k]
     return opnorm(BB)
 end
 
