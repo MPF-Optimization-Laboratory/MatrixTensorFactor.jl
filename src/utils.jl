@@ -19,6 +19,29 @@ function Base.:*(A::AbstractMatrix, B::Abstract3Tensor)
     return C
 end
 
+# TODO impliment these
+# generalizes @einsum C[i,j,k] := A[i,l] * B[l,j,k]
+#=
+function Base.:*(A::AbstractMatrix, B::AbstractArray)
+    sizeB = size(B)
+    Bmat = reshape(B, sizeB[1], :)
+    Cmat = A * Bmat
+    C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
+    return C
+end
+
+# generalizes @einsum C[s,r] := A[s,j,k]*B[r,j,k]
+function slice_dot(A, B)
+    C = zeros(size(A)[1], size(B)[1])
+    for (i, A_slice) in enumerate(eachslice(A, dims=1))
+        for (j, B_slice) in enumerate(eachslice(B, dims=1))
+            C[i, j] = A_slice ⋅ B_slice
+        end
+    end
+    return C
+end
+=#
+
 """
     combined_norm(u, v, ...)
 
