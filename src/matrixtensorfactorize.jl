@@ -141,7 +141,7 @@ We typicaly use the following convergence criterion:
 d(-\nabla \ell(\boldsymbol{A}^{t},\boldsymbol{\mathscr{B}}^{t}), N_{\mathcal{C}}(\boldsymbol{A}^{t},\boldsymbol{\mathscr{B}}^{t}))^2\leq\delta^2 R(I+JK).
 ```
 """
-function nnmtf(Y::Abstract3Tensor, R::Union{Nothing, Integer}=nothing;
+function nnmtf(Y::AbstractArray, R::Union{Nothing, Integer}=nothing;
     normalize::Symbol=:fibres,
     projection::Symbol=:nnscale,
     criterion::Symbol=:ncone,
@@ -210,7 +210,7 @@ Explination of argument handeling:
 - if projection is anything else, we should not, by default, rescale the factors
 """
 function _nnmtf_proxgrad(
-    Y::Abstract3Tensor,
+    Y::AbstractArray,
     R::Integer;
     maxiter::Integer=1000,
     tol::Real=1e-4,
@@ -229,16 +229,16 @@ function _nnmtf_proxgrad(
     normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
 
     # Extract Dimentions
-    M, N, P = size(Y)
+    M, Ns... = size(Y)
 
     # Initialize A, B
     init(x...) = abs.(randn(x...))
     A = init(M, R)
-    B = init(R, N, P)
+    B = init(R, Ns...)
 
     rescaleAB!(A, B; normalize)
 
-    problem_size = R*(M + N*P)
+    problem_size = R*(M + prod(Ns))
 
     # # Scale Y if desired
     if rescale_Y
@@ -495,9 +495,9 @@ function lipshitzB(A)
 end
 
 function grad_step_A!(A, B, Y; step=nothing) # not using calc_gradientA and lipshitzA so that BB only needs to be computed once
-    @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
-    @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
-    grad = A*BB - GG
+    BB = slicewise_dot(B, B) #@einsum BB[s,r] := B[s,j,k]*B[r,j,k]
+    YB = slicewise_dot(Y, B) #@einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
+    grad = A*BB - YB
     isnothing(step) ? step = 1/opnorm(BB) : nothing # Lipshitz fallback
     @. A -= step * grad # gradient step
 end
@@ -514,9 +514,9 @@ function calc_gradient(A, B, Y)
 end
 
 function calc_gradientA(A, B, Y)
-    @einsum BB[s,r] := B[s,j,k]*B[r,j,k]
-    @einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
-    grad_A = A*BB - GG
+    BB = slicewise_dot(B, B) #@einsum BB[s,r] := B[s,j,k]*B[r,j,k]
+    YB = slicewise_dot(Y, B) #@einsum GG[i,r] := Y[i,j,k]*B[r,j,k]
+    grad_A = A*BB - YB
     return grad_A
 end
 
@@ -529,7 +529,7 @@ end
 # Could compute the gradients this way to reuse CF-Y,
 # but the first way is still faster!
 #=
-CFY = A*B .- Y
+CFY = A*B - Y
 @einsum grad_A[i,r] := CFY[i,j,k]*B[r,j,k]
 @einsum grad_B[r,j,k] := A[i,r]*CFY[i,j,k]
 return grad_A, grad_B
@@ -547,7 +547,7 @@ function rescaleAB!(A, B; normalize)
 end
 
 """Rescales A and B so each factor (3 fibres) of B has similar magnitude."""
-function _avg_fibre_normalize!(A::AbstractMatrix, B::Abstract3Tensor)
+function _avg_fibre_normalize!(A::AbstractMatrix, B::AbstractArray)
     fiber_sums = sum.(eachslice(B, dims=(1,2)))
     avg_factor_sums = mean.(eachrow(fiber_sums))
 

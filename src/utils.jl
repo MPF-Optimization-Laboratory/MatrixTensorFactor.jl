@@ -19,6 +19,58 @@ function Base.:*(A::AbstractMatrix, B::Abstract3Tensor)
     return C
 end
 
+"""
+    Base.*(A::AbstractMatrix, B::AbstractArray)
+
+Computes the AbstractArray C where ``C_{i_1 i_2 \\dots i_d} = \\sum_{l=1}^L A_{i_1 l} * B_{l i_2 \\dots i_d}``.
+
+This is equivilent to the ``1``-mode product ``B \\times_1 A``.
+"""
+function Base.:*(A::AbstractMatrix, B::AbstractArray)
+    sizeB = size(B)
+    Bmat = reshape(B, sizeB[1], :)
+    Cmat = A * Bmat
+    C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
+    return C
+end
+
+"""
+    slicewise_dot(A::AbstractArray, B::AbstractArray)
+
+Constracts all but the first dimentions of A and B by performing a dot product over each `dim=1` slice.
+
+Generalizes `@einsum C[s,r] := A[s,j,k]*B[r,j,k]` to arbitrary dimentions.
+"""
+function slicewise_dot(A::AbstractArray, B::AbstractArray)
+    C = zeros(size(A)[1], size(B)[1]) # Array{promote_type(T, U), 2}(undef, size(A)[1], size(B)[1]) doesn't seem to be faster
+
+    if A === B # use the faster routine if they are the same array
+        return _slicewise_self_dot!(C, A)
+    end
+
+    for (i, A_slice) in enumerate(eachslice(A, dims=1))
+        for (j, B_slice) in enumerate(eachslice(B, dims=1))
+            C[i, j] = A_slice ⋅ B_slice
+        end
+    end
+    return C
+end
+
+function _slicewise_self_dot!(C, A)
+    enumerated_A_slices = enumerate(eachslice(A, dims=1))
+    for (i, Ai_slice) in enumerated_A_slices
+        for (j, Aj_slice) in enumerated_A_slices
+            if i > j
+                continue
+            else
+                C[i, j] = Ai_slice ⋅ Aj_slice
+            end
+        end
+    end
+    return Symmetric(C)
+end
+
+
 # TODO impliment these
 # generalizes @einsum C[i,j,k] := A[i,l] * B[l,j,k]
 #=

@@ -66,11 +66,13 @@ standard_curvature
 
 ```@docs
 *(::AbstractMatrix, ::Abstract3Tensor)
+*(::AbstractMatrix, ::AbstractArray)
 combined_norm
 dist_to_Ncone
 rel_error
 mean_rel_error
 residual
+slicewise_dot
 ```
 
 ## Index
