@@ -12,7 +12,7 @@ using KernelDensity
 using Base: *
 
 export Abstract3Tensor # Types
-export combined_norm, dist_to_Ncone, nnmtf, rel_error, mean_rel_error, residual, slicewise_dot # Functions
+export combined_norm, dist_to_Ncone, nnmtf, rel_error, mean_rel_error, relative_error, slicewise_dot # Functions
 export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 export nnmtf_proxgrad_online
 

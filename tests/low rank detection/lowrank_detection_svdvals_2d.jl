@@ -111,7 +111,7 @@ C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, r;
     final_loss[r] = norm(Y - C*F)
 end
 
-plot!(final_loss, label="Frobenius norm of residual tensor")
+plot!(final_loss, label="Frobenius norm of relative error tensor")
 
 R = 3 # Can see that R=3 is optimal
 C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
@@ -126,7 +126,7 @@ C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
 
 @show (I, R, J, K)
 @show length(rel_errors)
-@show mean_rel_error(Y, C*F; dims=1)
+@show mean_rel_error(C*F, Y; dims=1)
 
 heatmap(x, y, Y[1,:,:], title="True Y slice 1") |> display
 heatmap(x, y, (C*F)[1,:,:], title="learned Y slice 1") |> display

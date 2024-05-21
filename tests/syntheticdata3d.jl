@@ -144,7 +144,7 @@ C, F, rel_errors, norm_grad, dist_Ncone = nnmtf(Y, R;
 
 @show (I, R, J, K, L)
 @show length(rel_errors)
-@show mean_rel_error(Y, C*F; dims=1)
+@show mean_rel_error(C*F, Y; dims=1)
 
 
 

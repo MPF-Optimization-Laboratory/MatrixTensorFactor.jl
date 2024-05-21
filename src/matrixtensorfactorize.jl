@@ -31,9 +31,12 @@ const IMPLIMENTED_PROJECTIONS = Set{Symbol}((:nnscale, :simplex, :nonnegative)) 
 
 - `:ncone`: vector-set distance between the -gradient of the objective and the normal cone
 - `:iterates`: A,B before and after one iteration are close in L2 norm
-- `:objective`: objective before and after one iteration is close
+- `:objective`: objective is small
+- `:relativeerror`: relative error is small (when `normalize=:nothing`) or
+    mean relative error averaging fibres or slices when the normalization is `:fibres` or
+    `:slices` respectfuly.
 """
-const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective))
+const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective, :relativeerror))
 
 """
     IMPLIMENTED_STEPSIZES::Set{Symbol}
@@ -66,17 +69,21 @@ const IMPLIMENTED_OPTIONS = Dict(
 )
 
 @doc raw"""
-    nnmtf(Y::Abstract3Tensor, R::Integer; kwargs...)
+    nnmtf(Y::AbstractArray, R::Integer; kwargs...)
 
-Non-negatively matrix-tensor factorizes an order 3 tensor Y with a given "rank" R.
+Non-negatively matrix-tensor factorizes an order N tensor Y with a given "rank" R.
 
-Factorizes ``Y \approx A B`` where ``\displaystyle Y[i,j,k] \approx \sum_{r=1}^R A[i,r]*B[r,j,k]``
+For an order ``N=3`` tensor, this factorizes ``Y \approx A B`` where
+``\displaystyle Y[i,j,k] \approx \sum_{r=1}^R A[i,r]*B[r,j,k]``
 and the factors ``A, B \geq 0`` are nonnegative.
+
+For higher orders, this becomes
+``\displaystyle Y[i1,i2,...,iN] \approx \sum_{r=1}^R A[i1,r]*B[r,i2,...,iN].``
 
 Note there may NOT be a unique optimal solution
 
 # Arguments
-- `Y::Abstract3Tensor`: tensor to factorize
+- `Y::AbstractArray{T,N}`: tensor to factorize
 - `R::Integer`: rank to factorize Y (size(A)[2] and size(B)[1])
 
 # Keywords
@@ -89,14 +96,16 @@ Note there may NOT be a unique optimal solution
 - `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIA)
 - `stepsize::Symbol=:lipshitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
 - `momentum::Bool=false`: use momentum updates
-- `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq 3.5 Xu & Yin 2013)
+- `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq (3.5) Xu & Yin 2013)
 - `R_max::Integer=size(Y)[1]`: maximum rank to try if R is not given
 - `projectionA::Symbol=projection`: projection to use on factor A (must be in IMPLIMENTED_PROJECTIONS)
 - `projectionB::Symbol=projection`: projection to use on factor B (must be in IMPLIMENTED_PROJECTIONS)
+- `A_init::AbstractMatrix=nothing`: initial A for the iterative algorithm. Should be kept as nothing if `R` is not given.
+- `B_init::AbstractArray=nothing`: initial B for the iterative algorithm. Should be kept as nothing if `R` is not given.
 
 # Returns
 - `A::Matrix{Float64}`: the matrix A in the factorization Y ≈ A * B
-- `B::Array{Float64, 3}`: the tensor B in the factorization Y ≈ A * B
+- `B::Array{Float64, N}`: the tensor B in the factorization Y ≈ A * B
 - `rel_errors::Vector{Float64}`: relative errors at each iteration
 - `norm_grad::Vector{Float64}`: norm of the full gradient at each iteration
 - `dist_Ncone::Vector{Float64}`: distance of the -gradient to the normal cone at each iteration
@@ -224,6 +233,8 @@ function _nnmtf_proxgrad(
     rescale_Y::Bool = (projection == :nnscale ? true : false),
     projectionA::Symbol = projection,
     projectionB::Symbol = projection,
+    A_init::Union{Nothing, AbstractMatrix}=nothing,
+    B_init::Union{Nothing, AbstractArray}=nothing,
 )
     # Override scaling if no normalization is requested
     normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
@@ -232,11 +243,25 @@ function _nnmtf_proxgrad(
     M, Ns... = size(Y)
 
     # Initialize A, B
-    init(x...) = abs.(randn(x...))
-    A = init(M, R)
-    B = init(R, Ns...)
+    if A_init === nothing
+        A = _init(M, R)
+    else
+        size(A_init) == (M, R) || throw(ArgumentError("A_init should have size $((M, R)), got $(size(A_init))"))
+        A = A_init
+    end
 
-    rescaleAB!(A, B; normalize)
+    if A_init === nothing
+        B = _init(R, Ns...)
+    else
+        size(B_init) == (R, Ns...) || throw(ArgumentError("A_init should have size $((R, Ns...)), got $(size(B_init))"))
+        B = B_init
+    end
+
+    # Only want to rescale the initialization if both A and B were not given
+    # Otherwise, we should use the provided initialization
+    if rescale_AB && A_init === nothing && B_init === nothing
+        rescaleAB!(A, B; normalize)
+    end
 
     problem_size = R*(M + prod(Ns))
 
@@ -254,7 +279,7 @@ function _nnmtf_proxgrad(
 
     # Calculate initial relative error and gradient
     Yhat = A*B
-    rel_errors[i] = residual(Yhat, Y; normalize)
+    rel_errors[i] = relative_error(Yhat, Y; normalize)
     grad_A, grad_B = calc_gradient(A, B, Y)
     norm_grad[i] = combined_norm(grad_A, grad_B)
     dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
@@ -318,7 +343,7 @@ function _nnmtf_proxgrad(
         # Calculate relative error and norm of gradient
         i += 1
         Yhat .= A*B
-        rel_errors[i] = residual(Yhat, Y; normalize)
+        rel_errors[i] = relative_error(Yhat, Y; normalize)
 #        grad_A, grad_B = calc_gradient(A, B, Y)
         grad_A .= calc_gradientA(A, B, Y)
         grad_B .= calc_gradientB(A, B, Y)
@@ -326,7 +351,7 @@ function _nnmtf_proxgrad(
         #        norm_grad[i] = combined_norm(grad_A, grad_B)
         dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
 
-        if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
+        if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y, Yhat, normalize)
             break
         end
 
@@ -368,6 +393,11 @@ function _nnmtf_proxgrad(
 end
 
 """
+Default initialization
+"""
+_init(x...) = abs.(randn(x...))
+
+"""
 Convergence criteria function.
 
 When using :ncone, we "normalize" the distance vector so the tolerance can be picked
@@ -376,16 +406,26 @@ independent of the dimentions of Y and rank R.
 Note the use of `;` in the function definition so that order of arguments does not matter,
 and keyword assignment can be ignored if the input variables are named exactly as below.
 """
-function converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
+function converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y, Yhat, normalize)
+    criterion_value = 0.0
+
     if !(criterion in IMPLIMENTED_CRITERIA)
         return UnimplimentedError("criterion is not an impliment criterion")
+
     elseif criterion == :ncone
-        return dist_Ncone[i]/sqrt(problem_size) < tol #TODO remove root problem size dependence
+        criterion_value = dist_Ncone[i]/sqrt(problem_size) #TODO remove root problem size dependence
+
     elseif criterion == :iterates
-        return combined_norm(A - A_last, B - B_last) < tol
+        criterion_value = combined_norm(A - A_last, B - B_last)
+
     elseif criterion == :objective
-        return 0.5 * norm(A*B - Y)^2 < tol
+        criterion_value = 0.5 * norm(Yhat - Y)^2
+
+    elseif criterion == :relativeerror
+        criterion_value = relative_error(Yhat, Y; normalize)
     end
+
+    return criterion_value < tol
 end
 
 """
@@ -405,7 +445,7 @@ function to_dims(normalize::Symbol)
 end
 
 """
-    residual(Yhat, Y; normalize=:nothing)
+    relative_error(Yhat, Y; normalize=:nothing)
 
 Wrapper to use the relative error calculation according to the normalization used.
 
@@ -415,7 +455,7 @@ Wrapper to use the relative error calculation according to the normalization use
 
 See also [`rel_error`](@ref), [`mean_rel_error`](@ref).
 """
-function residual(Yhat, Y; normalize=:nothing)
+function relative_error(Yhat, Y; normalize=:nothing)
     if normalize in (:fibres, :slices)
         return mean_rel_error(Yhat, Y; dims=to_dims(normalize))
     elseif normalize == :nothing
@@ -655,7 +695,8 @@ function nnmtf_proxgrad_online(
     dist_Ncone = zeros(maxiter)
 
     # Calculate initial relative error and gradient
-    rel_errors[i] = residual(A*B, Y; normalize)
+    Yhat = A*B
+    rel_errors[i] = relative_error(Yhat, Y; normalize)
     grad_A, grad_B = calc_gradient(A, B, Y)
     norm_grad[i] = combined_norm(grad_A, grad_B)
     dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
@@ -719,12 +760,13 @@ function nnmtf_proxgrad_online(
 
         # Calculate relative error and norm of gradient
         i += 1
-        rel_errors[i] = residual(A*B, Y; normalize)
+        Yhat .= A*B
+        rel_errors[i] = relative_error(Yhat, Y; normalize)
         grad_A, grad_B = calc_gradient(A, B, Y)
         norm_grad[i] = combined_norm(grad_A, grad_B)
         dist_Ncone[i] = dist_to_Ncone(grad_A, grad_B, A, B)
 
-        if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y)
+        if converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, criterion, Y, Yhat, normalize)
             break
         end
 

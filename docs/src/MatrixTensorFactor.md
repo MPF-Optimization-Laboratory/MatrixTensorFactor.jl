@@ -71,7 +71,7 @@ combined_norm
 dist_to_Ncone
 rel_error
 mean_rel_error
-residual
+relative_error
 slicewise_dot
 ```
 
