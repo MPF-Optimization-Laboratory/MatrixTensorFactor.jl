@@ -1,23 +1,4 @@
-#= Short helpers for MTF.jl =#
-
-"""Alias for an AbstractArray{T, 3}."""
-const Abstract3Tensor{T} = AbstractArray{T, 3}
-
-# TODO maybe use a custom symbol in the future
-"""
-    Base.*(A::AbstractMatrix, B::Abstract3Tensor)
-
-Computes the Abstract3Tensor C where ``C_{ijk} = \\sum_{l=1}^L A_{il} * B_{ljk}``.
-
-When the third dimention of B has length 1, this is equivilent to the usual
-matrix-matrix multiplication. For this reason, we resuse the same symbol.
-
-This is equivilent to the ``1``-mode product ``B \\times_1 A``.
-"""
-function Base.:*(A::AbstractMatrix, B::Abstract3Tensor)
-    @einsum C[i,j,k] := A[i,l] * B[l,j,k]
-    return C
-end
+"""Short helpers and operations for MTF.jl"""
 
 """
     Base.*(A::AbstractMatrix, B::AbstractArray)
@@ -25,6 +6,8 @@ end
 Computes the AbstractArray C where ``C_{i_1 i_2 \\dots i_d} = \\sum_{l=1}^L A_{i_1 l} * B_{l i_2 \\dots i_d}``.
 
 This is equivilent to the ``1``-mode product ``B \\times_1 A``.
+
+Generalizes @einsum C[i,j,k] := A[i,l] * B[l,j,k].
 """
 function Base.:*(A::AbstractMatrix, B::AbstractArray)
     sizeB = size(B)
@@ -69,30 +52,6 @@ function _slicewise_self_dot!(C, A)
     end
     return Symmetric(C)
 end
-
-
-# TODO impliment these
-# generalizes @einsum C[i,j,k] := A[i,l] * B[l,j,k]
-#=
-function Base.:*(A::AbstractMatrix, B::AbstractArray)
-    sizeB = size(B)
-    Bmat = reshape(B, sizeB[1], :)
-    Cmat = A * Bmat
-    C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
-    return C
-end
-
-# generalizes @einsum C[s,r] := A[s,j,k]*B[r,j,k]
-function slice_dot(A, B)
-    C = zeros(size(A)[1], size(B)[1])
-    for (i, A_slice) in enumerate(eachslice(A, dims=1))
-        for (j, B_slice) in enumerate(eachslice(B, dims=1))
-            C[i, j] = A_slice ⋅ B_slice
-        end
-    end
-    return C
-end
-=#
 
 """
     combined_norm(u, v, ...)

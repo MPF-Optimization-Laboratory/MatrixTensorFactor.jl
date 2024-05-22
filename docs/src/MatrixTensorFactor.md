@@ -3,11 +3,6 @@
 MatrixTensorFactor
 ```
 
-## Types
-```@docs
-Abstract3Tensor
-```
-
 ## Nonnegative Matrix-Tensor Factorization
 ```@docs
 nnmtf
@@ -65,7 +60,6 @@ standard_curvature
 ## Other Functions
 
 ```@docs
-*(::AbstractMatrix, ::Abstract3Tensor)
 *(::AbstractMatrix, ::AbstractArray)
 combined_norm
 dist_to_Ncone

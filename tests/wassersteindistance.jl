@@ -71,7 +71,7 @@ plot!(x, grad_b, label="∇f_b(a,b)")
 grad_a + grad_b ≈ 0 # The gradients should be opposite by symmetry
 
 
-"""
+#=
 function W(C, a, b; β=1e-1, iters=1000)
     ϵ = eps()
     K = exp.(.-C ./ β)
@@ -136,4 +136,4 @@ ga = gradient(f,a)
 gb = gradient(g,b)
 
 _, ga2, gb2 = W(C, a, b)
-"""
+=#

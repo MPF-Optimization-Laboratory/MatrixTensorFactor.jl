@@ -650,7 +650,7 @@ Updates Y each iteration with a new sample
 
 """
 function nnmtf_proxgrad_online(
-    Y::Abstract3Tensor,
+    Y::AbstractArray{T, 3},
     R::Integer,
     distributions,
     number_of_samples;
@@ -666,7 +666,7 @@ function nnmtf_proxgrad_online(
     delta::Real=0.9999,
     rescale_AB::Bool = (projection == :nnscale ? true : false),
     rescale_Y::Bool = (projection == :nnscale ? true : false),
-)
+) where T <: Real
     # Override scaling if no normalization is requested
     normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
 
