@@ -1,4 +1,6 @@
-"""Code for taking a tensor a performing a decomposition"""
+"""
+High level code for taking a tensor a performing a decomposition
+"""
 
 general_tensor_factor(Y; kwargs...) =
 	_general_tensor_factor(Y; (default_kwargs(; kwargs...))...)
