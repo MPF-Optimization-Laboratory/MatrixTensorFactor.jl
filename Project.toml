@@ -1,10 +1,7 @@
-name = "MatrixTensorFactor"
-uuid = "b7339fc4-c5a0-4c8f-934d-9fd05475ae37"
-authors = [""]
+name = "GenericDecompositions"
+uuid = "07b766a1-0096-4e53-b687-1cd07becaccb"
+authors = ["Nicholas <njericha@math.ubc.ca>"]
 version = "0.1.0"
 
 [deps]
-KernelDensity = "5ab0869b-81aa-558d-bb23-cbf5423bbe9b"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
