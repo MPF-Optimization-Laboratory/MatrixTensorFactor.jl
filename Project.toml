@@ -1,4 +1,4 @@
-name = "GenericDecompositions"
+name = "BlockTensorDecomposition"
 uuid = "07b766a1-0096-4e53-b687-1cd07becaccb"
 authors = ["Nicholas <njericha@math.ubc.ca>"]
 version = "0.1.0"
