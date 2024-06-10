@@ -23,9 +23,11 @@ G = randn(3,3,3)
 
 G = Tucker((G, A, B, C))
 
+@test rankof(G) == (2,2,2)
+
 G = Tucker((G, A))
 
-G = Tucker((B', A))
+G = Tucker((B', A)) # Can it handle types that are an abstract matrix like Ajoint
 
 G = Tucker1((10,11,12), 5);
 Y = Tucker1((10,11,12), 5);
@@ -43,6 +45,8 @@ T = [361 434 507 580; 452 544 636 728; 543 654 765 876;;; 482 580 678 776; 604 7
 @test array(CPD) == T
 
 @test_throws ArgumentError Tucker((A, B, C))
+
+@test rankof(CPD) == (2,2,2)
 
 end
 
