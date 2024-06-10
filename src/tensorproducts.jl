@@ -28,17 +28,6 @@ end
 
 nmp = nmode_product # Short-hand alias
 
-"""
-    swapdims(A::AbstractArray, a::Integer, b::Integer=1)
-
-Swap dimentions `a` and `b`.
-"""
-function swapdims(A::AbstractArray, a::Integer, b::Integer=1)
-    dims = collect(1:ndims(A)) # TODO construct the permutation even more efficiently
-    dims[a] = b; dims[b] = a
-    permutedims(A, dims)
-end
-
 """1-mode product between a tensor and a matrix"""
 ×₁(A::AbstractArray, B::AbstractMatrix) = mtt(B, A)
 ×₁(A::AbstractArray, b::AbstractVector) = dropdims(mtt(b', A); dims=1)

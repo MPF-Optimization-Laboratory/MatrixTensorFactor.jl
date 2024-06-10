@@ -6,9 +6,11 @@ using LinearAlgebra: ⋅, opnorm, Symmetric
 
 # Method Extentions
 using Base: size, getindex, show, ndims, *
+using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
 include("./utils.jl")
+export SuperDiagonal
 include("./tensorproducts.jl")
 
 # Low level types and interface

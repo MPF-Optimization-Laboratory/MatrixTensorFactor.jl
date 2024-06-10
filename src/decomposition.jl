@@ -64,6 +64,14 @@ array(D) == (A op1 B) op2 C
 contractions(D::AbstractDecomposition) = D.contractions
 
 """
+    frozen(D::AbstractDecomposition)
+
+A tuple of `Bools` the same length as `factors(D)` showing which factors are "frozen" in the
+sense that a block decent algorithm should skip these factors when decomposing a tensor.
+"""
+frozen(D::AbstractDecomposition) = D.frozen
+
+"""
     rankof(D::AbstractDecomposition)
 
 Internal dimention sizes for a decomposition. Returns the sizes of all factors if not defined
@@ -87,12 +95,14 @@ For example, T = A * B + C could be represented as GenericDecomposition((A, B, C
 struct GenericDecomposition{T, N} <: AbstractDecomposition{T, N}
 	factors::Tuple{Vararg{AbstractArray{T}}} # ex. (A, B, C)
 	contractions::Tuple{Vararg{Function}}
+    frozen::Tuple{Vararg{Bool}}
 end
 
 # AbstractDecomposition Interface
 array(G::GenericDecomposition) = multifoldl(contractions(G), factors(G))
 factors(G::GenericDecomposition) = G.factors
 contractions(G::GenericDecomposition) = G.contractions
+frozen(G::GenericDecomposition) = G.frozen
 
 function multifoldl(ops, args)
     @assert (length(ops) + 1) == length(args)
@@ -104,47 +114,6 @@ function multifoldl(ops, args)
 end
 
 #Base.show(io::IO, D::AbstractDecomposition) = show.((io,), factors(D))
-
-"""
-CP decomposition. Takes the form of an outerproduct of multiple matricies.
-
-For example, a rank r CP decomposition of an order three tensor D would be, entry-wise,
-D[i, j, k] = sum_r A[i, r] * B[j, r] * C[k, r]).
-
-CPDecomposition((A, B, C))
-"""
-struct CPDecomposition{T, N} <: AbstractDecomposition{T, N}
-	factors::NTuple{N, <:AbstractArray{T}} # ex. (A, B, C)
-    # TODO Constrain size(factors(CPD)[i])[2] for all i to be equal
-end
-
-# Constructor
-CPDecomposition(factors) = CPDecomposition{eltype(factors[begin])}(factors)
-function CPDecomposition(full_size::Tuple{Vararg{Integer}}, rank::Integer; init=DEFAULT_INIT)
-    factors = init.(full_size, rank)
-    CPDecomposition(factors)
-end
-
-# AbstractDecomposition Interface
-factors(CPD::CPDecomposition) = CPD.factors
-array(CPD::CPDecomposition) = mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
-vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
-
-# Efficient size and indexing for CPDecomposition
-# Base.ndims(CPD::CPDecomposition) = length(factors(CPD))
-Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))
-# Example: CPD[i, j, k] = sum(A[i, :] .* B[j, :] .* C[k, :])
-Base.getindex(CPD::CPDecomposition, I::Vararg{Int})= sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
-
-# Additional CPDecomposition interface
-"""The single rank for a CP Decomposition"""
-rankof(CPD::CPDecomposition) = size(factors(CPD)[begin])[2]
-
-function Base.show(io::IO, CPD::CPDecomposition)
-    println(io, size(CPD), " rank ", rankof(CPD), " ", typeof(CPD), ":")
-    display.(io, F)
-    return
-end
 
 # Tucker decompositions
 abstract type AbstractTucker{T, N} <: AbstractDecomposition{T, N} end
@@ -246,3 +215,52 @@ function Base.getindex(T::Tucker, I::Vararg{Int})
     ops = Tuple((×₁) for _ in 1:ndims(T)) # the leading index gets collapsed each time, so it is always the 1 mode product
     return multifoldl(ops, (core(T), matrix_factors_slice...))
 end=#
+
+
+"""
+CP decomposition. Takes the form of an outerproduct of multiple matricies.
+
+For example, a rank r CP decomposition of an order three tensor D would be, entry-wise,
+D[i, j, k] = sum_r A[i, r] * B[j, r] * C[k, r]).
+
+CPDecomposition((A, B, C))
+"""
+struct CPDecomposition{T, N} <: AbstractTucker{T, N}
+	factors::NTuple{N, <:AbstractArray{T}} # ex. (A, B, C)
+    frozen::NTuple{N, Bool}
+    # TODO Constrain size(factors(CPD)[i])[2] for all i to be equal
+end
+
+# Constructor
+CPDecomposition(factors) = CPDecomposition(factors, Tuple(false for _ in factors))
+CPDecomposition(factors, frozen) = CPDecomposition{eltype(factors[begin])}(factors, frozen)
+function CPDecomposition(full_size::Tuple{Vararg{Integer}}, rank::Integer; init=DEFAULT_INIT)
+    factors = init.(full_size, rank)
+    CPDecomposition(factors)
+end
+
+# AbstractDecomposition Interface
+factors(CPD::CPDecomposition) = CPD.factors
+array(CPD::CPDecomposition) = mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
+frozen(CPD::CPDecomposition) = CPD.frozen
+vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
+
+# AbstractTucker Interface
+matrix_factors(CPD::CPDecomposition) = factors(CPD)
+core(CPD::CPDecomposition) = SuperDiagonal(rankof(CPD), ndims(CPD))
+
+# Efficient size and indexing for CPDecomposition
+# Base.ndims(CPD::CPDecomposition) = length(factors(CPD))
+Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))
+# Example: CPD[i, j, k] = sum(A[i, :] .* B[j, :] .* C[k, :])
+Base.getindex(CPD::CPDecomposition, I::Vararg{Int})= sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
+
+# Additional CPDecomposition interface
+"""The single rank for a CP Decomposition"""
+rankof(CPD::CPDecomposition) = size(factors(CPD)[begin])[2]
+
+function Base.show(io::IO, CPD::CPDecomposition)
+    println(io, size(CPD), " rank ", rankof(CPD), " ", typeof(CPD), ":")
+    display.(io, F)
+    return
+end
