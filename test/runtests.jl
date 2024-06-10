@@ -7,7 +7,7 @@ using Test
 using Random
 using BlockTensorDecomposition
 
-VERBOSE = true
+const VERBOSE = true
 
 @testset verbose=VERBOSE "AbstractDecomposition" begin
 
