@@ -26,7 +26,18 @@ end
 check(A::AbstractDecomposition, C::GenericConstraint) = (C.check)(A)
 
 # TODO should I be overloading the composition function like this?
-∘(f::AbstractConstraint, g::AbstractConstraint) = GenericConstraint(f.apply ∘ g.apply, f.check ∘ g.check)
+∘(f::AbstractConstraint, g::AbstractConstraint) = GenericConstraint(f.apply ∘ g.apply, bool_function_and(f.check, g.check))
+∘(f::AbstractConstraint, g::Function) = f.apply ∘ g
+∘(f::Function, g::AbstractConstraint) = f ∘ g.apply
+
+struct BoolFunctionAnd <: Function
+    f::Function
+    g::Function
+end
+
+(F::BoolFunctionAnd)(x) = F.f(x) & F.g(x) # No short curcit to ensure any warnings are shown from both checks
+
+bool_function_and(f::Function, g::Function) = BoolFunctionAnd(f, g)
 
 """
 
