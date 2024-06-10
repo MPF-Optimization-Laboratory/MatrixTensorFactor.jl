@@ -245,7 +245,7 @@ vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
 
 # AbstractTucker Interface
 matrix_factors(CPD::CPDecomposition) = factors(CPD)
-core(CPD::CPDecomposition) = SuperDiagonal(rankof(CPD), ndims(CPD))
+core(CPD::CPDecomposition) = SuperDiagonal(ones(eltype(CPD), rankof(CPD)), ndims(CPD))
 
 # Efficient size and indexing for CPDecomposition
 Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))

@@ -18,6 +18,7 @@ end
 
 # SuperDiagonal Interface
 SuperDiagonal(v::AbstractVector, ndims::Integer=2) = SuperDiagonal{eltype(v), ndims, typeof(v)}(v)
+#superones(T::DataType, size::Integer, ndims::Integer=2) = SuperDiagonal(ones(T, size), ndims) # TODO make interface for a super diagonal of ones
 SuperDiagonal{T}(v::AbstractVector, ndims::Integer=2) where {T} = SuperDiagonal(convert(AbstractVector{T}, v)::AbstractVector{T}, ndims)
 LinearAlgebra.diag(S::SuperDiagonal) = S.diag
 function array(S::SuperDiagonal)

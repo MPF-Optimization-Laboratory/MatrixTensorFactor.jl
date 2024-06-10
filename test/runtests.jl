@@ -70,6 +70,7 @@ end
     @test array(CPD) == T
     @test ndims(CPD) == 4
     @test rankof(CPD) == 2
+    @test all(diag(core(CPD)) .== 1)
 
     @test_throws ArgumentError Tucker((A, B, C))
 
