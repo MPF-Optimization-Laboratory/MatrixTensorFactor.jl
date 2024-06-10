@@ -19,7 +19,6 @@ abstract type AbstractDecomposition{T, N} <: AbstractArray{T, N} end
 
 # Fallback interface for any AbstractDecomposition to behave like an AbstractArray
 Base.size(D::AbstractDecomposition) = size(array(D))
-Base.ndims(_::AbstractDecomposition{T, N}) where {T, N} = N
 Base.getindex(D::AbstractDecomposition, i::Int) = getindex(array(D), i)
 Base.getindex(D::AbstractDecomposition, I::Vararg{Int}) = getindex(array(D), I...)
 
@@ -197,7 +196,6 @@ rankof(T::Tucker) = map(x -> size(x)[2], matrix_factors(T))
 rankof(T::Tucker1) = size(core(T))[begin]
 
 # AbstractArray interface
-# Base.ndims(T::AbstractTucker) = ndims(core(T))
 # Efficient size and indexing for CPDecomposition
 Base.size(T::Tucker) = map(x -> size(x)[1], matrix_factors(T))
 Base.size(T::Tucker1) = (size(factors(T)[2])[1], size(core(T))[begin+1:end]...)
@@ -250,7 +248,6 @@ matrix_factors(CPD::CPDecomposition) = factors(CPD)
 core(CPD::CPDecomposition) = SuperDiagonal(rankof(CPD), ndims(CPD))
 
 # Efficient size and indexing for CPDecomposition
-# Base.ndims(CPD::CPDecomposition) = length(factors(CPD))
 Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))
 # Example: CPD[i, j, k] = sum(A[i, :] .* B[j, :] .* C[k, :])
 Base.getindex(CPD::CPDecomposition, I::Vararg{Int})= sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))

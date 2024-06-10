@@ -7,12 +7,18 @@ Utility functions used throughout the package that don't fit anywhere else
 
 Array of order N that is zero everywhere except possibly along the super diagonal.
 """
-struct SuperDiagonal{T, N} <: AbstractArray{T,N}
-    diag::AbstractVector{T}
+struct SuperDiagonal{T, N, V<:AbstractVector{T}} <: AbstractArray{T,N}
+    diag::V
+
+    function SuperDiagonal{T, N, V}(diag) where {T, N, V<:AbstractVector{T}}
+        Base.require_one_based_indexing(diag)
+        new{T, N, V}(diag)
+    end
 end
 
 # SuperDiagonal Interface
-SuperDiagonal(v::AbstractVector, ndims::Integer=2) = SuperDiagonal{eltype(v), ndims}(v)
+SuperDiagonal(v::AbstractVector, ndims::Integer=2) = SuperDiagonal{eltype(v), ndims, typeof(v)}(v)
+SuperDiagonal{T}(v::AbstractVector, ndims::Integer=2) where {T} = SuperDiagonal(convert(AbstractVector{T}, v)::AbstractVector{T}, ndims)
 LinearAlgebra.diag(S::SuperDiagonal) = S.diag
 function array(S::SuperDiagonal)
     A = zeros(eltype(S), size(S))
@@ -22,11 +28,11 @@ end
 _diagonal_indexes(S::SuperDiagonal) = CartesianIndex.(fill(1:length(diag(S)), ndims(S))...)
 
 # AbstractArray interface
-Base.ndims(_::SuperDiagonal{T,N}) where {T,N} = N
+#Base.ndims(_::SuperDiagonal{T,N}) where {T,N} = N
 
-function Base.size(S::SuperDiagonal{T,N}) where {T,N}
+function Base.size(S::SuperDiagonal)
     n = length(diag(S))
-    return Tuple(n for _ in 1:N)
+    return Tuple(n for _ in 1:ndims(S))
 end
 
 Base.getindex(S::SuperDiagonal, i::Int) = getindex(array(S), i) # TODO work out this efficiently
@@ -43,6 +49,8 @@ function Base.getindex(S::SuperDiagonal, I::Vararg{Int})
         return zero(eltype(S))
     end
 end
+
+#######################################################
 
 """
     swapdims(A::AbstractArray, a::Integer, b::Integer=1)
