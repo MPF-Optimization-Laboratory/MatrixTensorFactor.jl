@@ -19,7 +19,7 @@ export array, contractions, core, factors, frozen, matrix_factors, rankof
 export AbstractDecomposition, GenericDecomposition, Tucker, Tucker1, CPDecomposition
 include("./constraint.jl")
 include("./blockupdates.jl")
-export least_square_updates
+export AbstractUpdate
 
 # High level / user-interface
 include("./factorize.jl")

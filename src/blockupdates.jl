@@ -2,8 +2,14 @@
 Mid level code that combines constraints with block updates to be used on an AbstractDecomposition
 """
 
+abstract type AbstractUpdate end
+#=
+struct Update <: AbstractUpdate
+    nothing
+end
+
 """Main type holding information about how to update each block in an AbstractDecomposition"""
-struct BlockUpdatedDecomposition{T, N} <: AbstractDecomposition{T,N}
+struct BlockedUpdate <: AbstractUpdate
 	D::AbstractDecomposition{T, N}
 	updates::NTuple{M, Function} where M
 	function BlockUpdatedDecomposition{T, N}(D, block_updates) where {T, N}
@@ -78,39 +84,4 @@ function least_square_updates(T::Tucker1, Y::AbstractArray)
     block_updates = (update_core!, update_matrix!)
     return BlockUpdatedDecomposition(T, block_updates)
 end
-
-"""
-    slicewise_dot(A::AbstractArray, B::AbstractArray)
-
-Constracts all but the first dimentions of A and B by performing a dot product over each `dim=1` slice.
-
-Generalizes `@einsum C[s,r] := A[s,j,k]*B[r,j,k]` to arbitrary dimentions.
-"""
-function slicewise_dot(A::AbstractArray, B::AbstractArray)
-    C = zeros(size(A)[1], size(B)[1]) # Array{promote_type(T, U), 2}(undef, size(A)[1], size(B)[1]) doesn't seem to be faster
-
-    if A === B # use the faster routine if they are the same array
-        return _slicewise_self_dot!(C, A)
-    end
-
-    for (i, A_slice) in enumerate(eachslice(A, dims=1))
-        for (j, B_slice) in enumerate(eachslice(B, dims=1))
-            C[i, j] = A_slice ⋅ B_slice
-        end
-    end
-    return C
-end
-
-function _slicewise_self_dot!(C, A)
-    enumerated_A_slices = enumerate(eachslice(A, dims=1))
-    for (i, Ai_slice) in enumerated_A_slices
-        for (j, Aj_slice) in enumerated_A_slices
-            if i > j
-                continue
-            else
-                C[i, j] = Ai_slice ⋅ Aj_slice
-            end
-        end
-    end
-    return Symmetric(C)
-end
+=#
