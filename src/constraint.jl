@@ -25,6 +25,7 @@ end
 
 check(A::AbstractDecomposition, C::GenericConstraint) = (C.check)(A)
 
+# TODO should I be overloading the composition function like this?
 ∘(f::AbstractConstraint, g::AbstractConstraint) = GenericConstraint(f.apply ∘ g.apply, f.check ∘ g.check)
 
 """
