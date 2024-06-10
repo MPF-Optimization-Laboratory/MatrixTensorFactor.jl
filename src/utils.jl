@@ -77,3 +77,6 @@ function mat(A::AbstractArray, n::Integer)
 end
 
 #fullouter(v...) = reshape(kron(reverse(vec.(v))...),tuple(vcat(collect.(size.(v))...)...))
+
+"""Makes a Tuple of length n filled with `false`."""
+false_tuple(n::Integer) = Tuple(fill(false, n))

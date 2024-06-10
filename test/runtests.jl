@@ -50,9 +50,11 @@ end
 
     @test rankof(G) == (3,3,3)
 
-    G = Tucker((G, A))
+    G = Tucker1((G, A))
 
-    G = Tucker((B', A)) # Can it handle types that are an abstract matrix like Ajoint
+    G = Tucker1((B', A)) # Can it handle types that are an abstract matrix like Ajoint
+
+    @test_throws ArgumentError Tucker((G, A)) # Can handle auto conversion to TuckerN in the future
 
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
@@ -71,8 +73,13 @@ end
     @test ndims(CPD) == 4
     @test rankof(CPD) == 2
     @test all(diag(core(CPD)) .== 1)
+    @test length(diag(core(CPD))) == 2 # same as rankof(CPD)
 
     @test_throws ArgumentError Tucker((A, B, C))
+
+    frozen_factors = (false, true, false, false)
+    CPD = CPDecomposition((A, B, C, D), frozen_factors)
+    @test frozen(CPD) == frozen_factors
 
 end
 

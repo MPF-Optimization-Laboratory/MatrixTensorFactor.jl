@@ -127,7 +127,16 @@ CPDecomposition((A, B, C))
 """
 struct Tucker{T, N} <: AbstractTucker{T, N}
 	factors::Tuple{AbstractArray{T}, Vararg{AbstractMatrix{T}}} # ex. (G, A, B, C)
-    Tucker{T, N}(factors) where {T, N} = !_valid_tucker(factors) ? throw(ArgumentError("Not a valid Tucker decomposition")) : new{T, N}(factors)
+    frozen::NTuple{M, Bool} where M
+    function Tucker{T, N}(factors, frozen) where {T, N}
+        _valid_tucker(factors) ||
+            throw(ArgumentError("Not a valid Tucker decomposition"))
+
+        length(frozen) == length(factors) ||
+            throw(ArgumentError("Tuple of frozen factors length $(length(frozen)) does not match number of factors $(length(factors))"))
+
+        new{T, N}(factors)
+    end
 end
 
 function _valid_tucker(factors)
@@ -135,7 +144,7 @@ function _valid_tucker(factors)
     core = factors[begin]
     other_factors = factors[begin+1:end]
     if ndims(core) != length(other_factors)
-        @warn "Core is order $(ndims(factors[1])) but got $(length(factors)-1) other factors"
+        @warn "Core is order $(ndims(factors[1])) but got $(length(factors)-1) other factor(s)"
         return false
     end
 
@@ -152,14 +161,19 @@ end
 
 struct Tucker1{T, N} <: AbstractTucker{T, N}
 	factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}} # ex. (G, A)
-    function Tucker1{T, N}(factors) where {T, N}
+    frozen::Tuple{Bool, Bool}
+    function Tucker1{T, N}(factors, frozen) where {T, N}
         core_dim1 = size(factors[begin])[1]
         matrix_dim2 = size(factors[end])[2]
         if core_dim1 != matrix_dim2
             @warn "First core dimention $core_dim1 does not match second matrix dimention $matrix_dim2"
             throw(ArgumentError("Not a valid Tucker1 decomposition"))
         end
-        new{T, N}(factors)
+
+        length(frozen) == length(factors) ||
+            throw(ArgumentError("Tuple of frozen factors length $(length(frozen)) does not match number of factors $(length(factors))"))
+
+        new{T, N}(factors, frozen)
     end
 end
 
@@ -167,20 +181,20 @@ end
 # factors is less than the number of dimentions of the core
 
 # Constructors
-Tucker(factors::Tuple{Vararg{AbstractArray{T}}}) where T = Tucker{T, length(factors) - 1}(factors)
-Tucker(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}) where T = Tucker1(factors) # use the more specific struct
-Tucker1(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}) where T = Tucker1{T, ndims(factors[1])}(factors)
-function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; init=DEFAULT_INIT) where N
+Tucker(factors::Tuple{Vararg{AbstractArray{T}}}, frozen=false_tuple(length(factors))) where T = Tucker{T, length(factors) - 1}(factors, frozen)
+#Tucker(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}, frozen=false_tuple(2)) where T = Tucker1(factors, frozen) # use the more specific struct
+Tucker1(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}, frozen=false_tuple(2)) where T = Tucker1{T, ndims(factors[1])}(factors, frozen)
+function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen=false_tuple(length(ranks)+1), init=DEFAULT_INIT) where N
     core = init(ranks)
     matrix_factors = init.(full_size, ranks)
-    Tucker((core, matrix_factors...))
+    Tucker((core, matrix_factors...), frozen)
 end
 
-function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; init=DEFAULT_INIT) where N
+function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tuple(2), init=DEFAULT_INIT) where N
     I, J... = full_size
     core = init((rank, J...))
     matrix_factor = init(I, rank)
-    Tucker((core, matrix_factor))
+    Tucker1((core, matrix_factor), frozen)
 end
 
 # AbstractTucker interface
@@ -224,17 +238,25 @@ D[i, j, k] = sum_r A[i, r] * B[j, r] * C[k, r]).
 CPDecomposition((A, B, C))
 """
 struct CPDecomposition{T, N} <: AbstractTucker{T, N}
-	factors::NTuple{N, <:AbstractArray{T}} # ex. (A, B, C)
+	factors::NTuple{N, <:AbstractMatrix{T}} # ex. (A, B, C)
     frozen::NTuple{N, Bool}
-    # TODO Constrain size(factors(CPD)[i])[2] for all i to be equal
+    function CPDecomposition{T, N}(factors, frozen) where {T, N}
+        ranks = map(x -> size(x)[2], factors)
+        allequal(ranks) ||
+            throw(ArgumentError("Second dimention of factors should be equal. Got $ranks"))
+
+        length(frozen) == length(factors) ||
+            throw(ArgumentError("Tuple of frozen factors length $(length(frozen)) does not match number of factors $(length(factors))"))
+
+        new{T, N}(factors, frozen)
+    end
 end
 
 # Constructor
-CPDecomposition(factors) = CPDecomposition(factors, Tuple(false for _ in factors))
-CPDecomposition(factors, frozen) = CPDecomposition{eltype(factors[begin])}(factors, frozen)
-function CPDecomposition(full_size::Tuple{Vararg{Integer}}, rank::Integer; init=DEFAULT_INIT)
+CPDecomposition(factors, frozen=false_tuple(length(factors))) = CPDecomposition{eltype(factors[begin]), length(factors)}(factors, frozen)
+function CPDecomposition(full_size::Tuple{Vararg{Integer}}, rank::Integer; frozen=false_tuple(length(full_size)), init=DEFAULT_INIT)
     factors = init.(full_size, rank)
-    CPDecomposition(factors)
+    CPDecomposition(factors, frozen)
 end
 
 # AbstractDecomposition Interface

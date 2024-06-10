@@ -15,8 +15,8 @@ include("./tensorproducts.jl")
 
 # Low level types and interface
 include("./decomposition.jl")
-export array, contractions, factors, rankof, core, matrix_factors
-export AbstractDecomposition, Tucker, Tucker1, CPDecomposition
+export array, contractions, core, factors, frozen, matrix_factors, rankof
+export AbstractDecomposition, GenericDecomposition, Tucker, Tucker1, CPDecomposition
 include("./constraint.jl")
 include("./blockupdates.jl")
 export least_square_updates
