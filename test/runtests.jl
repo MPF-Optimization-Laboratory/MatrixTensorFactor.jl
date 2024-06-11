@@ -13,9 +13,48 @@ const VERBOSE = true
 
 @testset verbose=true "BlockTensorDecomposition" begin
 
-@testset "Constraints" begin
-    v = 1:10
-    l1normalize!(1:10)
+@testset verbose=VERBOSE "Constraints" begin
+    @testset "L1" begin
+        v = collect(1:5)
+        l1normalize!(v)
+        @test v == [0, 0, 0, 0, 1]
+
+        v = Vector{Float64}([1, -1, 1, 1])
+        l1normalize!(v)
+        @test v == [1, -1, 1, 1] / 4
+    end
+
+    @testset "L2" begin
+        v = Vector{Float64}([1, 1])
+        l2normalize!(v)
+        @test v == [1, 1] / sqrt(2)
+
+        v= Vector{Float64}([1, -1, 1, 1])
+        l2normalize!(v)
+        @test v == [1, -1, 1, 1] / 2
+    end
+
+    @testset "Linfinity" begin
+        v = collect(1:5)
+        linftynormalize!(v)
+        @test v == [1, 1, 1, 1, 1]
+
+        v = collect(1:5) / 5
+        linftynormalize!(v)
+        @test v == (1:5) / 5
+
+        v = [0, 0.1, 0.8, 0.2]
+        linftynormalize!(v)
+        @test v == [0, 0.1, 1, 0.2]
+
+        v = [0, 0.1, -0.8, 0.2]
+        linftynormalize!(v)
+        @test v == [0, 0.1, -1, 0.2]
+
+        v = [0, 0.1, -0.8, 0.2]
+        linftynormalize!(v)
+        @test v == [0, 0.1, -1, 0.2]
+    end
 end
 
 @testset verbose=VERBOSE "SuperDiagonal" begin

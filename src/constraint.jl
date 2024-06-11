@@ -74,6 +74,12 @@ check(P::ProjectedNormalization, A::AbstractArray) = all((P.norm).(P.whats_norma
 ### Some standard projections ###
 l2norm(x::AbstractArray) = mapreduce(x -> x^2, +, x) |> sqrt
 function l2project!(x::AbstractArray)
+    if iszero(x)
+        @warn "Input $x is zero, picking a closest element"
+        x .= ones(size(x)) ./ sqrt(length(A))
+        return
+    end
+
     x ./= l2norm(x)
 end
 
@@ -85,6 +91,12 @@ const l2normalize_12slices! = ProjectedNormalization(l2norm, l2project!; whats_n
 
 l1norm(x::AbstractArray) = mapreduce(abs, +, x)
 function l1project!(x::AbstractArray)
+    if iszero(x)
+        @warn "Input $x is zero, picking a closest element"
+        x .= ones(size(x)) ./ length(A)
+        return
+    end
+
     signs = sign.(x)
     x .= signs .* projsplx(signs .* x)
 end
@@ -97,16 +109,23 @@ const l1normalize_12slices! = ProjectedNormalization(l1norm, l1project!; whats_n
 
 linftynorm(x::AbstractArray) = maximum(abs, x)
 function linftyproject!(x::AbstractArray)
-    xnorm = linftynorm(xnorm)
+    if iszero(x)
+        @warn "Input $x is zero, picking a closest element"
+        x .= zero(x)
+        x[begin] = 1
+        return
+    end
+
+    xnorm = linftynorm(x)
     if xnorm > 1
         # projection to the l_infinity ball
         x .= clamp.(x, -1, 1)
     elseif xnorm < 1
         # push the closest element to ±1 to sign(x[i])
         indexes = findall(xi -> abs(xi) == xnorm, x)
+        length(indexes) == 1 ||
+            @warn "L_infinity projection is not unique, picking a closest element"
         i = indexes[begin]
-        length(is) == 1 ||
-            @warn "L_infinity projection is not unique, picking a closest element."
         x[i] = sign(x[i])
     # else, we have xnorm == 1 already so do nothing
     end
