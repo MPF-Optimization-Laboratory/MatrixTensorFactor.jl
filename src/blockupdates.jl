@@ -2,12 +2,80 @@
 Mid level code that combines constraints with block updates to be used on an AbstractDecomposition
 """
 
-abstract type AbstractUpdate end
-#=
-struct Update <: AbstractUpdate
-    nothing
+abstract type AbstractUpdate{T<:AbstractDecomposition} <: Function end
+
+struct GenericUpdate{T} <: AbstractUpdate{T}
+    f::Function
 end
 
+(U::GenericUpdate{T})(x::T) where T = (U.f)(x)
+
+#=
+struct ProxGradientUpdate{T} <: AbstractUpdate{T}
+    gradientstep::Function
+    prox::AbstractConstraint
+end
+
+(U::ProxGradientUpdate{T})(x::T) = (U.prox ∘ U.gradientstep)(x)
+=#
+
+"""Perform a GradientUpdate on the nth factor of an Abstract Decomposition x"""
+struct GradientUpdate{T} <: AbstractUpdate{T}
+    gradientstep::Function
+    n::Integer
+end
+
+function (U::GradientUpdate{T})(x::T) where T
+    n = U.n
+    if isfrozen(x, n)
+        return x
+    end
+    F = factors(x)
+    (U.gradientstep)(F[n])
+end
+
+"""Perform a NNGradientUpdate on the nth factor of an Abstract Decomposition x"""
+struct NNGradientUpdate{T} <: AbstractUpdate{T}
+    gradientstep::Function
+    n::Integer
+end
+
+function (U::NNGradientUpdate{T})(x::T) where T
+    n = U.n
+    if isfrozen(x, n)
+        return x
+    end
+    F = factors(x)
+    Fn = F[n]
+    (U.gradientstep)(Fn)
+    nnegative!(Fn)
+end
+
+
+struct ScaledNNGradientUpdate{T} <: AbstractUpdate{T}
+    gradientstep::Function
+    rescale::AbstractConstraint
+end
+
+function (U::ScaledNNGradientUpdate{T})(x::T) where T
+    n = U.n
+    if isfrozen(x, n)
+        return x
+    end
+    F = factors(x)
+    Fn = F[n]
+    (U.gradientstep)(Fn)
+    nnegative!(Fn)
+    (U.rescale)(x, n)
+end
+
+#=
+struct BlockedUpdate{T} <: AbstractUpdate{T}
+    updates::NTuple{N, AbstractUpdate}
+end
+=#
+
+#=
 """Main type holding information about how to update each block in an AbstractDecomposition"""
 struct BlockedUpdate <: AbstractUpdate
 	D::AbstractDecomposition{T, N}

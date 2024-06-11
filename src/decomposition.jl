@@ -70,6 +70,9 @@ sense that a block decent algorithm should skip these factors when decomposing a
 """
 frozen(D::AbstractDecomposition) = D.frozen
 
+isfrozen(D::AbstractDecomposition) = any(frozen(D))
+isfrozen(D::AbstractDecomposition, n::Integer) = frozen(D)[n]
+
 """
     rankof(D::AbstractDecomposition)
 
