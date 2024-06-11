@@ -71,6 +71,17 @@ end
 
 check(P::ProjectedNormalization, A::AbstractArray) = all((P.norm).(P.whats_normalized(A)) .== 1)
 
+### Some standard projections ###
+l2norm(x::AbstractArray) = mapreduce(x -> x^2, +, x) |> sqrt
+function l2project!(x::AbstractArray)
+    x ./= l2norm(x)
+end
+
+const l2normalize! = ProjectedNormalization(l2norm, l2project!)
+const l2normalize_rows! = ProjectedNormalization(l2norm, l2project!; whats_normalized=eachrow)
+const l2normalize_cols! = ProjectedNormalization(l2norm, l2project!; whats_normalized=eachcol)
+const l2normalize_1slices! = ProjectedNormalization(l2norm, l2project!; whats_normalized=(x -> eachslice(x; dims=1)))
+
 """
     ScaledNormalization(norm; whats_normalized=identity, scale=1)
 
