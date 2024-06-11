@@ -11,6 +11,14 @@ using BlockTensorDecomposition
 
 const VERBOSE = true
 
+@testset verbose=true "BlockTensorDecomposition" begin
+
+@testset "Constraints" begin
+    v = 1:10
+    l1project!(1:10)
+
+end
+
 @testset verbose=VERBOSE "SuperDiagonal" begin
     v = 1:10
     S = SuperDiagonal(v, 2)
@@ -87,4 +95,6 @@ end
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
     @test_broken BUD = least_square_updates(G, Y);
+end
+
 end

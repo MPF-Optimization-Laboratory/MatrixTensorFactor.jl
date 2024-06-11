@@ -95,6 +95,29 @@ const l1normalize_cols! = ProjectedNormalization(l1norm, l1project!; whats_norma
 const l1normalize_1slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=1)))
 const l1normalize_12slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
+linftynorm(x::AbstractArray) = maximum(abs, x)
+function linftyproject!(x::AbstractArray)
+    xnorm = linftynorm(xnorm)
+    if xnorm > 1
+        # projection to the l_infinity ball
+        x .= clamp.(x, -1, 1)
+    elseif xnorm < 1
+        # push the closest element to ±1 to sign(x[i])
+        indexes = findall(xi -> abs(xi) == xnorm, x)
+        i = indexes[begin]
+        length(is) == 1 ||
+            @warn "L_infinity projection is not unique, picking a closest element."
+        x[i] = sign(x[i])
+    # else, we have xnorm == 1 already so do nothing
+    end
+end
+
+const linftynormalize! = ProjectedNormalization(linftynorm, linftyproject!)
+const linftynormalize_rows! = ProjectedNormalization(linftynorm, linftyproject!; whats_normalized=eachrow)
+const linftynormalize_cols! = ProjectedNormalization(linftynorm, linftyproject!; whats_normalized=eachcol)
+const linftynormalize_inftyslices! = ProjectedNormalization(linftynorm, linftyproject!; whats_normalized=(x -> eachslice(x; dims=1)))
+const linftynormalize_12slices! = ProjectedNormalization(linftynorm, linftyproject!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
 """
     ScaledNormalization(norm; whats_normalized=identity, scale=1)
 
@@ -133,6 +156,12 @@ const l1scaled_rows! = ScaledNormalization(l1norm; whats_normalized=eachrow)
 const l1scaled_cols! = ScaledNormalization(l1norm; whats_normalized=eachcol)
 const l1scaled_1slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=1)))
 const l1scaled_12slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
+const linftyscaled! = ScaledNormalization(linftynorm)
+const linftyscaled_rows! = ScaledNormalization(linftynorm; whats_normalized=eachrow)
+const linftyscaled_cols! = ScaledNormalization(linftynorm; whats_normalized=eachcol)
+const linftyscaled_1slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=1)))
+const linftyscaled_12slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
 """Entrywise constraint. Note both apply and check needs to be performed entrywise on an array"""
 struct EntryWise <: AbstractConstraint
