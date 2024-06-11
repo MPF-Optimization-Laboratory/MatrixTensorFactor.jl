@@ -22,6 +22,25 @@ const VERBOSE = true
         v = Vector{Float64}([1, -1, 1, 1])
         l1normalize!(v)
         @test v == [1, -1, 1, 1] / 4
+
+        v = [1, -1, 1, 1]
+        @test_broken l1normalize!(v) # v can only hold Int, so there is an error here
+
+        A = Array{Float64}(reshape(1:12, 3,4))
+        l1normalize_rows!(A)
+        @test all(A .≈ [0 0 0 1; 0 0 0 1; 0 0 0 1])
+
+        A = Array{Float64}(reshape(1:12, 3,4))
+        l1normalize_cols!(A)
+        @test all(A .≈ [0 0 0 0; 0 0 0 0; 1 1 1 1])
+
+        A = Array{Float64}(ones(2, 3))
+        l1normalize_rows!(A)
+        @test all(A .≈ ones(2, 3) / 3)
+
+        A = Array{Float64}(ones(2, 3))
+        l1normalize_cols!(A)
+        @test all(A .≈ ones(2, 3) / 2)
     end
 
     @testset "L2" begin
@@ -32,6 +51,14 @@ const VERBOSE = true
         v= Vector{Float64}([1, -1, 1, 1])
         l2normalize!(v)
         @test v == [1, -1, 1, 1] / 2
+
+        A = Array{Float64}(ones(2, 3))
+        l2normalize_rows!(A)
+        @test all(A .≈ ones(2, 3) / √3)
+
+        A = Array{Float64}(ones(2, 3))
+        l2normalize_cols!(A)
+        @test all(A .≈ ones(2, 3) / √2)
     end
 
     @testset "Linfinity" begin
@@ -54,6 +81,14 @@ const VERBOSE = true
         v = [0, 0.1, -0.8, 0.2]
         linftynormalize!(v)
         @test v == [0, 0.1, -1, 0.2]
+
+        A = Array{Float64}(reshape(1:12, 3,4))
+        l1normalize_rows!(A)
+        @test A == [0 0 0 1; 0 0 0 1; 0 0 0 1]
+
+        A = Array{Float64}(reshape(1:12, 3,4))
+        l1normalize_cols!(A)
+        @test A == [0 0 0 0; 0 0 0 0; 1 1 1 1]
     end
 end
 
