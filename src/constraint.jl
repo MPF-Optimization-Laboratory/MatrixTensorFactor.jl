@@ -81,6 +81,19 @@ const l2normalize! = ProjectedNormalization(l2norm, l2project!)
 const l2normalize_rows! = ProjectedNormalization(l2norm, l2project!; whats_normalized=eachrow)
 const l2normalize_cols! = ProjectedNormalization(l2norm, l2project!; whats_normalized=eachcol)
 const l2normalize_1slices! = ProjectedNormalization(l2norm, l2project!; whats_normalized=(x -> eachslice(x; dims=1)))
+const l2normalize_12slices! = ProjectedNormalization(l2norm, l2project!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
+l1norm(x::AbstractArray) = mapreduce(abs, +, x)
+function l1project!(x::AbstractArray)
+    signs = sign.(x)
+    x .= signs .* projsplx(signs .* x)
+end
+
+const l1normalize! = ProjectedNormalization(l1norm, l1project!)
+const l1normalize_rows! = ProjectedNormalization(l1norm, l1project!; whats_normalized=eachrow)
+const l1normalize_cols! = ProjectedNormalization(l1norm, l1project!; whats_normalized=eachcol)
+const l1normalize_1slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=1)))
+const l1normalize_12slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
 """
     ScaledNormalization(norm; whats_normalized=identity, scale=1)
@@ -106,6 +119,20 @@ function (S::ScaledNormalization)(A::AbstractArray)
 end
 
 check(S::ScaledNormalization, A::AbstractArray) = all((S.norm).(S.whats_normalized(A)) .== S.scale)
+
+### Some standard rescaling ###
+
+const l2scaled! = ScaledNormalization(l2norm)
+const l2scaled_rows! = ScaledNormalization(l2norm; whats_normalized=eachrow)
+const l2scaled_cols! = ScaledNormalization(l2norm; whats_normalized=eachcol)
+const l2scaled_1slices! = ScaledNormalization(l2norm; whats_normalized=(x -> eachslice(x; dims=1)))
+const l2scaled_12slices! = ScaledNormalization(l2norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
+const l1scaled! = ScaledNormalization(l1norm)
+const l1scaled_rows! = ScaledNormalization(l1norm; whats_normalized=eachrow)
+const l1scaled_cols! = ScaledNormalization(l1norm; whats_normalized=eachcol)
+const l1scaled_1slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=1)))
+const l1scaled_12slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
 """Entrywise constraint. Note both apply and check needs to be performed entrywise on an array"""
 struct EntryWise <: AbstractConstraint

@@ -65,7 +65,7 @@ function swapdims(A::AbstractArray, a::Integer, b::Integer=1)
 end
 
 """
-mat(A::AbstractArray, n::Integer)
+    mat(A::AbstractArray, n::Integer)
 
 Matricize along the nth mode.
 """
@@ -80,3 +80,40 @@ end
 
 """Makes a Tuple of length n filled with `false`."""
 false_tuple(n::Integer) = Tuple(fill(false, n))
+
+"""
+    projsplx(y::AbstractVector{<:Real})
+
+Projects (in Euclidian distance) the vector y into the simplex.
+
+[1] Yunmei Chen and Xiaojing Ye, "Projection Onto A Simplex", 2011
+"""
+function projsplx(y)
+    n = length(y)
+
+    if n==1 # quick exit for trivial length-1 "vectors" (i.e. scalars)
+        return [one(eltype(y))]
+    end
+
+    y_sorted = sort(y[:]) # Vectorize/extract input and sort all entries
+    i = n - 1
+    t = 0 # need to ensure t has scope outside the while loop
+    while true
+        t = (sum(@view y_sorted[i+1:end]) - 1) / (n-i)
+        if t >= y_sorted[i]
+            break
+        else
+            i -= 1
+        end
+
+        if i >= 1
+            continue
+        else # i == 0
+            t = (sum(y_sorted) - 1) / n
+            break
+        end
+    end
+    return ReLU.(y .- t)
+end
+
+ReLU(x) = max(0,x)
