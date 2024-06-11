@@ -39,14 +39,40 @@ end
 
 bool_function_and(f::Function, g::Function) = BoolFunctionAnd(f, g)
 
+abstract type AbstractNormalization <: AbstractConstraint end
+
 """
 
 """
-struct Normalization <: AbstractConstraint
+struct ProjectedNormalization <: AbstractNormalization
     apply::Function # input a AbstractDecomposition -> mutate it so that `check` would return true
     check::Function # input a AbstractDecomposition -> output a Bool
 end
 
+struct ScaledNormalization{T<:Union{Real,AbstractArray{<:Real}}} <: AbstractNormalization
+    norm::Function
+    whats_normalized::Function
+    scale::T
+end
+
+"""
+    ScaledNormalization(norm; whats_normalized=identity, scale=1)
+
+Main constructor for the constraint where `norm` of `whats_normalized` equals `scale`.
+
+Scale can be a single `Real`, or an `AbstractArray{<:Real}`, but should be the same size as
+the output of `whats_normalized`.
+"""
+ScaledNormalization(norm;whats_normalized=identity,scale=1)=ScaledNormalization{typeof(scale)}(norm, whats_normalized, scale)
+
+function (S::ScaledNormalization)(A::AbstractDecomposition)
+    whats_normalized_A = S.whats_normalized(A)
+    A_norm = (S.norm).(whats_normalized_A) ./ S.scale(A)
+    whats_normalized_A ./= A_norm
+    return A_norm
+end
+
+check(A::AbstractDecomposition, S::ScaledNormalization) = all((S.norm).(S.whats_normalized(A)) .== S.scale)
 
 """Entrywise constraint. Note both apply and check needs to be performed entrywise on an array"""
 struct EntryWise <: AbstractConstraint
