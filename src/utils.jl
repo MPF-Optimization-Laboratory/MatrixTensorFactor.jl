@@ -116,4 +116,12 @@ function projsplx(y)
     return ReLU.(y .- t)
 end
 
+"""max(0,x)"""
 ReLU(x) = max(0,x)
+
+"""
+    singleton(x)
+
+Useful for returning an iterable with a single iterate x
+"""
+singleton(x) = (x,) # TODO make this an Iterable type rather than a 1-Tuple

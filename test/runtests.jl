@@ -15,8 +15,7 @@ const VERBOSE = true
 
 @testset "Constraints" begin
     v = 1:10
-    l1project!(1:10)
-
+    l1normalize!(1:10)
 end
 
 @testset verbose=VERBOSE "SuperDiagonal" begin
