@@ -62,7 +62,7 @@ struct ProjectedNormalization <: AbstractNormalization
     whats_normalized::Function
 end
 
-ProjectedNormalization(norm, projection; whats_normalized=singleton)=ProjectedNormalization(norm, projection, whats_normalized)
+ProjectedNormalization(norm, projection; whats_normalized=identityslice)=ProjectedNormalization(norm, projection, whats_normalized)
 
 function (P::ProjectedNormalization)(A::AbstractArray)
     whats_normalized_A = P.whats_normalized(A)
@@ -151,11 +151,11 @@ struct ScaledNormalization{T<:Union{Real,AbstractArray{<:Real}}} <: AbstractNorm
     scale::T
 end
 
-ScaledNormalization(norm;whats_normalized=singleton,scale=1) = ScaledNormalization{typeof(scale)}(norm, whats_normalized, scale)
+ScaledNormalization(norm;whats_normalized=identityslice,scale=1) = ScaledNormalization{typeof(scale)}(norm, whats_normalized, scale)
 
 function (S::ScaledNormalization)(A::AbstractArray)
     whats_normalized_A = S.whats_normalized(A)
-    A_norm = (S.norm).(whats_normalized_A) ./ S.scale(A)
+    A_norm = (S.norm).(whats_normalized_A) ./ S.scale
     whats_normalized_A ./= A_norm
     return A_norm
 end

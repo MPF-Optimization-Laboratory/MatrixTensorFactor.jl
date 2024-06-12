@@ -10,7 +10,7 @@ using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
 include("./utils.jl")
-export SuperDiagonal
+export SuperDiagonal, abs_randn, identityslice
 include("./tensorproducts.jl")
 
 # Low level types and interface
@@ -36,11 +36,12 @@ export linftynormalize!, linftynormalize_rows!, linftynormalize_cols!, linftynor
 
 export EntryWise
 export nnegative!
+export l1norm, l2norm, linftynorm
 
 include("./blockupdates.jl")
-export AbstractUpdate
+export AbstractUpdate, GradientUpdate, NNGradientUpdate, ScaledNNGradientUpdate
 
-export block_gradient_decent
+export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent
 
 # High level / user-interface
 include("./factorize.jl")

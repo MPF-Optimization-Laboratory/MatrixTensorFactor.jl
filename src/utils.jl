@@ -120,8 +120,19 @@ end
 ReLU(x) = max(0,x)
 
 """
-    singleton(x)
+    identityslice(x::AbstractArray{T, N})
 
 Useful for returning an iterable with a single iterate x
 """
-singleton(x) = (x,) # TODO make this an Iterable type rather than a 1-Tuple
+function identityslice(A::AbstractArray{T, N}) where {T, N}
+    ax = ntuple(dim -> Base.OneTo(1), N)
+    slicemap = ntuple(dim -> (:), N)
+    return Slices(A, slicemap, ax)
+end
+
+"""
+    abs_randn(x...)
+
+Folded normal or more specificly the half-normal initialization.
+"""
+abs_randn(x...) = abs.(randn(x...))

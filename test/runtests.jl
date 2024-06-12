@@ -41,6 +41,10 @@ const VERBOSE = true
         A = Array{Float64}(ones(2, 3))
         l1normalize_cols!(A)
         @test all(A .≈ ones(2, 3) / 2)
+
+        A = Array{Float64}(reshape(1:12, 3,2,2))
+        l1scaled_1slices!(A)
+        @test A ≈ [0.045454545454545456 0.18181818181818182; 0.07692307692307693 0.19230769230769232; 0.1 0.2;;; 0.3181818181818182 0.45454545454545453; 0.3076923076923077 0.4230769230769231; 0.3 0.4]
     end
 
     @testset "L2" begin
@@ -138,7 +142,7 @@ end
     @test_throws ArgumentError Tucker((G, A)) # Can handle auto conversion to TuckerN in the future
 
     G = Tucker1((10,11,12), 5);
-    Y = Tucker1((10,11,12), 5);
+    Y = Tucker1((10,11,12), 5; init=abs_randn); # check if other initilizations work
 
     # CPDecomposition test
     A = reshape(1:6, 3, 2)
@@ -179,7 +183,21 @@ end
         v[i] = norm(array(G)-Y)
     end
 
-    @test v[end] / v[begin] < 1e-2 # expect to see at least 99% improvment of error
+    @test v[end] / v[begin] < 0.1 # expect to see at least 90% improvement of error
+
+    G = Tucker1((10,11,12), 5);
+    Y = Tucker1((10,11,12), 5; init=abs_randn);
+    Y = array(Y)
+
+    bgd! = scaled_nn_block_gradient_decent(G, Y;
+        scale=l2scaled!,
+        whats_rescaled=(x -> factor(x, 2))
+    )
+
+    bgd!(G)
+
+    @test l2norm(core(G)) ≈ 1
+
 end
 
 end

@@ -166,12 +166,12 @@ function nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; kwargs...)
     return BlockedUpdate(block_updates)
 end
 
-function scaled_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; kwargs...)
+function scaled_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; scale, whats_rescaled, kwargs...)
     size(T) == size(Y) || ArgumentError("Size of decomposition $(size(T)) does not match size of the data $(size(Y))")
     gradstep_core! = make_gradstep_core(Y; kwargs...)
     gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
     block_updates = (
-        ScaledNNGradientUpdate{Tucker1}(gradstep_core!, kwargs[:scale], kwargs[:whats_rescaled], 1),
+        ScaledNNGradientUpdate{Tucker1}(gradstep_core!, scale, whats_rescaled, 1),
         NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
     )
     return BlockedUpdate(block_updates)
