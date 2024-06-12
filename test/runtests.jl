@@ -167,12 +167,19 @@ end
 @testset verbose=VERBOSE "BlockUpdatedDecomposition" begin
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
+    Y = array(Y)
     bgd! = block_gradient_decent(G, Y);
 
-    @test typeof(bgd!) <: AbstractUpdate # make sure it works
+    @test typeof(bgd!) <: AbstractUpdate # make sure it correctly made the update struct
 
-    bgd!(G);
+    N = 100
+    v = zeros(N)
+    for i in 1:N
+        bgd!(G);
+        v[i] = norm(array(G)-Y)
+    end
 
+    @test v[end] / v[begin] < 1e-2 # expect to see at least 99% improvment of error
 end
 
 end
