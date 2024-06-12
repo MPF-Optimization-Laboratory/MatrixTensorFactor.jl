@@ -39,9 +39,9 @@ export nnegative!
 export l1norm, l2norm, linftynorm
 
 include("./blockupdates.jl")
-export AbstractUpdate, GradientUpdate, NNGradientUpdate, ScaledNNGradientUpdate
+export AbstractUpdate, GradientUpdate, NNGradientUpdate, ScaledNNGradientUpdate, ProjGradientUpdate
 
-export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent
+export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
 include("./factorize.jl")

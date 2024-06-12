@@ -185,19 +185,51 @@ end
 
     @test v[end] / v[begin] < 0.1 # expect to see at least 90% improvement of error
 
-    G = Tucker1((10,11,12), 5);
+    G = Tucker1((10,11,12), 5; init=abs_randn);
     Y = Tucker1((10,11,12), 5; init=abs_randn);
-    Y = array(Y)
+    Y = array(Y);
 
     bgd! = scaled_nn_block_gradient_decent(G, Y;
-        scale=l2scaled!,
+        scale=l1scaled!,
         whats_rescaled=(x -> factor(x, 2))
     )
 
     bgd!(G)
 
-    @test l2norm(core(G)) ≈ 1
+    @test l1norm(core(G)) ≈ 1
 
+    N = 100
+    v = zeros(N)
+    for i in 1:N
+        bgd!(G);
+        v[i] = norm(array(G)-Y)
+    end
+
+    @test v[end] / v[begin] < 0.4 # only expect at least 60% improvement in 100 iterations
+    @test l1norm(core(G)) ≈ 1 # G should still be normalized
+
+    G = Tucker1((10,11,12), 5; init=abs_randn);
+    Y = Tucker1((10,11,12), 5; init=abs_randn);
+    Y = array(Y);
+
+    bgd! = proj_nn_block_gradient_decent(G, Y;
+        proj=l1normalize!,
+    )
+
+    bgd!(G)
+
+    @test l1norm(core(G)) ≈ 1
+
+    N = 100
+    v = zeros(N)
+    for i in 1:N
+        bgd!(G);
+        v[i] = norm(array(G)-Y)
+    end
+
+    @test v[end] / v[begin] < 0.4 # only expect at least 60% improvement in 100 iterations
+    @test isapprox(l1norm(core(G)), 1; atol=0.015)
+    @test_broken l1norm(core(G)) ≈ 1 # G should still be normalized
 end
 
 end

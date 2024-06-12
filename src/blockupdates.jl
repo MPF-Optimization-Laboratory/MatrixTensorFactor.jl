@@ -40,8 +40,6 @@ struct ProjGradientUpdate{T} <: AbstractUpdate{T}
     n::Integer
 end
 
-#(U::ProjGradientUpdate{T})(x::T) where T = (U.proj ∘ U.gradientstep)(x)
-
 function (U::ProjGradientUpdate{T})(x::T) where T
     n = U.n
     if isfrozen(x, n)
@@ -83,7 +81,7 @@ function (U::ScaledNNGradientUpdate{T})(x::T) where T
     end
     Fn = factor(x, n)
 
-    (U.gradientstep)(x)
+    U.gradientstep(x)
     nnegative!(Fn)
 
     # TODO possible have information about what gets rescaled withthe `ScaledNormalization`.
@@ -172,6 +170,17 @@ function scaled_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; scale, wh
     gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
     block_updates = (
         ScaledNNGradientUpdate{Tucker1}(gradstep_core!, scale, whats_rescaled, 1),
+        NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
+    )
+    return BlockedUpdate(block_updates)
+end
+
+function proj_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; proj, kwargs...)
+    size(T) == size(Y) || ArgumentError("Size of decomposition $(size(T)) does not match size of the data $(size(Y))")
+    gradstep_core! = make_gradstep_core(Y; kwargs...)
+    gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
+    block_updates = (
+        ProjGradientUpdate{Tucker1}(gradstep_core!, proj, 1),
         NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
     )
     return BlockedUpdate(block_updates)
