@@ -1,7 +1,7 @@
 module BlockTensorDecomposition
 
 # Dependencies
-using Random: randn, rand, seed!
+using Random: randn, rand, seed!, shuffle
 using LinearAlgebra: ⋅, opnorm, Symmetric
 
 # Method Extentions
@@ -15,7 +15,7 @@ include("./tensorproducts.jl")
 
 # Low level types and interface
 include("./decomposition.jl")
-export array, contractions, core, factors, frozen, isfrozen, matrix_factors, rankof
+export array, contractions, core, factor, factors, frozen, isfrozen, matrix_factors, rankof
 export AbstractDecomposition, GenericDecomposition, Tucker, Tucker1, CPDecomposition
 
 include("./constraint.jl")
@@ -39,6 +39,8 @@ export nnegative!
 
 include("./blockupdates.jl")
 export AbstractUpdate
+
+export block_gradient_decent
 
 # High level / user-interface
 include("./factorize.jl")

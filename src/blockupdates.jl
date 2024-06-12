@@ -30,11 +30,31 @@ function (U::GradientUpdate{T})(x::T) where T
     if isfrozen(x, n)
         return x
     end
-    F = factors(x)
-    (U.gradientstep)(F[n])
+    U.gradientstep(x)
 end
 
-"""Perform a NNGradientUpdate on the nth factor of an Abstract Decomposition x"""
+"""Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
+struct ProjGradientUpdate{T} <: AbstractUpdate{T}
+    gradientstep::Function
+    proj::ProjectedNormalization
+    n::Integer
+end
+
+#(U::ProjGradientUpdate{T})(x::T) where T = (U.proj ∘ U.gradientstep)(x)
+
+function (U::ProjGradientUpdate{T})(x::T) where T
+    n = U.n
+    if isfrozen(x, n)
+        return x
+    end
+    U.gradientstep(x)
+    U.proj(factor(x, n))
+end
+
+"""
+Perform a nonnegative gradient update on the nth factor of an Abstract Decomposition x.
+See [`ProjGradientUpdate`](@ref).
+"""
 struct NNGradientUpdate{T} <: AbstractUpdate{T}
     gradientstep::Function
     n::Integer
@@ -45,16 +65,15 @@ function (U::NNGradientUpdate{T})(x::T) where T
     if isfrozen(x, n)
         return x
     end
-    F = factors(x)
-    Fn = F[n]
-    (U.gradientstep)(Fn)
-    nnegative!(Fn)
+    U.gradientstep(x)
+    nnegative!(factor(x, n))
 end
-
 
 struct ScaledNNGradientUpdate{T} <: AbstractUpdate{T}
     gradientstep::Function
-    rescale::AbstractConstraint
+    scale::ScaledNormalization
+    whats_rescaled::Function
+    n::Integer
 end
 
 function (U::ScaledNNGradientUpdate{T})(x::T) where T
@@ -62,18 +81,67 @@ function (U::ScaledNNGradientUpdate{T})(x::T) where T
     if isfrozen(x, n)
         return x
     end
-    F = factors(x)
-    Fn = F[n]
-    (U.gradientstep)(Fn)
+    Fn = factor(x, n)
+
+    (U.gradientstep)(x)
     nnegative!(Fn)
-    (U.rescale)(x, n)
+
+    # TODO possible have information about what gets rescaled withthe `ScaledNormalization`.
+    # Right now, the scaling is only applied to arrays, not decompositions, so the information
+    # about where (`U.whats_rescaled`) and how (only multiplication (*) right now) the weight
+    # from Fn gets canceled out is stored with the `ScaledNNGradientUpdate` struct and not
+    # the `ScaledNormalization`.
+    Fn_scale = U.scale(Fn)
+    to_scale = U.whats_rescaled(x)
+    to_scale .*= Fn_scale
 end
 
-#=
 struct BlockedUpdate{T} <: AbstractUpdate{T}
-    updates::NTuple{N, AbstractUpdate}
+    updates::NTuple{N, AbstractUpdate{T}} where N
 end
-=#
+
+#BlockedUpdate(updates::NTuple{N, AbstractUpdate{T}}) where {T, N} = BlockedUpdate{T}(updates)
+
+function (U::BlockedUpdate{T})(x::T; random_order::Bool=false) where T
+    if random_order
+        order = shuffle(eachindex(U.updates))
+        updates = U.updates[order]
+        for update! in updates
+            update!(x)
+        end
+    else
+        for update! in U.updates
+            update!(x)
+        end
+    end
+end
+
+function block_gradient_decent(T::Tucker1, Y::AbstractArray)
+    size(T) == size(Y) || ArgumentError("Size of decomposition $(size(T)) does not match size of the data $(size(Y))")
+
+    function gradstep_core!(T::Tucker1; stepsize=:lipshitz, kwargs...)
+        (C, A) = factors(T)
+        AA = A'A
+        YA = Y ×₁A'
+        grad = C×₁AA - YA # TODO define multiplication generaly
+        stepsize == :lipshitz ? step=1/opnorm(AA) : step=stepsize # TODO make a function that takes a symbol for a type of stepsize and calculates the step
+        @. C -= step * grad
+        return C
+    end
+
+    function gradstep_matrix!(T::Tucker1; stepsize=:lipshitz, kwargs...)
+        (C, A) = factors(T)
+        CC = slicewise_dot(C, C)
+        YC = slicewise_dot(Y, C)
+        grad = A*CC - YC
+        stepsize == :lipshitz ? step=1/opnorm(CC) : step=stepsize # TODO make a function that takes a symbol for a type of stepsize and calculates the step
+        @. A -= step * grad
+        return C
+    end
+
+    block_updates = (GradientUpdate{Tucker1}(gradstep_core!, 1), GradientUpdate{Tucker1}(gradstep_matrix!, 1))
+    return BlockedUpdate(block_updates)
+end
 
 #=
 """Main type holding information about how to update each block in an AbstractDecomposition"""

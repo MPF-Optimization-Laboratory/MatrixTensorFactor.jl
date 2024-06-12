@@ -167,7 +167,12 @@ end
 @testset verbose=VERBOSE "BlockUpdatedDecomposition" begin
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
-    @test_broken BUD = least_square_updates(G, Y);
+    bgd! = block_gradient_decent(G, Y);
+
+    @test typeof(bgd!) <: AbstractUpdate # make sure it works
+
+    bgd!(G);
+
 end
 
 end

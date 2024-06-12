@@ -41,11 +41,13 @@ array(D::AbstractDecomposition) = Array(D)::AbstractArray
 
 """
     factors(D::AbstractDecomposition)
+    factor(D::AbstractDecomposition, n::Integer)
 
 A tuple of (usually smaller) arrays representing the decomposition of a (usually larger)
-array.
+array. Use `factor(D, n)` to get just the `n`'th factor.
 """
 factors(D::AbstractDecomposition) = D.factors
+factor(D::AbstractDecomposition, n::Integer) = factors(D)[n]
 
 """
     contractions(D::AbstractDecomposition)
