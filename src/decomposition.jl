@@ -89,7 +89,7 @@ Examples
 """
 rankof(D::AbstractDecomposition) = size.(factors(D))
 
-DEFAULT_INIT(x...) = randn(x...)
+DEFAULT_INIT = randn
 
 """
 Most general decomposition. Takes the form of interweaving contractions between the factors.
