@@ -22,6 +22,10 @@ Base.size(D::AbstractDecomposition) = size(array(D))
 Base.getindex(D::AbstractDecomposition, i::Int) = getindex(array(D), i)
 Base.getindex(D::AbstractDecomposition, I::Vararg{Int}) = getindex(array(D), I...)
 
+# copy/deepcopy all factors and any other properties before reconstructing
+Base.copy(D::AbstractDecomposition) = typeof(D)((copy(D.p) for p in propertynames(D))...)
+Base.deepcopy(D::AbstractDecomposition) = typeof(D)((deepcopy(D.p) for p in propertynames(D))...)
+
 # AbstractDecomposition functions
 """
     nfactors(D::AbstractDecomposition)
@@ -134,6 +138,10 @@ struct Tucker{T, N} <: AbstractTucker{T, N}
 	factors::Tuple{AbstractArray{T}, Vararg{AbstractMatrix{T}}} # ex. (G, A, B, C)
     frozen::NTuple{M, Bool} where M
     function Tucker{T, N}(factors, frozen) where {T, N}
+        core = factors[begin]
+        ndims(core) == N ||
+            throw(ArgumentError("Core should have matching number of dims as the call to Tucker1{$T, $N}, got $(ndims(core))"))
+
         _valid_tucker(factors) ||
             throw(ArgumentError("Not a valid Tucker decomposition"))
 
@@ -168,7 +176,11 @@ struct Tucker1{T, N} <: AbstractTucker{T, N}
 	factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}} # ex. (G, A)
     frozen::Tuple{Bool, Bool}
     function Tucker1{T, N}(factors, frozen) where {T, N}
-        core_dim1 = size(factors[begin])[1]
+        core = factors[begin]
+        ndims(core) == N ||
+            throw(ArgumentError("Core should have matching number of dims as the call to Tucker1{$T, $N}, got $(ndims(core))"))
+
+        core_dim1 = size(core)[1]
         matrix_dim2 = size(factors[end])[2]
         if core_dim1 != matrix_dim2
             @warn "First core dimention $core_dim1 does not match second matrix dimention $matrix_dim2"

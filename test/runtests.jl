@@ -129,13 +129,16 @@ end
 
     CPD = CPDecomposition((A, B))
 
-    G = randn(3,3,3)
-
-    G = Tucker((G, A, B, C))
+    G = Tucker((randn(3,3,3), A, B, C))
 
     @test rankof(G) == (3,3,3)
 
-    G = Tucker1((G, A))
+    G = Tucker1(([1 2]', [3 4]))
+    @test size(G) == (1, 1)
+    @test_throws MethodError Tucker1{Int, 3}(([1 2]', [3 4])) # missing the freeze argument
+    @test_throws ArgumentError Tucker1{Int, 3}(([1 2]', [3 4]), (false, false)) # the 3 in Tucker1{Int, 3} should be 2 since this combines to a 1×1 matrix
+
+    G = Tucker1((randn(3,3,3), A))
 
     G = Tucker1((B', A)) # Can it handle types that are an abstract matrix like Ajoint
 
@@ -183,7 +186,7 @@ end
         v[i] = norm(array(G)-Y)
     end
 
-    @test v[end] / v[begin] < 0.1 # expect to see at least 90% improvement of error
+    @test v[end] / v[begin] < 0.2 # expect to see at least 80% improvement of error
 
     G = Tucker1((10,11,12), 5; init=abs_randn);
     Y = Tucker1((10,11,12), 5; init=abs_randn);

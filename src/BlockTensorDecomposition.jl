@@ -5,7 +5,7 @@ using Random: randn, rand, seed!, shuffle
 using LinearAlgebra: ⋅, opnorm, Symmetric
 
 # Method Extentions
-using Base: size, getindex, show, ndims, *
+using Base: copy, deepcopy, getindex, show, size, ndims, *
 using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
