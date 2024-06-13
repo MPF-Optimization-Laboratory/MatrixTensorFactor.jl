@@ -40,12 +40,18 @@ function default_kwargs(Y; kwargs...)
 
 	# Initialization
 	get!(kwargs, :decomposition, nothing)
-	get!(kwargs, :model, CPDecomposition)
+	get!(kwargs, :model, Tucker1)
 	get!(kwargs, :rank, 1) # Can also be a tuple. For example, Tucker rank could be (1, 2, 3) for an order 3 array Y
 	get!(kwargs, :init) do
 		isnonnegative(Y) ? abs_randn : randn
 	end
 	# get!(kwargs, :freeze) # Default is handled by the model constructor
+
+	# Update
+	get!(kwargs, :algorithm, scaled_nn_block_gradient_decent)
+	get!(kwargs, :core_constraint, l1normalize_1slices!)
+	get!(kwargs, :whats_rescaled, (x -> eachcol(factor(x, 2))))
+
 
     return kwargs
 end
@@ -59,6 +65,6 @@ function initialize_decomposition(Y; decomposition, model, rank, kwargs...)
 	end
 end
 
-function make_update(decomposition, Y; kwargs...)
-	return block_gradient_decent
+function make_update(decomposition, Y; algorithm, kwargs...)
+	return algorithm(decomposition, Y; kwargs...)
 end
