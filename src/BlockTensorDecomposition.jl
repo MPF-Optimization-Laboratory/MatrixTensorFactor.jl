@@ -45,5 +45,6 @@ export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient
 
 # High level / user-interface
 include("./factorize.jl")
+export factorize
 
 end # module BlockTensorDecomposition

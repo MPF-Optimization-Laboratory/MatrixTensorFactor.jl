@@ -136,3 +136,12 @@ end
 Folded normal or more specificly the half-normal initialization.
 """
 abs_randn(x...) = abs.(randn(x...))
+
+"""
+    isnonnegative(X::AbstractArray{<:Real})
+    isnonnegative(x::Real)
+
+Checks if all entries of X are bigger or equal to zero.
+"""
+isnonnegative(X::AbstractArray{<:Real}) = all(isnonnegative, X)
+isnonnegative(x::Real) = (x >= 0)

@@ -2,15 +2,16 @@
 High level code for taking a tensor a performing a decomposition
 """
 
-general_tensor_factor(Y; kwargs...) =
-	_general_tensor_factor(Y; (default_kwargs(; kwargs...))...)
+factorize(Y; kwargs...) =
+	_factorize(Y; (default_kwargs(Y; kwargs...))...)
 
 """
 Factor Y = ABC... such that
 X is normalized according to normX for X in (A, B, C...)
 """
-function _general_tensor_factor(Y; kwargs...)
-	decomposition, stats_data = initialize(kwargs...)
+function _factorize(Y; kwargs...)
+	decomposition = initialize_decomposition(Y; kwargs...)
+	stats_data = initialize_stats(decomposition, Y; kwargs...)
 	push!(stats_data, stats(decomposition, Y; kwargs...))
 
 	update! = make_update(decomposition, Y; kwargs...)
@@ -28,8 +29,34 @@ function _general_tensor_factor(Y; kwargs...)
 	return decomposition, stats_data
 end
 
-function default_kwargs(; kwargs...)
+function default_kwargs(Y; kwargs...)
+	# Set up kwargs as a dictionary
+	# then add `get!(kwargs, :option, default)` to set `option=default`
+	# or use `do` syntax:
+	# get!(kwargs, :option) do
+	#     calculate_default()
+	# end
+	isempty(kwargs) ? kwargs = Dict{Symbol,Any}() : kwargs = Dict(kwargs)
+
+	# Initialization
+	get!(kwargs, :decomposition, nothing)
+	get!(kwargs, :model, CPDecomposition)
+	get!(kwargs, :rank, 1) # Can also be a tuple. For example, Tucker rank could be (1, 2, 3) for an order 3 array Y
+	get!(kwargs, :init) do
+		isnonnegative(Y) ? abs_randn : randn
+	end
+	# get!(kwargs, :freeze) # Default is handled by the model constructor
+
     return kwargs
+end
+
+function initialize_decomposition(Y; decomposition, model, rank, kwargs...)
+	if !isnothing(decomposition)
+		return decomposition
+	else
+		decomposition = model(size(Y), rank; kwargs...)
+		return decomposition
+	end
 end
 
 function make_update(decomposition, Y; kwargs...)
