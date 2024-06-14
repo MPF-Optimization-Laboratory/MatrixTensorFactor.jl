@@ -31,9 +31,11 @@ _diagonal_indexes(S::SuperDiagonal) = CartesianIndex.(fill(1:length(diag(S)), nd
 # AbstractArray interface
 #Base.ndims(_::SuperDiagonal{T,N}) where {T,N} = N
 
-function Base.size(S::SuperDiagonal)
+function Base.size(S::SuperDiagonal{T,N}) where {T, N}
     n = length(diag(S))
-    return Tuple(n for _ in 1:ndims(S))
+    # Why Val(N) and not just N?
+    # See https://docs.julialang.org/en/v1/manual/performance-tips/#man-performance-value-type
+    return ntuple(i -> n, Val(N)) #Tuple(n for _ in 1:ndims(S))
 end
 
 Base.getindex(S::SuperDiagonal, i::Int) = getindex(array(S), i) # TODO work out this efficiently
@@ -125,8 +127,10 @@ ReLU(x) = max(0,x)
 Useful for returning an iterable with a single iterate x
 """
 function identityslice(A::AbstractArray{T, N}) where {T, N}
-    ax = ntuple(dim -> Base.OneTo(1), N)
-    slicemap = ntuple(dim -> (:), N)
+    # Why the Val(N) and not just N?
+    # See https://docs.julialang.org/en/v1/manual/performance-tips/#man-performance-value-type
+    ax = ntuple(dim -> Base.OneTo(1), Val(N))
+    slicemap = ntuple(dim -> (:), Val(N))
     return Slices(A, slicemap, ax)
 end
 
