@@ -8,7 +8,7 @@ struct GenericUpdate{T} <: AbstractUpdate{T}
     f::Function
 end
 
-(U::GenericUpdate{T})(x::T) where T = (U.f)(x)
+(U::GenericUpdate{T})(x::T; kwargs...) where T = U.f(x; kwargs...)
 
 #=
 struct ProxGradientUpdate{T} <: AbstractUpdate{T}
@@ -25,12 +25,12 @@ struct GradientUpdate{T} <: AbstractUpdate{T}
     n::Integer
 end
 
-function (U::GradientUpdate{T})(x::T) where T
+function (U::GradientUpdate{T})(x::T; kwargs...) where T
     n = U.n
     if isfrozen(x, n)
         return x
     end
-    U.gradientstep(x)
+    U.gradientstep(x; kwargs...)
 end
 
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
@@ -40,12 +40,12 @@ struct ProjGradientUpdate{T} <: AbstractUpdate{T}
     n::Integer
 end
 
-function (U::ProjGradientUpdate{T})(x::T) where T
+function (U::ProjGradientUpdate{T})(x::T; kwargs...) where T
     n = U.n
     if isfrozen(x, n)
         return x
     end
-    U.gradientstep(x)
+    U.gradientstep(x; kwargs...)
     U.proj(factor(x, n))
 end
 
@@ -58,12 +58,12 @@ struct NNGradientUpdate{T} <: AbstractUpdate{T}
     n::Integer
 end
 
-function (U::NNGradientUpdate{T})(x::T) where T
+function (U::NNGradientUpdate{T})(x::T; kwargs...) where T
     n = U.n
     if isfrozen(x, n)
         return x
     end
-    U.gradientstep(x)
+    U.gradientstep(x; kwargs...)
     nnegative!(factor(x, n))
 end
 
@@ -74,14 +74,14 @@ struct ScaledNNGradientUpdate{T} <: AbstractUpdate{T}
     n::Integer
 end
 
-function (U::ScaledNNGradientUpdate{T})(x::T) where T
+function (U::ScaledNNGradientUpdate{T})(x::T; kwargs...) where T
     n = U.n
     if isfrozen(x, n)
         return x
     end
     Fn = factor(x, n)
 
-    U.gradientstep(x)
+    U.gradientstep(x; kwargs...)
     nnegative!(Fn)
 
     # TODO possible have information about what gets rescaled withthe `ScaledNormalization`.
@@ -100,24 +100,86 @@ end
 
 #BlockedUpdate(updates::NTuple{N, AbstractUpdate{T}}) where {T, N} = BlockedUpdate{T}(updates)
 
-function (U::BlockedUpdate{T})(x::T; random_order::Bool=false) where T
+function (U::BlockedUpdate{T})(x::T; random_order::Bool=false, kwargs...) where T
     if random_order
         order = shuffle(eachindex(U.updates))
         updates = U.updates[order]
         for update! in updates
-            update!(x)
+            update!(x; kwargs...)
         end
     else
         for update! in U.updates
-            update!(x)
+            update!(x; kwargs...)
         end
     end
 end
 
 ##################################################
 
-function make_gradstep_core(Y::AbstractArray; stepsize=:lipshitz, kwargs...)
-    function gradstep_core!(T::Tucker1; kwargs...)
+function make_momentum_gradstep_matrix(Y::AbstractArray; kwargs...)
+    # This momentum update only works for lipshitz stepsize
+    # I leave this as an option so we error if a different calcstep was requested
+    function momentum_gradstep_matrix!(T::Tucker1;
+            calcstep=LipshitzStep()::LipshitzStep, δ=0, ω=0, kwargs...)
+        (C, A) = factors(T)
+        CC = slicewise_dot(C, C)
+        YC = slicewise_dot(Y, C)
+
+        # Momentum
+        L = opnorm(CC)
+        ω = min(ω, δ*sqrt(LA/L))
+        A .+= momentum
+
+        # Gradient
+        grad = A*CC - YC
+        step=calcstep(L)
+        @. A -= step * grad
+        return C
+    end
+    return momentum_gradstep_matrix!
+end
+
+# Attempt 2
+function make_momentum_gradstep_matrix(Y::AbstractArray; kwargs...)
+    # This momentum update only works for lipshitz stepsize
+    # I leave this as an option so we error if a different calcstep was requested
+    function momentum_gradstep_matrix!(T::Tucker1;
+            calcstep=LipshitzStep()::LipshitzStep, δ=0, ω=0, kwargs...)
+        (C, A) = factors(T)
+        CC = slicewise_dot(C, C)
+        YC = slicewise_dot(Y, C)
+
+        # Momentum
+        L = opnorm(CC)
+        ω = min(ω, δ*sqrt(LA/L))
+        A .+= momentum
+
+        # Gradient
+        grad = A*CC - YC
+        step=calcstep(L)
+        @. A -= step * grad
+        return C
+    end
+    return momentum_gradstep_matrix!
+end
+
+# Attempt 1
+function make_momentum_gradstep_matrix(Y::AbstractArray; kwargs...)
+    function momentum_gradstep_matrix!(T::Tucker1; momentum=0, stepsize=:lipshitz, kwargs...)
+        (C, A) = factors(T)
+        iszero(momentum) ? nothing : A .+= momentum
+        CC = slicewise_dot(C, C)
+        YC = slicewise_dot(Y, C)
+        grad = A*CC - YC
+        stepsize == :lipshitz ? step=1/opnorm(CC) : step=stepsize # TODO make a function that takes a symbol for a type of stepsize and calculates the step
+        @. A -= step * grad
+        return A
+    end
+    return momentum_gradstep_matrix!
+end
+
+function make_gradstep_core(Y::AbstractArray; kwargs...)
+    function gradstep_core!(T::Tucker1; stepsize=:lipshitz, kwargs...)
         (C, A) = factors(T)
         AA = A'A
         YA = Y×₁A'
@@ -129,15 +191,15 @@ function make_gradstep_core(Y::AbstractArray; stepsize=:lipshitz, kwargs...)
     return gradstep_core!
 end
 
-function make_gradstep_matrix(Y::AbstractArray; stepsize=:lipshitz, kwargs...)
-    function gradstep_matrix!(T::Tucker1; kwargs...)
+function make_gradstep_matrix(Y::AbstractArray; kwargs...)
+    function gradstep_matrix!(T::Tucker1; stepsize=:lipshitz, kwargs...)
         (C, A) = factors(T)
         CC = slicewise_dot(C, C)
         YC = slicewise_dot(Y, C)
         grad = A*CC - YC
         stepsize == :lipshitz ? step=1/opnorm(CC) : step=stepsize # TODO make a function that takes a symbol for a type of stepsize and calculates the step
         @. A -= step * grad
-        return C
+        return A
     end
     return gradstep_matrix!
 end
@@ -184,6 +246,34 @@ function proj_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; proj, kwarg
         NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
     )
     return BlockedUpdate(block_updates)
+end
+
+########################################################################################
+abstract type AbstractStep <: Function end
+
+struct LipshitzStep <: AbstractStep end
+
+(step::LipshitzStep)(L::Real; kwargs...) = 1/L
+#LipshitzStep(L::Real) = 1/L
+
+struct ConstantStep <: AbstractStep
+    stepsize::Real
+end
+
+(step::ConstantStep)(_...; kwargs...) = step.stepsize
+
+struct SPGStep <: AbstractStep
+    min::Real
+    max::Real
+end
+
+SPGStep(;min=1e-10, max=1e10) = SPGStep(min, max)
+
+function (step::SPGStep)(x, x_last, grad_x, grad_x_last; stepmin=step.min, stepmax=step.max, kwargs...)
+    s = x - x_last
+    y = grad_x - grad_x_last
+    suggested_step = (s ⋅ s) / (s ⋅ y)
+    return clamp(suggested_step, stepmin, stepmax) # safeguards to ensure step is within reasonable bounds
 end
 
 #=
