@@ -142,10 +142,12 @@ const linftynormalize_12slices! = ProjectedNormalization(linftynorm, linftyproje
 
 Main constructor for the constraint where `norm` of `whats_normalized` equals `scale`.
 
-Scale can be a single `Real`, or an `AbstractArray{<:Real}`, but should be the same size as
-the output of `whats_normalized`.
+Scale can be a single `Real`, or an `AbstractArray{<:Real}`, but should be brodcast-able
+with the output of `whats_normalized`.
+Lasly, scale can be a `Function` which will act on an `AbstractArray{<:Real}` and return
+something that is brodcast-able `whats_normalized`.
 """
-struct ScaledNormalization{T<:Union{Real,AbstractArray{<:Real}}} <: AbstractNormalization
+struct ScaledNormalization{T<:Union{Real,AbstractArray{<:Real},Function}} <: AbstractNormalization
     norm::Function
     whats_normalized::Function
     scale::T
@@ -153,9 +155,16 @@ end
 
 ScaledNormalization(norm;whats_normalized=identityslice,scale=1) = ScaledNormalization{typeof(scale)}(norm, whats_normalized, scale)
 
-function (S::ScaledNormalization)(A::AbstractArray)
+function (S::ScaledNormalization{T})(A::AbstractArray) where {T<:Union{Real,AbstractArray{<:Real}}}
     whats_normalized_A = S.whats_normalized(A)
     A_norm = (S.norm).(whats_normalized_A) ./ S.scale
+    whats_normalized_A ./= A_norm
+    return A_norm
+end
+
+function (S::ScaledNormalization{T})(A::AbstractArray) where {T<:Function}
+    whats_normalized_A = S.whats_normalized(A)
+    A_norm = (S.norm).(whats_normalized_A) ./ S.scale(A)
     whats_normalized_A ./= A_norm
     return A_norm
 end
@@ -175,6 +184,10 @@ const l1scaled_rows! = ScaledNormalization(l1norm; whats_normalized=eachrow)
 const l1scaled_cols! = ScaledNormalization(l1norm; whats_normalized=eachcol)
 const l1scaled_1slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=1)))
 const l1scaled_12slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
+const l1scaled_average12slices! = ScaledNormalization(l1norm;
+    whats_normalized=(x -> eachslice(x; dims=1)),
+    scale=(A -> size(A)[2])) # the length of the second dimention "J"
 
 const linftyscaled! = ScaledNormalization(linftynorm)
 const linftyscaled_rows! = ScaledNormalization(linftynorm; whats_normalized=eachrow)
