@@ -31,12 +31,12 @@ function _factorize(Y; kwargs...)
 		# this could be the next stepsize or other info used by update!
 		updateparameters!(parameters, decomposition, previous)
 
-		# Update the one or two previous iterates, used for momentum, spg stepsizes
-		# We do not save every iterate since that is too much memory
-		updateprevious!(previous, decomposition)
-
 		# Save stats
 		push!(stats_data, getstats(decomposition, Y, previous, parameters))
+
+		# Update the one or two previous iterates, used for momentum, spg stepsizes
+		# We do not save every iterate since that is too much memory
+		updateprevious!(previous, parameters, decomposition)
 	end
 
 	return decomposition, stats_data
@@ -68,6 +68,11 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :whats_rescaled, (x -> eachcol(factor(x, 2))))
 	# get!(kwargs, :random_order) # This default is handled by the BlockedUpdate struct
 
+	# Momentum
+	get!(kwargs, :momentum, true)
+	get!(kwargs, :δ, 0.9999)
+	get!(kwargs, :previous_iterates, 1)
+
 	# Stats
 	get!(kwargs, :stats) do # TODO maybe make some types and structure for common stats you may want
 							# some of these should match the algorithm, for example the gradient calculation
@@ -88,9 +93,9 @@ function default_kwargs(Y; kwargs...)
 			return grad
 		end
 		(;
-		gradient_norm = (X, Y, s) -> sqrt(norm(grad_matrix(X))^2 + norm(grad_core(X))^2),
-		error    = (X, Y, s) -> norm(array(X) - Y),
-		last_error_ratio = (X, Y, s) -> norm(array(X) - Y) / s[end, :error],
+		gradient_norm = (X, Y, stats) -> sqrt(norm(grad_matrix(X))^2 + norm(grad_core(X))^2),
+		error    = (X, Y, stats) -> norm(array(X) - Y),
+		last_error_ratio = (X, Y, stats) -> norm(array(X) - Y) / stats[end, :error],
 		)
 	end
 
@@ -132,41 +137,47 @@ function initialize_previous(decomposition, Y; previous_iterates::Integer, kwarg
 	previous = [deepcopy(decomposition) for _ in 1:previous_iterates] # TODO check if this should be copy?
 	previous_iterates == 0 ? updateprevious!(x...) = nothing : begin
 		# Shift the list of previous iterates and put the newest first
-		function updateprevious!(previous, decomposition)
+		function updateprevious!(previous, parameters, decomposition)
 			previous .= circshift(previous, 1)
 			previous[begin] = deepcopy(decomposition) # TODO check if this should be copy?
+			parameters[:x_last] = previous[begin]
 		end
 	end
 	return previous, updateprevious!
 end
 
-function initialize_parameters(decomposition, Y, previous; stepsize, kwargs...)
+function initialize_parameters(decomposition, Y, previous; momentum::Bool, kwargs...)
 	# parameters for the update step are symbol => value pairs
 	# they are held in a dictionary since we may mutate these for ex. the stepsize
 	parameters = Dict{Symbol, Any}()
 
-	parameters[:stepsize] = stepsize
+	# General Looping
+	parameters[:iteration] = 1
+	parameters[:x_last] = previous[begin] # Last iterate
 
+	# Momentum
 	if momentum
-		t_last = t
-		t = 0.5*(1 + sqrt(1 + 4*t_last^2))
-		omegahat = (t_last - 1) / t # Candidate momentum step
-
-		LA = lipshitzA(B)
-		omegaA = min(omegahat, delta*sqrt(LA_last/LA)) # Safeguarded momentum step
-		#A = A_last + omegaA * (A_last - A_last_last)
-		@. A += omegaA * (factor(previous[1], 2) - factor(previous[2], 2))
-	end
-
-	if i > 1 && stepsize == :spg
-		grad_A_last_last = calc_gradientA(A_last_last, B_last_last, Y)
-		grad_A_last = calc_gradientA(A_last, B_last, Y)
-		step = spg_stepsize(A_last, A_last_last, grad_A_last, grad_A_last_last)
+		parameters[:t_last] = update_t(1::Float64)
+		parameters[:t] = 1::Float64
+		parameters[:ω] = (parameters[:t_last] - 1) / parameters[:t]
+		parameters[:δ] = kwargs[:δ]
 	end
 
 	function updateparameters!(parameters, decomposition, previous)
-		parameters[:stepsize]
+		parameters[:iteration] += 1
+		#parameters[:x_last] = previous[begin] # Last iterate updated with updateprevious!
+											   # this ensures we only copy over the decomposition
+											   # once since updateparameters! happens before updateprevious!
+
+		# Momentum
+		if momentum
+			parameters[:t_last] = parameters[:t]
+			parameters[:t] = update_t(parameters[:t_last])
+			parameters[:ω] = (parameters[:t_last] - 1) / parameters[:t]
+		end
 	end
 
 	return parameters, updateparameters!
 end
+
+update_t(t) = 0.5*(1 + sqrt(1 + 4*t^2))

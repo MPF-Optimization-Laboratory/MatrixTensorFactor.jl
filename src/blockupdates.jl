@@ -2,13 +2,13 @@
 Mid level code that combines constraints with block updates to be used on an AbstractDecomposition
 """
 
-abstract type AbstractUpdate{T<:AbstractDecomposition} <: Function end
+abstract type AbstractUpdate <: Function end
 
-struct GenericUpdate{T} <: AbstractUpdate{T}
+struct GenericUpdate <: AbstractUpdate
     f::Function
 end
 
-(U::GenericUpdate{T})(x::T; kwargs...) where T = U.f(x; kwargs...)
+(U::GenericUpdate)(x; kwargs...) = U.f(x; kwargs...)
 
 #=
 struct ProxGradientUpdate{T} <: AbstractUpdate{T}
@@ -19,89 +19,146 @@ end
 (U::ProxGradientUpdate{T})(x::T) = (U.prox ∘ U.gradientstep)(x)
 =#
 
-"""Perform a GradientUpdate on the nth factor of an Abstract Decomposition x"""
-struct GradientUpdate{T} <: AbstractUpdate{T}
-    gradientstep::Function
-    n::Integer
+function checkfrozen(x, n)
+    frozen = isfrozen(x, n)
+    if frozen
+        @warning "Factor $n is frozen, skipping its update."
+    end
+    return frozen
 end
 
-function (U::GradientUpdate{T})(x::T; kwargs...) where T
+"""
+Perform a Gradient decent step on the nth factor of an Abstract Decomposition x
+
+The n is only to keep track of the factor that gets updated, and to check if a frozen
+factor was requested to be updated.
+"""
+struct GradientDescent <: AbstractUpdate
+    n::Integer
+    gradient::Function
+    step::AbstractStep
+end
+
+function (U::GradientDescent)(x; x_last, kwargs...)
     n = U.n
-    if isfrozen(x, n)
+    if checkfrozen(x, n)
         return x
     end
-    U.gradientstep(x; kwargs...)
+    grad = U.gradient(x; kwargs...)
+    # Note we pass a function for grad_last (lazy) so that we only compute it if needed for the step
+    s = U.step(x; n, x_last, grad, grad_last=(x -> U.gradient(x; kwargs...)), kwargs...)
+    a = factor(x, n)
+    @. a -= s*g
+end
+
+function make_gradient(D::AbstractDecomposition, _::Integer, _::AbstractArray; objective::AbstractObjective, kwargs...)
+    error("Gradient not implimented for ", typeof(D), " with ", typeof(objective), " objective")
+end
+
+# Using this patter of inputs so that gradients for a generic decomposition could be calculated
+# with auto diff by looking at the gradient of the function objective(D, Y) with respect to the nth factor in D
+function make_gradient(_::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function gradient(T::Tucker1; kwargs...)
+            (C, A) = factors(T)
+            AA = A'A
+            YA = Y×₁A'
+            grad = C×₁AA - YA # TODO define multiplication generaly
+            return grad
+        end
+
+    elseif n==1 # the matrix is the zeroth factor
+        function gradient(T::Tucker1; kwargs...)
+            (C, A) = factors(T)
+            CC = slicewise_dot(C, C)
+            YC = slicewise_dot(Y, C)
+            grad = A*CC - YC
+            return grad
+        end
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+
+    return gradient
 end
 
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
-struct ProjGradientUpdate{T} <: AbstractUpdate{T}
-    gradientstep::Function
-    proj::ProjectedNormalization
+struct Projection <: AbstractUpdate
     n::Integer
+    proj::AbstractConstraint #ProjectedNormalization
 end
 
-function (U::ProjGradientUpdate{T})(x::T; kwargs...) where T
+function (U::Projection)(x::T; kwargs...) where T
     n = U.n
-    if isfrozen(x, n)
+    if checkfrozen(x, n)
         return x
     end
-    U.gradientstep(x; kwargs...)
     U.proj(factor(x, n))
 end
 
-"""
-Perform a nonnegative gradient update on the nth factor of an Abstract Decomposition x.
-See [`ProjGradientUpdate`](@ref).
-"""
-struct NNGradientUpdate{T} <: AbstractUpdate{T}
-    gradientstep::Function
+NNProjection(n) = Projection(n, nnegative!)
+
+struct Rescale <: AbstractUpdate
     n::Integer
-end
-
-function (U::NNGradientUpdate{T})(x::T; kwargs...) where T
-    n = U.n
-    if isfrozen(x, n)
-        return x
-    end
-    U.gradientstep(x; kwargs...)
-    nnegative!(factor(x, n))
-end
-
-struct ScaledNNGradientUpdate{T} <: AbstractUpdate{T}
-    gradientstep::Function
     scale::ScaledNormalization
     whats_rescaled::Function
-    n::Integer
 end
 
-function (U::ScaledNNGradientUpdate{T})(x::T; kwargs...) where T
-    n = U.n
-    if isfrozen(x, n)
-        return x
-    end
-    Fn = factor(x, n)
-
-    U.gradientstep(x; kwargs...)
-    nnegative!(Fn)
-
+function (U::Rescale)(x; kwargs...)
     # TODO possible have information about what gets rescaled withthe `ScaledNormalization`.
     # Right now, the scaling is only applied to arrays, not decompositions, so the information
     # about where (`U.whats_rescaled`) and how (only multiplication (*) right now) the weight
-    # from Fn gets canceled out is stored with the `ScaledNNGradientUpdate` struct and not
+    # from Fn gets canceled out is stored with the `Rescale` struct and not
     # the `ScaledNormalization`.
     Fn_scale = U.scale(Fn)
     to_scale = U.whats_rescaled(x)
     to_scale .*= Fn_scale
 end
 
-struct MomentumUpdate{T} <: AbstractUpdate{T}
+#=
+struct MomentumUpdate <: AbstractUpdate
     n::Integer
+    momentum::Function
 end
 
-function (U::MomentumUpdate{T})(x::T, x₋₁::T, x₋₂::T; ω::Real=1, kwargs...)
+function (U::MomentumUpdate)(x::T; x_last::T, kwargs...) where T
     n = U.n
-    a, a₋₁, a₋₂ = factor(x, n), factor(x₋₁, n), factor(x₋₂, n)
-    @. a += ω * (a₋₁ - a₋₂)
+    if checkfrozen(x, n)
+        return x
+    end
+    ω = U.momentum(x; kwargs...)
+    a, a_last = factor(x, n), factor(x_last, n)
+    @. a += ω * (a - a_last)
+end
+
+function make_momentum(_::Tucker1, n::Integer, Y::AbstractArray; kwargs...)
+    function momentum(T::Tucker1; ω, δ, lipshitz, L_last, kwargs...)
+        L = lipshitz(T)
+        return min(ω, δ * √(L_last/L)) # Safeguarded momentum step
+    end
+    return momentum
+end
+=#
+
+struct MomentumUpdate <: AbstractUpdate
+    n::Integer
+    lipshitz::Function
+end
+
+function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
+    n = U.n
+    if checkfrozen(x, n)
+        return x
+    end
+    # TODO avoid redoing this lipshitz calculation and instead store the previous L
+    # TODO generalize this momentum update to allow for other decaying momentums ω
+    L = U.lipshitz(x; kwargs...)
+    L_last = U.lipshitz(x_last; kwargs...)
+    ω = min(ω, δ * √(L_last/L))
+
+    a, a_last = factor(x, n), factor(x_last, n)
+    @. a += ω * (a - a_last)
 end
 
 struct BlockedUpdate{T} <: AbstractUpdate{T}
@@ -277,10 +334,35 @@ end
 ########################################################################################
 abstract type AbstractStep <: Function end
 
-struct LipshitzStep <: AbstractStep end
+struct LipshitzStep <: AbstractStep
+    lipshitz::Function
+end
 
-(step::LipshitzStep)(L::Real; kwargs...) = 1/L
+function (step::LipshitzStep)(x; kwargs...)
+    L = step.lipshitz(x)
+    return 1/L
+end
 #LipshitzStep(L::Real) = 1/L
+
+function make_lipshitz(_::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function lipshitz(T::Tucker1; kwargs...)
+            A = matrix_factor(T, 1)
+            return opnorm(A'A)
+        end
+
+    elseif n==1 # the matrix is the zeroth factor
+        function lipshitz(T::Tucker1; kwargs...)
+            C = core(T)
+            return opnorm(slicewise_dot(C, C))
+        end
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+
+    return lipshitz
+end
 
 struct ConstantStep <: AbstractStep
     stepsize::Real
@@ -295,11 +377,26 @@ end
 
 SPGStep(;min=1e-10, max=1e10) = SPGStep(min, max)
 
-function (step::SPGStep)(x, x_last, grad_x, grad_x_last; stepmin=step.min, stepmax=step.max, kwargs...)
+# Convert an input of the full decomposition, to a calculation on the factor
+# Calculate the last gradient if a function was provided
+(step::SPGStep)(x::T; n, x_last::T, grad_last::Function, kwargs...) where {T <: AbstractDecomposition} =
+    step(factor(x,n); x_last=factor(x_last,n), grad_last=grad_last(x_last), kwargs...)
+
+# option to override the set defaults from step
+# TODO SPG has a linesearch/negative momentum update part to the fill iteration
+# but in the best case, this linesearch just uses the value given by this step
+# so I will skip implimenting it for now, but may want to add that once
+# I add a line search
+function (step::SPGStep)(x; grad, x_last, grad_last, stepmin=step.min, stepmax=step.max, kwargs...)
     s = x - x_last
-    y = grad_x - grad_x_last
-    suggested_step = (s ⋅ s) / (s ⋅ y)
-    return clamp(suggested_step, stepmin, stepmax) # safeguards to ensure step is within reasonable bounds
+    y = grad - grad_last
+    sy = (s ⋅ y)
+    if sy <=0 #TODO check why (s ⋅ y) < 0 means we should take stepmax and not stepmin
+        return stepmax
+    else
+        suggested_step = (s ⋅ s) / sy
+        return clamp(suggested_step, stepmin, stepmax) # safeguards to ensure step is within reasonable bounds
+    end
 end
 
 #=
