@@ -53,6 +53,18 @@ array. Use `factor(D, n)` to get just the `n`'th factor.
 factors(D::AbstractDecomposition) = D.factors
 factor(D::AbstractDecomposition, n::Integer) = factors(D)[n]
 
+# Essentialy zero index tucker factors so the core is the 0th factor, and the nth factor
+# is the matrix factor in the nth dimention
+function factor(D::AbstractTucker, n::Integer)
+    if n == 0
+        return core(D)
+    elseif n >= 1
+        return matrix_factor(D, n)
+    else
+        throw(ArgumentError("No $(n)th factor in $(typeof(D))"))
+    end
+end
+
 """
     contractions(D::AbstractDecomposition)
 
@@ -217,6 +229,9 @@ end
 # AbstractTucker interface
 core(T::AbstractTucker) = factors(T)[begin]
 matrix_factors(T::AbstractTucker) = factors(T)[begin+1:end]
+matrix_factor(T::AbstractTucker, n::Integer) = matrix_factors(T)[n]
+# This way, the 1st matrix factor in a CPDecomposition is factors(T)[1]
+# and the 1st matrix factor in a Tucker is factors(T)[2]
 
 # AbstractDecomposition Interface
 array(T::AbstractTucker) = multifoldl(contractions(T), factors(T))
@@ -229,7 +244,7 @@ rankof(T::Tucker1) = size(core(T))[begin]
 # AbstractArray interface
 # Efficient size and indexing for CPDecomposition
 Base.size(T::Tucker) = map(x -> size(x)[1], matrix_factors(T))
-Base.size(T::Tucker1) = (size(factors(T)[2])[1], size(core(T))[begin+1:end]...)
+Base.size(T::Tucker1) = (size(matrix_factors(T)[begin])[1], size(core(T))[begin+1:end]...)
 function Base.getindex(T::Tucker1, I::Vararg{Int})
     G, A = factors(T)
     i = I[1]
@@ -293,7 +308,7 @@ Base.getindex(CPD::CPDecomposition, I::Vararg{Int})= sum(reduce(.*, (@view f[i,:
 
 # Additional CPDecomposition interface
 """The single rank for a CP Decomposition"""
-rankof(CPD::CPDecomposition) = size(factors(CPD)[begin])[2]
+rankof(CPD::CPDecomposition) = size(matrix_factors(CPD)[begin])[2]
 
 function Base.show(io::IO, CPD::CPDecomposition)
     println(io, size(CPD), " rank ", rankof(CPD), " ", typeof(CPD), ":")
