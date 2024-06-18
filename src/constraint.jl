@@ -72,7 +72,7 @@ end
 check(P::ProjectedNormalization, A::AbstractArray) = all((P.norm).(P.whats_normalized(A)) .== 1)
 
 ### Some standard projections ###
-l2norm(x::AbstractArray) = mapreduce(x -> x^2, +, x) |> sqrt
+l2norm(x::AbstractArray) = sqrt(norm2(x))
 function l2project!(x::AbstractArray)
     if iszero(x)
         @warn "Input $x is zero, picking a closest element"

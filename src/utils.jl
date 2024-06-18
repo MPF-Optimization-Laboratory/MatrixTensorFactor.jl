@@ -149,3 +149,10 @@ Checks if all entries of X are bigger or equal to zero.
 """
 isnonnegative(X::AbstractArray{<:Real}) = all(isnonnegative, X)
 isnonnegative(x::Real) = (x >= 0)
+
+"""
+    norm2(x)
+
+L2 norm squared, the sum of squares of the entries of x.
+"""
+norm2(x) = mapreduce(x -> x^2, +, x)

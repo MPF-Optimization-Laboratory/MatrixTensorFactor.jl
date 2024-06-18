@@ -3,6 +3,7 @@ module BlockTensorDecomposition
 # Dependencies
 using Random: randn, rand, seed!, shuffle
 using LinearAlgebra: ⋅, opnorm, Symmetric
+using DataFrames: DataFrame
 
 # Method Extentions
 using Base: copy, deepcopy, getindex, show, size, ndims, *
@@ -17,6 +18,10 @@ include("./tensorproducts.jl")
 include("./decomposition.jl")
 export array, contractions, core, factor, factors, frozen, isfrozen, matrix_factors, rankof
 export AbstractDecomposition, GenericDecomposition, Tucker, Tucker1, CPDecomposition
+
+include("./objective.jl")
+export AbstractObjective
+export L2
 
 include("./constraint.jl")
 export AbstractConstraint
@@ -38,6 +43,10 @@ export l1scaled_average12slices!
 export EntryWise
 export nnegative!
 export l1norm, l2norm, linftynorm
+
+include("./stats.jl")
+export AbstractStat
+export Iteration, GradientNorm, GradientNNCone, ObjectiveValue, ObjectiveRatio, IterateNormDiff, IterateRelativeDiff
 
 include("./blockupdates.jl")
 export AbstractUpdate, GradientUpdate, NNGradientUpdate, ScaledNNGradientUpdate, ProjGradientUpdate

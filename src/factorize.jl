@@ -146,6 +146,7 @@ function initialize_previous(decomposition, Y; previous_iterates::Integer, kwarg
 	return previous, updateprevious!
 end
 
+"""update parameters needed for the update"""
 function initialize_parameters(decomposition, Y, previous; momentum::Bool, kwargs...)
 	# parameters for the update step are symbol => value pairs
 	# they are held in a dictionary since we may mutate these for ex. the stepsize
