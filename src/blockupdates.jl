@@ -94,6 +94,16 @@ function (U::ScaledNNGradientUpdate{T})(x::T; kwargs...) where T
     to_scale .*= Fn_scale
 end
 
+struct MomentumUpdate{T} <: AbstractUpdate{T}
+    n::Integer
+end
+
+function (U::MomentumUpdate{T})(x::T, x₋₁::T, x₋₂::T; ω::Real=1, kwargs...)
+    n = U.n
+    a, a₋₁, a₋₂ = factor(x, n), factor(x₋₁, n), factor(x₋₂, n)
+    @. a += ω * (a₋₁ - a₋₂)
+end
+
 struct BlockedUpdate{T} <: AbstractUpdate{T}
     updates::NTuple{N, AbstractUpdate{T}} where N
 end
@@ -116,9 +126,11 @@ end
 
 ##################################################
 
+# Attempt 3
+#=
 function make_momentum_gradstep_matrix(Y::AbstractArray; kwargs...)
     # This momentum update only works for lipshitz stepsize
-    # I leave this as an option so we error if a different calcstep was requested
+    # I leave calcstep as an option so we error if a different calcstep was requested
     function momentum_gradstep_matrix!(T::Tucker1;
             calcstep=LipshitzStep()::LipshitzStep, δ=0, ω=0, kwargs...)
         (C, A) = factors(T)
@@ -177,6 +189,7 @@ function make_momentum_gradstep_matrix(Y::AbstractArray; kwargs...)
     end
     return momentum_gradstep_matrix!
 end
+=#
 
 function make_gradstep_core(Y::AbstractArray; kwargs...)
     function gradstep_core!(T::Tucker1; stepsize=:lipshitz, kwargs...)
@@ -184,7 +197,7 @@ function make_gradstep_core(Y::AbstractArray; kwargs...)
         AA = A'A
         YA = Y×₁A'
         grad = C×₁AA - YA # TODO define multiplication generaly
-        stepsize == :lipshitz ? step=1/opnorm(AA) : step=stepsize # TODO make a function that takes a symbol for a type of stepsize and calculates the step
+        stepsize == :lipshitz ? step=1/opnorm(AA) : step=stepsize # step = calcstep(opnorm(AA)) # TODO make a function that takes a symbol for a type of stepsize and calculates the step
         @. C -= step * grad
         return C
     end
@@ -210,7 +223,7 @@ function block_gradient_decent(T::Tucker1, Y::AbstractArray; kwargs...)
     gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
     block_updates = (
         GradientUpdate{Tucker1}(gradstep_core!, 1),
-        GradientUpdate{Tucker1}(gradstep_matrix!, 1),
+        GradientUpdate{Tucker1}(gradstep_matrix!, 2),
     )
     return BlockedUpdate(block_updates)
 end
@@ -221,7 +234,7 @@ function nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; kwargs...)
     gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
     block_updates = (
         NNGradientUpdate{Tucker1}(gradstep_core!, 1),
-        NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
+        NNGradientUpdate{Tucker1}(gradstep_matrix!, 2),
     )
     return BlockedUpdate(block_updates)
 end
@@ -232,7 +245,7 @@ function scaled_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; core_cons
     gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
     block_updates = (
         ScaledNNGradientUpdate{Tucker1}(gradstep_core!, core_constraint, whats_rescaled, 1),
-        NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
+        NNGradientUpdate{Tucker1}(gradstep_matrix!, 2),
     )
     return BlockedUpdate(block_updates)
 end
@@ -243,7 +256,20 @@ function proj_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; proj, kwarg
     gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
     block_updates = (
         ProjGradientUpdate{Tucker1}(gradstep_core!, proj, 1),
-        NNGradientUpdate{Tucker1}(gradstep_matrix!, 1),
+        NNGradientUpdate{Tucker1}(gradstep_matrix!, 2),
+    )
+    return BlockedUpdate(block_updates)
+end
+
+function momentum_scaled_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; core_constraint, whats_rescaled, kwargs...)
+    size(T) == size(Y) || ArgumentError("Size of decomposition $(size(T)) does not match size of the data $(size(Y))")
+    gradstep_core! = make_gradstep_core(Y; kwargs...)
+    gradstep_matrix! = make_gradstep_matrix(Y; kwargs...)
+    block_updates = (
+        MomentumUpdate{Tucker1}(1), #need different ω's for these two momentum updates...
+        ScaledNNGradientUpdate{Tucker1}(gradstep_core!, core_constraint, whats_rescaled, 1),
+        MomentumUpdate{Tucker1}(2),
+        NNGradientUpdate{Tucker1}(gradstep_matrix!, 2),
     )
     return BlockedUpdate(block_updates)
 end
