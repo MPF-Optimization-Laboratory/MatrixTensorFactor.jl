@@ -247,7 +247,7 @@ function make_momentum_gradstep_matrix(Y::AbstractArray; kwargs...)
     return momentum_gradstep_matrix!
 end
 =#
-
+#=
 function make_gradstep_core(Y::AbstractArray; kwargs...)
     function gradstep_core!(T::Tucker1; stepsize=:lipshitz, kwargs...)
         (C, A) = factors(T)
@@ -331,6 +331,7 @@ function momentum_scaled_nn_block_gradient_decent(T::Tucker1, Y::AbstractArray; 
     return BlockedUpdate(block_updates)
 end
 
+=#
 ########################################################################################
 abstract type AbstractStep <: Function end
 
