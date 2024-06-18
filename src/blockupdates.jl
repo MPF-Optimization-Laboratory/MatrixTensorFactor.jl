@@ -333,6 +333,29 @@ end
 
 =#
 ########################################################################################
+
+"""
+Interface to make a step scheme is
+
+struct MyStep <: AbstractStep
+    ...
+end
+
+function (step::MyStep)(x::AbstractDecomposition; kwargs...)
+    ...
+    return step::Real
+end
+
+To use your scheme, construct an instance with any necessary parameters
+
+mystep = MyStep(...)
+
+and then you can call
+
+step = mystep(D; kwargs...)
+
+to compute the step size.
+"""
 abstract type AbstractStep <: Function end
 
 struct LipshitzStep <: AbstractStep
