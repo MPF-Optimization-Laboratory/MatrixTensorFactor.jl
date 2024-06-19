@@ -142,7 +142,7 @@ function (U::GradientDescent)(x; x_last, kwargs...)
     # Note we pass a function for grad_last (lazy) so that we only compute it if needed for the step
     s = U.step(x; n, x_last, grad, grad_last=(x -> U.gradient(x; kwargs...)), kwargs...)
     a = factor(x, n)
-    @. a -= s*g
+    @. a -= s*grad
 end
 
 function make_gradient(D::AbstractDecomposition, n::Integer, Y::AbstractArray; objective::AbstractObjective, kwargs...)
@@ -258,6 +258,8 @@ end
 struct BlockedUpdate <: AbstractUpdate
     updates::NTuple{N, AbstractUpdate} where N
 end
+
+BlockedUpdate(x...) = BlockedUpdate(x)
 
 #BlockedUpdate(updates::NTuple{N, AbstractUpdate{T}}) where {T, N} = BlockedUpdate{T}(updates)
 

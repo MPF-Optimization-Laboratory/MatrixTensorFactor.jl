@@ -23,8 +23,8 @@ Base.getindex(D::AbstractDecomposition, i::Int) = getindex(array(D), i)
 Base.getindex(D::AbstractDecomposition, I::Vararg{Int}) = getindex(array(D), I...)
 
 # copy/deepcopy all factors and any other properties before reconstructing
-Base.copy(D::AbstractDecomposition) = typeof(D)((copy(D.p) for p in propertynames(D))...)
-Base.deepcopy(D::AbstractDecomposition) = typeof(D)((deepcopy(D.p) for p in propertynames(D))...)
+Base.copy(D::AbstractDecomposition) = typeof(D)((copy.(getfield(D, p)) for p in propertynames(D))...)
+Base.deepcopy(D::AbstractDecomposition) = typeof(D)((deepcopy.(getfield(D, p)) for p in propertynames(D))...)
 
 # AbstractDecomposition functions
 """
@@ -208,7 +208,7 @@ function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen
     Tucker((core, matrix_factors...), frozen)
 end
 
-function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tuple(2), init=DEFAULT_INIT) where N
+function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tuple(2), init=DEFAULT_INIT, kwargs...) where N
     I, J... = full_size
     core = init((rank, J...))
     matrix_factor = init(I, rank)
@@ -219,6 +219,7 @@ end
 core(T::AbstractTucker) = factors(T)[begin]
 matrix_factors(T::AbstractTucker) = factors(T)[begin+1:end]
 matrix_factor(T::AbstractTucker, n::Integer) = matrix_factors(T)[n]
+isfrozen(T::AbstractTucker, n::Integer) = frozen(T)[n+1]
 # This way, the 1st matrix factor in a CPDecomposition is factors(T)[1]
 # and the 1st matrix factor in a Tucker is factors(T)[2]
 
@@ -299,7 +300,8 @@ factors(CPD::CPDecomposition) = CPD.factors
 array(CPD::CPDecomposition) = mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
 frozen(CPD::CPDecomposition) = CPD.frozen
 vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
-eachfactorindex(D::CPDecomposition) = 1:nfactors(D) # unlike other AbstractTucker's, back to 1 based since there's only matrix factors
+eachfactorindex(CPD::CPDecomposition) = 1:nfactors(CPD) # unlike other AbstractTucker's, back to 1 based since there's only matrix factors
+isfrozen(CPD::CPDecomposition, n::Integer) = n == 0 ? true : frozen(CPD)[n] # similar to eachfactorindex
 
 # AbstractTucker Interface
 matrix_factors(CPD::CPDecomposition) = factors(CPD)

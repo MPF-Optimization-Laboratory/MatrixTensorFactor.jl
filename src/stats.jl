@@ -5,8 +5,20 @@ to return a number.
 """
 abstract type AbstractStat <: Function end
 
-struct Iteration <: AbstractStat end
-#Iteration(; kwargs...) = Iteration()
+# These methods allow us to check length([GradientNNCone, ObjectiveValue]) or length(GradientNNCone)
+# or iterate over a list / single element of AbstractStat
+Base.length(_::Type{<:AbstractStat}) = 1
+Base.iterate(x::Type{<:AbstractStat}, state=1) = state > 1 ? nothing : (x, state+1)
+#Base.eltype(x::Type{<:AbstractStat}) = typeof(x)
+
+struct Iteration <: AbstractStat
+    function Iteration(; kwargs...) # must define it this way so the constructor can take (and ignore) kwargs
+        new()
+    end
+end
+# This does not work since the pattern (; kwargs...) counts as the same input as the empty ()
+# so Julia thinks you are redefining Iteration() = Iteration() in a circular manner
+# Iteration(; kwargs...) = Iteration()
 
 struct GradientNorm{T} <: AbstractStat
     gradients::T
@@ -48,20 +60,20 @@ end
 
 IterateRelativeDiff(; norm, kwargs...) = IterateRelativeDiff(norm)
 
-#(S::Iteration)(_, _, _, stats) = nrow(stats) + 1
-(S::GradientNorm)(X, _, _, _) = sqrt(mapreduce(g -> norm2(g(X)), +, S.gradients))
-function (S::GradientNNCone)(X, _, _, _)
-    function d(A, g)
+(S::Iteration)(_, _, _, _, stats) = nrow(stats) + 1
+(S::GradientNorm)(X, _, _, _, _) = sqrt(mapreduce(g -> norm2(g(X)), +, S.gradients))
+function (S::GradientNNCone)(X, _, _, _, _)
+    function d((A, g))
         grad = g(X)
-        return norm2(@view grad[@. (A > 0) | (grad < 0)])
+        return norm2(@view grad[@. (A > 0) | (grad < 0)]) # faster to use full "or" rather than shortcutting "or" in this case
     end
     return sqrt(mapreduce(d, +, zip(factors(X), S.gradients)))
 end
-(S::ObjectiveValue)(X, Y, _, _) = S.objective(X, Y)
-(S::ObjectiveRatio)(X, Y, previous, _) = S.objective(previous[begin], Y) / S.objective(X, Y) # converged if < 1.01 say
+(S::ObjectiveValue)(X, Y, _, _, _) = S.objective(X, Y)
+(S::ObjectiveRatio)(X, Y, previous, _, _) = S.objective(previous[begin], Y) / S.objective(X, Y) # converged if < 1.01 say
 # TODO compute less with this, but need to ensure stats
 # are calculated in the right order, and dependent stats are calculated:
 # stats[end-1, :ObjectiveValue] / stats[end, :ObjectiveValue]
 
-(S::IterateNormDiff)(X, _, previous, _) = S.norm(X - previous[begin])
-(S::IterateRelativeDiff)(X, _, previous, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
+(S::IterateNormDiff)(X, _, previous, _, _) = S.norm(X - previous[begin])
+(S::IterateRelativeDiff)(X, _, previous, _, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
