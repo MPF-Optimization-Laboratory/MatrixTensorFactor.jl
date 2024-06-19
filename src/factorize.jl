@@ -11,11 +11,9 @@ X is normalized according to normX for X in (A, B, C...)
 """
 function _factorize(Y; kwargs...)
 	decomposition = initialize_decomposition(Y; kwargs...)
-	stats_data, getstats = initialize_stats(decomposition, Y; kwargs...)
 	previous, updateprevious! = initialize_previous(decomposition, Y; kwargs...)
 	parameters, updateparameters! = initialize_parameters(decomposition, Y, previous; kwargs...)
-
-	push!(stats_data, getstats(decomposition, Y, previous, parameters))
+	stats_data, getstats = initialize_stats(decomposition, Y, previous, parameters; kwargs...)
 
 	update! = make_update(decomposition, Y; kwargs...)
 	@assert typeof(update!) <: AbstractUpdate{typeof(decomposition)} # basic check that the update is compatible with this decomposition
@@ -74,30 +72,16 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :previous_iterates, 1)
 
 	# Stats
-	get!(kwargs, :stats) do # TODO maybe make some types and structure for common stats you may want
-							# some of these should match the algorithm, for example the gradient calculation
-							# this is also not a viable way to store previous or the last two iterates
-							# since this would need to save *every* iterate (too much memory)
-		function grad_matrix(T::Tucker1)
-			(C, A) = factors(T)
-			CC = slicewise_dot(C, C)
-			YC = slicewise_dot(Y, C)
-			grad = A*CC - YC
-			return grad
-		end
-		function grad_core(T::Tucker1)
-			(C, A) = factors(T)
-			AA = A'A
-			YA = Y×₁A'
-			grad = C×₁AA - YA
-			return grad
-		end
-		(;
-		gradient_norm = (X, Y, stats) -> sqrt(norm(grad_matrix(X))^2 + norm(grad_core(X))^2),
-		error    = (X, Y, stats) -> norm(array(X) - Y),
-		last_error_ratio = (X, Y, stats) -> norm(array(X) - Y) / stats[end, :error],
-		)
-	end
+	get!(kwargs, :stats, [Iteration, GradientNNCone, ObjectiveValue])
+		# TODO maybe make some types and structure for common stats you may want
+		# some of these should match the algorithm, for example the gradient calculation
+		# this is also not a viable way to store previous or the last two iterates
+		# since this would need to save *every* iterate (too much memory)
+
+	############ kwargs check #############
+	# eltype(kwargs[:stats]) <: AbstractStat # not true unless they are constructed
+	# notice Iteration vs Iteration()
+
 
     return kwargs
 end
@@ -121,13 +105,13 @@ function make_update(decomposition, Y; algorithm, kwargs...)
 end
 
 """The stats that will be saved every iteration"""
-function initialize_stats(decomposition, Y; stats, kwargs...)
+function initialize_stats(decomposition, Y, previous, parameters; stats, kwargs...)
+	stat_functions = [S(; kwargs...) for S in stats] # construct the AbstractStats
 
-	stats_data = DataFrame(make_columns(; kwargs...)...)
+	getstats(decomposition, Y, previous, parameters) =
+		(f(decomposition, Y, previous, parameters) for f in stat_functions)
 
-	function getstats(decomposition, Y, previous, parameters)
-		return
-	end
+	stats_data = DataFrame((Symbol(S) => [v] for (S,v) in zip(stats, getstats(decomposition, Y, previous, parameters)))...)
 
 	return stats_data, getstats
 end
