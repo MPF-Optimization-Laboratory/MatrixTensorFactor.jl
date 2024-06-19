@@ -54,21 +54,6 @@ factors(D::AbstractDecomposition) = D.factors
 factor(D::AbstractDecomposition, n::Integer) = factors(D)[n]
 eachfactorindex(D::AbstractDecomposition) = 1:nfactors(D)
 
-# Essentialy zero index tucker factors so the core is the 0th factor, and the nth factor
-# is the matrix factor in the nth dimention
-function factor(D::AbstractTucker, n::Integer)
-    if n == 0
-        return core(D)
-    elseif n >= 1
-        return matrix_factor(D, n)
-    else
-        throw(ArgumentError("No $(n)th factor in $(typeof(D))"))
-    end
-end
-
-eachfactorindex(D::AbstractTucker) = 0:(nfactors(D)-1) # 0 based, where core is 0
-eachfactorindex(D::CPDecomposition) = 1:nfactors(D) # back to 1 based since there's only matrix factors
-
 """
     contractions(D::AbstractDecomposition)
 
@@ -245,6 +230,20 @@ contractions(_::Tucker1) = ((×₁),)
 rankof(T::Tucker) = map(x -> size(x)[2], matrix_factors(T))
 rankof(T::Tucker1) = size(core(T))[begin]
 
+# Essentialy zero index tucker factors so the core is the 0th factor, and the nth factor
+# is the matrix factor in the nth dimention
+function factor(D::AbstractTucker, n::Integer)
+    if n == 0
+        return core(D)
+    elseif n >= 1
+        return matrix_factor(D, n)
+    else
+        throw(ArgumentError("No $(n)th factor in $(typeof(D))"))
+    end
+end
+
+eachfactorindex(D::AbstractTucker) = 0:(nfactors(D)-1) # 0 based, where core is 0
+
 # AbstractArray interface
 # Efficient size and indexing for CPDecomposition
 Base.size(T::Tucker) = map(x -> size(x)[1], matrix_factors(T))
@@ -300,6 +299,7 @@ factors(CPD::CPDecomposition) = CPD.factors
 array(CPD::CPDecomposition) = mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
 frozen(CPD::CPDecomposition) = CPD.frozen
 vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
+eachfactorindex(D::CPDecomposition) = 1:nfactors(D) # unlike other AbstractTucker's, back to 1 based since there's only matrix factors
 
 # AbstractTucker Interface
 matrix_factors(CPD::CPDecomposition) = factors(CPD)

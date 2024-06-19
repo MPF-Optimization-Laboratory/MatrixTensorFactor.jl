@@ -2,6 +2,100 @@
 Mid level code that combines constraints with block updates to be used on an AbstractDecomposition
 """
 
+
+"""
+Interface to make a step scheme is
+
+struct MyStep <: AbstractStep
+    ...
+end
+
+function (step::MyStep)(x::AbstractDecomposition; kwargs...)
+    ...
+    return step::Real
+end
+
+To use your scheme, construct an instance with any necessary parameters
+
+mystep = MyStep(...)
+
+and then you can call
+
+step = mystep(D; kwargs...)
+
+to compute the step size.
+"""
+abstract type AbstractStep <: Function end
+
+struct LipshitzStep <: AbstractStep
+    lipshitz::Function
+end
+
+function (step::LipshitzStep)(x; kwargs...)
+    L = step.lipshitz(x)
+    return 1/L
+end
+#LipshitzStep(L::Real) = 1/L
+
+function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function lipshitz0(T::Tucker1; kwargs...)
+            A = matrix_factor(T, 1)
+            return opnorm(A'A)
+        end
+        return lipshitz0
+
+    elseif n==1 # the matrix is the zeroth factor
+        function lipshitz1(T::Tucker1; kwargs...)
+            C = core(T)
+            return opnorm(slicewise_dot(C, C))
+        end
+        return lipshitz1
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+end
+
+struct ConstantStep <: AbstractStep
+    stepsize::Real
+end
+
+(step::ConstantStep)(x; kwargs...) = step.stepsize
+
+struct SPGStep <: AbstractStep
+    min::Real
+    max::Real
+end
+
+SPGStep(;min=1e-10, max=1e10) = SPGStep(min, max)
+
+# Convert an input of the full decomposition, to a calculation on the factor
+# Calculate the last gradient if a function was provided
+(step::SPGStep)(x::T; n, x_last::T, grad_last::Function, kwargs...) where {T <: AbstractDecomposition} =
+    step(factor(x,n); x_last=factor(x_last,n), grad_last=grad_last(x_last), kwargs...)
+
+# option to override the set defaults from step
+# TODO SPG has a linesearch/negative momentum update part to the fill iteration
+# but in the best case, this linesearch just uses the value given by this step
+# so I will skip implimenting it for now, but may want to add that once
+# I add a line search
+function (step::SPGStep)(x; grad, x_last, grad_last, stepmin=step.min, stepmax=step.max, kwargs...)
+    s = x - x_last
+    y = grad - grad_last
+    sy = (s ⋅ y)
+    if sy <=0 #TODO check why (s ⋅ y) < 0 means we should take stepmax and not stepmin
+        return stepmax
+    else
+        suggested_step = (s ⋅ s) / sy
+        return clamp(suggested_step, stepmin, stepmax) # safeguards to ensure step is within reasonable bounds
+    end
+end
+
+
+###########################
+
+
 abstract type AbstractUpdate <: Function end
 
 struct GenericUpdate <: AbstractUpdate
@@ -22,7 +116,7 @@ end
 function checkfrozen(x, n)
     frozen = isfrozen(x, n)
     if frozen
-        @warning "Factor $n is frozen, skipping its update."
+        @warn "Factor $n is frozen, skipping its update."
     end
     return frozen
 end
@@ -51,36 +145,36 @@ function (U::GradientDescent)(x; x_last, kwargs...)
     @. a -= s*g
 end
 
-function make_gradient(D::AbstractDecomposition, _::Integer, _::AbstractArray; objective::AbstractObjective, kwargs...)
+function make_gradient(D::AbstractDecomposition, n::Integer, Y::AbstractArray; objective::AbstractObjective, kwargs...)
     error("Gradient not implimented for ", typeof(D), " with ", typeof(objective), " objective")
 end
 
 # Using this patter of inputs so that gradients for a generic decomposition could be calculated
 # with auto diff by looking at the gradient of the function objective(D, Y) with respect to the nth factor in D
-function make_gradient(_::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function gradient(T::Tucker1; kwargs...)
+        function gradient0(T::Tucker1; kwargs...)
             (C, A) = factors(T)
             AA = A'A
             YA = Y×₁A'
             grad = C×₁AA - YA # TODO define multiplication generaly
             return grad
         end
+        return gradient0
 
     elseif n==1 # the matrix is the zeroth factor
-        function gradient(T::Tucker1; kwargs...)
+        function gradient1(T::Tucker1; kwargs...)
             (C, A) = factors(T)
             CC = slicewise_dot(C, C)
             YC = slicewise_dot(Y, C)
             grad = A*CC - YC
             return grad
         end
+        return gradient1
 
     else
         error("No $(n)th factor in Tucker1")
     end
-
-    return gradient
 end
 
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
@@ -161,13 +255,13 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     @. a += ω * (a - a_last)
 end
 
-struct BlockedUpdate{T} <: AbstractUpdate{T}
-    updates::NTuple{N, AbstractUpdate{T}} where N
+struct BlockedUpdate <: AbstractUpdate
+    updates::NTuple{N, AbstractUpdate} where N
 end
 
 #BlockedUpdate(updates::NTuple{N, AbstractUpdate{T}}) where {T, N} = BlockedUpdate{T}(updates)
 
-function (U::BlockedUpdate{T})(x::T; random_order::Bool=false, kwargs...) where T
+function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
     if random_order
         order = shuffle(eachindex(U.updates))
         updates = U.updates[order]
@@ -334,94 +428,6 @@ end
 =#
 ########################################################################################
 
-"""
-Interface to make a step scheme is
-
-struct MyStep <: AbstractStep
-    ...
-end
-
-function (step::MyStep)(x::AbstractDecomposition; kwargs...)
-    ...
-    return step::Real
-end
-
-To use your scheme, construct an instance with any necessary parameters
-
-mystep = MyStep(...)
-
-and then you can call
-
-step = mystep(D; kwargs...)
-
-to compute the step size.
-"""
-abstract type AbstractStep <: Function end
-
-struct LipshitzStep <: AbstractStep
-    lipshitz::Function
-end
-
-function (step::LipshitzStep)(x; kwargs...)
-    L = step.lipshitz(x)
-    return 1/L
-end
-#LipshitzStep(L::Real) = 1/L
-
-function make_lipshitz(_::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
-    if n==0 # the core is the zeroth factor
-        function lipshitz(T::Tucker1; kwargs...)
-            A = matrix_factor(T, 1)
-            return opnorm(A'A)
-        end
-
-    elseif n==1 # the matrix is the zeroth factor
-        function lipshitz(T::Tucker1; kwargs...)
-            C = core(T)
-            return opnorm(slicewise_dot(C, C))
-        end
-
-    else
-        error("No $(n)th factor in Tucker1")
-    end
-
-    return lipshitz
-end
-
-struct ConstantStep <: AbstractStep
-    stepsize::Real
-end
-
-(step::ConstantStep)(_...; kwargs...) = step.stepsize
-
-struct SPGStep <: AbstractStep
-    min::Real
-    max::Real
-end
-
-SPGStep(;min=1e-10, max=1e10) = SPGStep(min, max)
-
-# Convert an input of the full decomposition, to a calculation on the factor
-# Calculate the last gradient if a function was provided
-(step::SPGStep)(x::T; n, x_last::T, grad_last::Function, kwargs...) where {T <: AbstractDecomposition} =
-    step(factor(x,n); x_last=factor(x_last,n), grad_last=grad_last(x_last), kwargs...)
-
-# option to override the set defaults from step
-# TODO SPG has a linesearch/negative momentum update part to the fill iteration
-# but in the best case, this linesearch just uses the value given by this step
-# so I will skip implimenting it for now, but may want to add that once
-# I add a line search
-function (step::SPGStep)(x; grad, x_last, grad_last, stepmin=step.min, stepmax=step.max, kwargs...)
-    s = x - x_last
-    y = grad - grad_last
-    sy = (s ⋅ y)
-    if sy <=0 #TODO check why (s ⋅ y) < 0 means we should take stepmax and not stepmin
-        return stepmax
-    else
-        suggested_step = (s ⋅ s) / sy
-        return clamp(suggested_step, stepmin, stepmax) # safeguards to ensure step is within reasonable bounds
-    end
-end
 
 #=
 forwarded_functions = (

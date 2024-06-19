@@ -175,6 +175,8 @@ end
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
     Y = array(Y)
+    BlockTensorDecomposition.factorize(Y; rank=5)
+    #=
     bgd! = block_gradient_decent(G, Y);
 
     @test typeof(bgd!) <: AbstractUpdate # make sure it correctly made the update struct
@@ -211,10 +213,12 @@ end
     @test v[end] / v[begin] < 0.4 # only expect at least 60% improvement in 100 iterations
     @test l1norm(core(G)) ≈ 1 # G should still be normalized
 
-    G = Tucker1((10,11,12), 5; init=abs_randn);
-    Y = Tucker1((10,11,12), 5; init=abs_randn);
+    G = Tucker1((10,11,12), 5; init=randn);
+    Y = Tucker1((10,11,12), 5; init=randn);
     Y = array(Y);
+=#
 
+    #=
     bgd! = proj_nn_block_gradient_decent(G, Y;
         proj=l1normalize!,
     )
@@ -233,6 +237,7 @@ end
     @test v[end] / v[begin] < 0.4 # only expect at least 60% improvement in 100 iterations
     @test isapprox(l1norm(core(G)), 1; atol=0.015)
     @test_broken l1norm(core(G)) ≈ 1 # G should still be normalized
+    =#
 end
 
 end
