@@ -165,7 +165,7 @@ function initialize_parameters(decomposition, Y, previous; momentum::Bool, kwarg
 	parameters = Dict{Symbol, Any}()
 
 	# General Looping
-	parameters[:iteration] = 1
+	parameters[:iteration] = 0
 	parameters[:x_last] = previous[begin] # Last iterate
 
 	# Momentum
@@ -199,8 +199,12 @@ function make_converged(; converged, tolerence, maxiter, kwargs...)
 	converged_tol = zip(converged, tolerence)
 	function isconverged(stats_data; kwargs...)
 		if any(((c, t),) -> stats_data[end, Symbol(c)] < t, converged_tol) # note the use of ((c, t),) rather than (c, t) since each element of the zipped converged_tol is a tuple, not two values
-			indexes = findall(((c, t),) -> stats_data[end, Symbol(c)] < t, converged_tol)
-			@info "converged based on $(join(converged[indexes], ", ", " and ")) less than $(join(tolerence[indexes], ", ", " and "))"
+			if length(converged) == 1
+				@info "converged based on $converged less than $tolerence"
+			else
+				indexes = findall(((c, t),) -> stats_data[end, Symbol(c)] < t, converged_tol)
+				@info "converged based on $(join(converged[indexes], ", ", " and ")) less than $(join(tolerence[indexes], ", ", " and "))"
+			end
 			return true
 		elseif stats_data[end, :Iteration] >= maxiter
 			@warn "maximum iteration $maxiter reached, without convergence"

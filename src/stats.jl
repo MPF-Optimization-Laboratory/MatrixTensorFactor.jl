@@ -60,7 +60,10 @@ end
 
 IterateRelativeDiff(; norm, kwargs...) = IterateRelativeDiff(norm)
 
-(S::Iteration)(_, _, _, _, stats) = nrow(stats) + 1
+function (S::Iteration)(_, _, _, parameters, stats)
+    @assert nrow(stats) == parameters[:iteration] # make sure these don't drift for some reason
+    return parameters[:iteration]
+end
 (S::GradientNorm)(X, _, _, _, _) = sqrt(mapreduce(g -> norm2(g(X)), +, S.gradients))
 function (S::GradientNNCone)(X, _, _, _, _)
     function d((A, g))

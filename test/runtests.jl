@@ -194,7 +194,12 @@ end
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
     Y = array(Y);
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, maxiter=5);
+
+    # check hitting maximum number of iterations
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, maxiter=2);
+    # check convergence on first iteration
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, tolerence=Inf);
+
     #=
     bgd! = block_gradient_decent(G, Y);
 
