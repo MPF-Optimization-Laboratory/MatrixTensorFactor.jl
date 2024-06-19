@@ -61,9 +61,9 @@ function default_kwargs(Y; kwargs...)
 							# freeze=(...) can still be provided to override the default
 
 	# Update
-	get!(kwargs, :algorithm, scaled_nn_block_gradient_decent)
-	get!(kwargs, :core_constraint, l1normalize_1slices!)
-	get!(kwargs, :whats_rescaled, (x -> eachcol(factor(x, 2))))
+	get!(kwargs, :objective, L2())
+	#get!(kwargs, :core_constraint, l1normalize_1slices!)
+	#get!(kwargs, :whats_rescaled, (x -> eachcol(factor(x, 2))))
 	# get!(kwargs, :random_order) # This default is handled by the BlockedUpdate struct
 
 	# Momentum
@@ -100,8 +100,17 @@ end
 What one iteration of the algorithm looks like.
 One iteration is likely a full cycle through each block or factor of the model.
 """
-function make_update(decomposition, Y; algorithm, kwargs...)
-	return algorithm(decomposition, Y; kwargs...)
+function make_update(decomposition, Y; momentum, kwargs...)
+	ns = eachfactorindex(decomposition)
+	kwargs[:gradients] = [make_gradient(decomposition, n, Y; kwargs...) for n in ns]
+	kwargs[:steps] = [make_lipshitz(decomposition, n, Y; kwargs...) for n in ns] # avoid hard coded lipshitz step
+	if momentum
+		error("Momentum bocked updates not handled yet")
+	else
+		update! = BlockedUpdate((GradientDescent(n, g, s) for (n, g, s) in zip(ns, kwargs[:gradients], kwargs[:steps])
+		)...)
+	end
+	return update!
 end
 
 """The stats that will be saved every iteration"""

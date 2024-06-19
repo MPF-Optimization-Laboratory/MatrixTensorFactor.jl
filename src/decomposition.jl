@@ -52,6 +52,7 @@ array. Use `factor(D, n)` to get just the `n`'th factor.
 """
 factors(D::AbstractDecomposition) = D.factors
 factor(D::AbstractDecomposition, n::Integer) = factors(D)[n]
+eachfactorindex(D::AbstractDecomposition) = 1:nfactors(D)
 
 # Essentialy zero index tucker factors so the core is the 0th factor, and the nth factor
 # is the matrix factor in the nth dimention
@@ -64,6 +65,9 @@ function factor(D::AbstractTucker, n::Integer)
         throw(ArgumentError("No $(n)th factor in $(typeof(D))"))
     end
 end
+
+eachfactorindex(D::AbstractTucker) = 0:(nfactors(D)-1) # 0 based, where core is 0
+eachfactorindex(D::CPDecomposition) = 1:nfactors(D) # back to 1 based since there's only matrix factors
 
 """
     contractions(D::AbstractDecomposition)

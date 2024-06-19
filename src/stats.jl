@@ -6,22 +6,35 @@ to return a number.
 abstract type AbstractStat <: Function end
 
 struct Iteration <: AbstractStat end
+Iteration(; kwargs...) = Iteration()
 
-struct GradientNorm{T<:AbstractVector{<:Function}} <: AbstractStat
+struct GradientNorm{T} <: AbstractStat
     gradients::T
+    function GradientNorm{T}(gradients)
+        @assert eltype(gradients) <: Function
+        new{T}(gradients)
+    end
 end
+GradientNorm(; gradients, kwargs...) = GradientNorm{typeof(gradients)}(gradients)
 
-struct GradientNNCone{T<:AbstractVector{<:Function}} <: AbstractStat
+struct GradientNNCone{T} <: AbstractStat
     gradients::T
+    function GradientNNCone{T}(gradients)
+        @assert eltype(gradients) <: Function
+        new{T}(gradients)
+    end
 end
+GradientNNCone(; gradients, kwargs...) = GradientNNCone{typeof(gradients)}(gradients)
 
 struct ObjectiveValue{T<:AbstractObjective} <: AbstractStat
     objective::T
 end
+ObjectiveValue(; objective, kwargs...) = ObjectiveValue(objective)
 
 struct ObjectiveRatio{T<:AbstractObjective} <: AbstractStat
     objective::T
 end
+ObjectiveRatio(; objective, kwargs...) = ObjectiveRatio(objective)
 
 #(S::Iteration)(_, _, _, stats) = nrow(stats) + 1
 (S::GradientNorm)(X, _, _, _) = sqrt(mapreduce(g -> norm2(g(X)), +, S.gradients))
