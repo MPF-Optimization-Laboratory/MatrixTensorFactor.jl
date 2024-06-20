@@ -130,7 +130,7 @@ function make_update(decomposition, Y; momentum, constraints, kwargs...)
 	end
 
 	if !isnothing(constraints)
-		match_interlace!(update!, constraints)
+		smart_interlace!(update!, constraints)
 	end
 
 	return update!, kwargs

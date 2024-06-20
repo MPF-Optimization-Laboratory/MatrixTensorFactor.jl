@@ -311,13 +311,13 @@ function add_momentum!(U::BlockedUpdate)
 end
 
 """
-    match_insert!(U::BlockedUpdate, V::AbstractUpdate)
+    smart_insert!(U::BlockedUpdate, V::AbstractUpdate)
 
 Tries to insert V into U after the last matching update in U. A "matching update" means
 it updates the same factor/block n.
-See [`match_interlace!`](@ref)
+See [`smart_interlace!`](@ref)
 """
-function match_insert!(U::BlockedUpdate, V::AbstractUpdate)
+function smart_insert!(U::BlockedUpdate, V::AbstractUpdate)
     updates = updates(U)
     i = findlast(u -> u.n == V.n, updates)
 
@@ -327,18 +327,18 @@ function match_insert!(U::BlockedUpdate, V::AbstractUpdate)
 end
 
 """
-    match_interlace!(U::BlockedUpdate, V)
+    smart_interlace!(U::BlockedUpdate, V)
 
-`match_insert!`s each update in V, into U.
-See [`match_insert!`](@ref)
+`smart_insert!`s each update in V, into U.
+See [`smart_insert!`](@ref)
 """
-function match_interlace!(U::BlockedUpdate, other_updates)
+function smart_interlace!(U::BlockedUpdate, other_updates)
     for V in other_updates
         match_insert!(U::BlockedUpdate, V::AbstractUpdate)
     end
 end
 
-match_interlace!(U::BlockedUpdate, V::BlockedUpdate) = insert(U::BlockedUpdate, updates(V))
+smart_interlace!(U::BlockedUpdate, V::BlockedUpdate) = insert(U::BlockedUpdate, updates(V))
 
 
 ##################################################

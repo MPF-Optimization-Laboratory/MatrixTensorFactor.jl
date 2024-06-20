@@ -55,7 +55,7 @@ export LipshitzStep, ConstantStep, SPGStep
 export AbstractUpdate
 export GradientDescent, MomentumUpdate, Rescale, Projection
 export BlockedUpdate
-export match_insert!, match_interlase!
+export smart_insert!, smart_interlase!
 
 #export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
