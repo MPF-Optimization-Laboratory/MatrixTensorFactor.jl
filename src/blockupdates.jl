@@ -240,6 +240,16 @@ struct MomentumUpdate <: AbstractUpdate
     lipshitz::Function
 end
 
+"""
+Makes a MomentumUpdate from a GradientDescent assuming the GradientDescent has a lipshitz step size
+"""
+function MomentumUpdate(GD::GradientDescent)
+    n, step = GD.n, GD.step
+    @assert typeof(step) <: LipshitzStep
+
+    return MomentumUpdate(n, step.lipshitz)
+end
+
 function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     n = U.n
     if checkfrozen(x, n)
@@ -256,26 +266,80 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
 end
 
 struct BlockedUpdate <: AbstractUpdate
-    updates::NTuple{N, AbstractUpdate} where N
+    updates::Vector{AbstractUpdate}
+    # Note I want exactly AbstractUpdate[] since I want to push any type of AbstractUpdate
+    # like MomentumUpdate or another BlockedUpdate, even if not already present.
+    # This means it cannot be Vector{<:AbstractUpdate} since a BlockedUpdate with only
+    # GradientDescent would give a GradientDescent[] and we couldnt push a MomentumUpdate.
+    # And it cannot be AbstractVector{AbstractUpdate} since we may not be able to insert!/push!
+    # into other AbstractVectors like Views.
 end
 
-BlockedUpdate(x...) = BlockedUpdate(x)
+#convert(, x::AbstractVector{<:AbstractUpdate})
 
+# Wrappers to allow multiple args, or a tuple input
+BlockedUpdate(x::Tuple) = BlockedUpdate(x...)
+BlockedUpdate(x...) = BlockedUpdate(vcat(x...))
+
+updates(U::BlockedUpdate) = U.updates
 #BlockedUpdate(updates::NTuple{N, AbstractUpdate{T}}) where {T, N} = BlockedUpdate{T}(updates)
 
 function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
+    updatesU = updates(U)
     if random_order
-        order = shuffle(eachindex(U.updates))
-        updates = U.updates[order]
-        for update! in updates
-            update!(x; kwargs...)
-        end
-    else
-        for update! in U.updates
-            update!(x; kwargs...)
-        end
+        order = shuffle(eachindex(updatesU))
+        updatesU = updatesU[order] # not using a view since we need to acess elements in a random order
+                                   # https://docs.julialang.org/en/v1/manual/performance-tips/#Copying-data-is-not-always-bad
+    end
+
+    for update! in updatesU
+        update!(x; kwargs...)
     end
 end
+
+function add_momentum!(U::BlockedUpdate)
+    # Find all the GradientDescent updates
+    updatesU = updates(U)
+    indexes = findall(u -> typeof(u) <: GradientDescent, updatesU)
+
+    # insert MomentumUpdates before each GradientDescent
+    # do this in reverse order so "i" correctly indexes a GradientDescent
+    # as we mutate updates
+    for i in reverse(indexes)
+        insert!(updatesU, i, MomentumUpdate(updatesU[i]))
+    end
+end
+
+"""
+    match_insert!(U::BlockedUpdate, V::AbstractUpdate)
+
+Tries to insert V into U after the last matching update in U. A "matching update" means
+it updates the same factor/block n.
+See [`match_interlace!`](@ref)
+"""
+function match_insert!(U::BlockedUpdate, V::AbstractUpdate)
+    updates = updates(U)
+    i = findlast(u -> u.n == V.n, updates)
+
+    # insert the other update immediately after
+    # or if there is no update, push it to the end
+    isnothing(i) ? push!(updates, V) : insert!(updates, i+1, V)
+end
+
+"""
+    match_interlace!(U::BlockedUpdate, V)
+
+`match_insert!`s each update in V, into U.
+See [`match_insert!`](@ref)
+"""
+function match_interlace!(U::BlockedUpdate, other_updates)
+    for V in other_updates
+        match_insert!(U::BlockedUpdate, V::AbstractUpdate)
+    end
+end
+
+match_interlace!(U::BlockedUpdate, V::BlockedUpdate) = insert(U::BlockedUpdate, updates(V))
+
 
 ##################################################
 

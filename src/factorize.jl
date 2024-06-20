@@ -71,6 +71,9 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :δ, 0.9999)
 	get!(kwargs, :previous_iterates, 1)
 
+	# Constraints
+	get!(kwargs, :constraints, nothing)
+
 	# Stats
 	get!(kwargs, :stats, [Iteration, GradientNNCone, ObjectiveValue])
 	if Iteration ∉ kwargs[:stats]
@@ -110,7 +113,7 @@ end
 What one iteration of the algorithm looks like.
 One iteration is likely a full cycle through each block or factor of the model.
 """
-function make_update(decomposition, Y; momentum, kwargs...)
+function make_update(decomposition, Y; momentum, constraints, kwargs...)
 	ns = eachfactorindex(decomposition)
 
 	# TODO this looks messy converting the NamedTuple kwargs to a Dictionary so more keywords can be added
@@ -119,12 +122,17 @@ function make_update(decomposition, Y; momentum, kwargs...)
 
 	kwargs[:gradients] = [make_gradient(decomposition, n, Y; kwargs...) for n in ns]
 	kwargs[:steps] = [LipshitzStep(make_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
+
+	update! = BlockedUpdate((GradientDescent(n, g, s) for (n, g, s) in zip(ns, kwargs[:gradients], kwargs[:steps]))...)
+
 	if momentum
-		error("Momentum blocked updates not handled yet")
-	else
-		update! = BlockedUpdate((GradientDescent(n, g, s) for (n, g, s) in zip(ns, kwargs[:gradients], kwargs[:steps])
-		)...)
+		add_momentum!(update!)
 	end
+
+	if !isnothing(constraints)
+		match_interlace!(update!, constraints)
+	end
+
 	return update!, kwargs
 end
 

@@ -11,7 +11,7 @@ using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
 include("./utils.jl")
-export SuperDiagonal, abs_randn, identityslice
+export SuperDiagonal, abs_randn, identityslice, interlace, norm2
 include("./tensorproducts.jl")
 
 # Low level types and interface
@@ -49,9 +49,15 @@ export AbstractStat
 export GradientNorm, GradientNNCone, ObjectiveValue, ObjectiveRatio, IterateNormDiff, IterateRelativeDiff, Iteration
 
 include("./blockupdates.jl")
-export AbstractUpdate, GradientUpdate, NNGradientUpdate, ScaledNNGradientUpdate, ProjGradientUpdate
+export AbstractStep
+export LipshitzStep, ConstantStep, SPGStep
 
-export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent, proj_nn_block_gradient_decent
+export AbstractUpdate
+export GradientDescent, MomentumUpdate, Rescale, Projection
+export BlockedUpdate
+export match_insert!, match_interlase!
+
+#export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
 include("./factorize.jl")

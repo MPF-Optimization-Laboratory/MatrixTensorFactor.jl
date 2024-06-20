@@ -12,6 +12,18 @@ using BlockTensorDecomposition
 const VERBOSE = true
 
 @testset verbose=true "BlockTensorDecomposition" begin
+    @testset verbose=VERBOSE "Utils" begin
+        @testset verbose=VERBOSE "interlace" begin
+        @test interlace(1:10,10:15) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 8, 9, 10]
+        @test interlace(1:5,10:20) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 15, 16, 17, 18, 19, 20]
+        @test interlace(1:3, ("this", "that", "other")) == Any[1, "this", 2, "that", 3, "other"]
+        end
+
+        @testset verbose=VERBOSE "norm2" begin
+            @test norm2([3, 4]) == 25
+            @test norm2(1:10) == sum((1:10) .^ 2)
+        end
+    end
 
 @testset verbose=VERBOSE "Constraints" begin
     @testset "L1" begin
@@ -199,6 +211,8 @@ end
     decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, maxiter=2);
     # check convergence on first iteration
     decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, tolerence=Inf);
+    # check momentum
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=true, maxiter=2);
 
     #=
     bgd! = block_gradient_decent(G, Y);

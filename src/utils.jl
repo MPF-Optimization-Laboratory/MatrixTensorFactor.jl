@@ -156,3 +156,21 @@ isnonnegative(x::Real) = (x >= 0)
 L2 norm squared, the sum of squares of the entries of x.
 """
 norm2(x) = mapreduce(x -> x^2, +, x)
+
+"""
+    interlace(u, v)
+
+Takes two iterables, u and v, and alternates elements from u and v into a vector.
+If u and v are not the same length, extra elements are put on the end of the vector.
+"""
+function interlace(u, v)
+    m = length(u)
+    n = length(v)
+    if m == n
+        return vcat(collect.(zip(u,v))...)
+    elseif m > n
+        return vcat(interlace(u[begin:n], v), u[n+1:end])
+    elseif m < n
+        return vcat(interlace(u, v[begin:m]), v[m+1:end])
+    end
+end
