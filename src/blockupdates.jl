@@ -98,6 +98,13 @@ end
 
 abstract type AbstractUpdate <: Function end
 
+function Base.show(io::IO, x::AbstractUpdate)
+    print(io, typeof(x))
+    print(io, "(")
+    join(io, propertynames(x), ", ")
+    print(io, ")")
+end
+
 struct GenericUpdate <: AbstractUpdate
     f::Function
 end
@@ -250,6 +257,15 @@ function (U::Rescale{Missing})(x; kwargs...)
     end
 end
 
+function Base.show(io::IO, ::MIME"text/plain", x::GradientDescent)
+    print(io, typeof(x))
+    print(io, "(", x.n, ", ...)")
+end
+
+function Base.show(io::IO, ::MIME"text/plain", x::ConstraintUpdate)
+    print(io, typeof(x))
+    print(io, "(", x.n, ", ...)")
+end
 
 #=
 struct MomentumUpdate <: AbstractUpdate
@@ -306,6 +322,11 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     @. a += ω * (a - a_last)
 end
 
+function Base.show(io::IO, ::MIME"text/plain", x::MomentumUpdate)
+    print(io, typeof(x))
+    print(io, "(", x.n, ", ...)")
+end
+
 struct BlockedUpdate <: AbstractUpdate
     updates::Vector{AbstractUpdate}
     # Note I want exactly AbstractUpdate[] since I want to push any type of AbstractUpdate
@@ -329,6 +350,14 @@ Base.getindex(U::BlockedUpdate, i::Int) = getindex(updates(U), i)
 Base.getindex(U::BlockedUpdate, I::Vararg{Int}) = getindex(updates(U), I...)
 Base.length(U::BlockedUpdate) = length(updates(U))
 Base.iterate(U::BlockedUpdate, state=1) = state > length(U) ? nothing : (U[state], state+1)
+
+function Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate)
+    println(io, typeof(x), "(")
+    for u in x
+        println(io, "    ", u)
+    end
+    println(io, ")")
+end
 
 function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
     U_updates = updates(U)
