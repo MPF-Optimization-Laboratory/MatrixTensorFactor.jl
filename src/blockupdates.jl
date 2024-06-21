@@ -101,7 +101,17 @@ abstract type AbstractUpdate <: Function end
 function Base.show(io::IO, x::AbstractUpdate)
     print(io, typeof(x))
     print(io, "(")
-    join(io, propertynames(x), ", ")
+    data = Any[]
+    for p in propertynames(x)
+        if p == :n
+            push!(data, getproperty(x, p))
+        elseif p in (:step, :proj)
+            push!(data, typeof(getproperty(x, p)))
+        else
+            push!(data, p)
+        end
+    end
+    join(io, data, ", ")
     print(io, ")")
 end
 
@@ -256,7 +266,7 @@ function (U::Rescale{Missing})(x; kwargs...)
         A .*= scale
     end
 end
-
+#=
 function Base.show(io::IO, ::MIME"text/plain", x::GradientDescent)
     print(io, typeof(x))
     print(io, "(", x.n, ", ...)")
@@ -266,6 +276,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::ConstraintUpdate)
     print(io, typeof(x))
     print(io, "(", x.n, ", ...)")
 end
+=#
 
 #=
 struct MomentumUpdate <: AbstractUpdate
@@ -321,12 +332,12 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     a, a_last = factor(x, n), factor(x_last, n)
     @. a += ω * (a - a_last)
 end
-
+#=
 function Base.show(io::IO, ::MIME"text/plain", x::MomentumUpdate)
     print(io, typeof(x))
     print(io, "(", x.n, ", ...)")
 end
-
+=#
 struct BlockedUpdate <: AbstractUpdate
     updates::Vector{AbstractUpdate}
     # Note I want exactly AbstractUpdate[] since I want to push any type of AbstractUpdate
