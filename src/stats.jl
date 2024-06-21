@@ -48,6 +48,11 @@ struct ObjectiveRatio{T<:AbstractObjective} <: AbstractStat
 end
 ObjectiveRatio(; objective, kwargs...) = ObjectiveRatio(objective)
 
+struct RelativeError{T<:Function} <: AbstractStat
+    norm::T
+end
+RelativeError(; norm, kwargs...) = RelativeError(norm)
+
 struct IterateNormDiff{T<:Function} <: AbstractStat
     norm::T
 end
@@ -77,6 +82,7 @@ end
 # TODO compute less with this, but need to ensure stats
 # are calculated in the right order, and dependent stats are calculated:
 # stats[end-1, :ObjectiveValue] / stats[end, :ObjectiveValue]
+(S::RelativeError)(X, Y, _, _, _) = S.norm(X - Y) / S.norm(Y)
 
 (S::IterateNormDiff)(X, _, previous, _, _) = S.norm(X - previous[begin])
 (S::IterateRelativeDiff)(X, _, previous, _, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
