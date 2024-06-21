@@ -11,7 +11,7 @@ using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
 include("./utils.jl")
-export SuperDiagonal, abs_randn, identityslice, interlace, norm2
+export SuperDiagonal, abs_randn, geomean, identityslice, interlace, norm2
 include("./tensorproducts.jl")
 
 # Low level types and interface
@@ -53,7 +53,11 @@ export AbstractStep
 export LipshitzStep, ConstantStep, SPGStep
 
 export AbstractUpdate
-export GradientDescent, MomentumUpdate, Rescale, Projection
+export GradientDescent, MomentumUpdate
+
+export ConstraintUpdate
+export Projection, Rescale
+
 export BlockedUpdate
 export smart_insert!, smart_interlase!
 

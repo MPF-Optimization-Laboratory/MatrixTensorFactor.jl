@@ -174,3 +174,12 @@ function interlace(u, v)
         return vcat(interlace(u, v[begin:m]), v[m+1:end])
     end
 end
+
+"""
+    geomean(v)
+    geomean(v...)
+
+Geometric mean of a collection of numbers: `prod(v)^(1/length(v))``.
+"""
+geomean(v) = prod(v)^(1/length(v))
+geomean(v...) = geomean(v)

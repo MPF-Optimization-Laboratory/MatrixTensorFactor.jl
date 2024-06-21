@@ -23,6 +23,12 @@ const VERBOSE = true
             @test norm2([3, 4]) == 25
             @test norm2(1:10) == sum((1:10) .^ 2)
         end
+
+        @testset verbose=VERBOSE "geomean" begin
+            @test geomean(5) == 5
+            @test geomean(2, 1/2) == 1
+            @test geomean((1,2,3)) ≈ 1.8171205928321397
+        end
     end
 
 @testset verbose=VERBOSE "Constraints" begin
@@ -212,7 +218,18 @@ end
     # check convergence on first iteration
     decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, tolerence=Inf);
     # check momentum
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=true, maxiter=2);
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=true, tolerence=Inf);
+    # check constraints
+    ## a single constraint, to be applied on every block
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, constraints=nnegative!, tolerence=Inf);
+    ## a collection of constraints
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, tolerence=Inf,
+        constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
+    );
+    ## check if you can constrain the initialization
+    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, tolerence=Inf, constrain_init=true,
+        constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
+    );
 
     #=
     bgd! = block_gradient_decent(G, Y);

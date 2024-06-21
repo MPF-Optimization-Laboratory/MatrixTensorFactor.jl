@@ -10,11 +10,13 @@ Factor Y = ABC... such that
 X is normalized according to normX for X in (A, B, C...)
 """
 function _factorize(Y; kwargs...)
-	decomposition = initialize_decomposition(Y; kwargs...)
+	decomposition, kwargs = initialize_decomposition(Y; kwargs...)
 	previous, updateprevious! = initialize_previous(decomposition, Y; kwargs...)
 	parameters, updateparameters! = initialize_parameters(decomposition, Y, previous; kwargs...)
 
-	update!, kwargs = make_update(decomposition, Y; kwargs...) # more kwargs get added here, so need to return kwargs
+	# one pass of the constraints is possibly applied so note decomposition could be mutated
+	# and more kwargs get added here, so need to return kwargs
+	update!, kwargs = make_update!(decomposition, Y; kwargs...)
 
 	stats_data, getstats = initialize_stats(decomposition, Y, previous, parameters; kwargs...)
 
@@ -40,7 +42,17 @@ function _factorize(Y; kwargs...)
 	return decomposition, stats_data
 end
 
-"""Handles all keywords and options, and sets defaults if not provided"""
+"""
+	default_kwargs(Y; kwargs...)
+
+Handles all keywords and options, and sets defaults if not provided.
+
+Keywords & Defaults
+===================
+`decomposition`: `nothing`
+`model`: `Tucker1`
+`rank`: `1`
+"""
 function default_kwargs(Y; kwargs...)
 	# Set up kwargs as a dictionary
 	# then add `get!(kwargs, :option, default)` to set `option=default`
@@ -50,20 +62,23 @@ function default_kwargs(Y; kwargs...)
 	# end
 	isempty(kwargs) ? kwargs = Dict{Symbol,Any}() : kwargs = Dict{Symbol,Any}(kwargs)
 
-	# Initialization
+	# DecompositionInitialization
 	get!(kwargs, :decomposition, nothing)
-	get!(kwargs, :model, Tucker1)
-	get!(kwargs, :rank, 1) # Can also be a tuple. For example, Tucker rank could be (1, 2, 3) for an order 3 array Y
+	get!(kwargs, :model) do
+		isnothing(kwargs[:decomposition]) ? Tucker1 : typeof(kwargs[:decomposition])
+	end
+	get!(kwargs, :rank) do # Can also be a tuple. For example, Tucker rank could be (1, 2, 3) for an order 3 array Y
+		isnothing(kwargs[:decomposition]) ? 1 : rankof(kwargs[:decomposition])
+	end
 	get!(kwargs, :init) do
 		isnonnegative(Y) ? abs_randn : randn
 	end
+	get!(kwargs, :constrain_init, false)
 	# get!(kwargs, :freeze) # This default is handled by the model constructor
 							# freeze=(...) can still be provided to override the default
 
 	# Update
 	get!(kwargs, :objective, L2())
-	#get!(kwargs, :core_constraint, l1normalize_1slices!)
-	#get!(kwargs, :whats_rescaled, (x -> eachcol(factor(x, 2))))
 	# get!(kwargs, :random_order) # This default is handled by the BlockedUpdate struct
 
 	# Momentum
@@ -73,6 +88,8 @@ function default_kwargs(Y; kwargs...)
 
 	# Constraints
 	get!(kwargs, :constraints, nothing)
+	# get!(kwargs, :whats_rescaled, missing) # This default is handled by the ConstraintUpdate function
+	# the rest of the constraint parsing is handled later, once the decomposition is initalized
 
 	# Stats
 	get!(kwargs, :stats, [Iteration, GradientNNCone, ObjectiveValue])
@@ -90,35 +107,58 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :maxiter, 300) # Iteration
 	@assert all(c -> c in kwargs[:stats], kwargs[:converged]) # more memory efficient that all(in.(kwargs[:converged], (kwargs[:stats],)))
 
-
-	############ kwargs check #############
-	# eltype(kwargs[:stats]) <: AbstractStat # not true unless they are constructed
-	# notice Iteration vs Iteration()
-
-
     return kwargs
 end
 
+"""
+	parse_constraints(constraints, decomposition; kwargs...)
+
+Parses the constraints to make sure we have a valid list of ConstraintUpdate
+If only one AbstractConstraint is given, assume we want this constraint to apply to every
+factor in the decomposition, and make a ConstraintUpdate for each factor.
+"""
+function parse_constraints(constraints, decomposition; kwargs...)
+	# Base case
+	if all(c -> typeof(c) <: ConstraintUpdate, constraints)
+		return BlockedUpdate(constraints)
+	else
+		throw(error("got a set of constraints I am not sure how to parse: $constraints"))
+	end
+end
+parse_constraints(constraints::Nothing, decomposition; kwargs...) = nothing
+
+# Assume we want this constraint to apply to every factor in this case
+parse_constraints(constraints::AbstractConstraint, decomposition; kwargs...) =
+	BlockedUpdate([ConstraintUpdate(n, constraints; kwargs...) for n in eachfactorindex(decomposition)])
+
 """The decomposition model Y will be factored into"""
 function initialize_decomposition(Y; decomposition, model, rank, kwargs...)
-	if !isnothing(decomposition)
-		return decomposition
-	else
+	kwargs = Dict{Symbol,Any}(kwargs)
+	# have to add these keyword back since it was extracted by make_update
+	kwargs[:model] = model
+	kwargs[:rank] = rank
+
+	if isnothing(decomposition)
 		decomposition = model(size(Y), rank; kwargs...)
-		return decomposition
 	end
+	# have to add this keyword back since it was extracted by make_update
+	kwargs[:decomposition] = decomposition
+	return decomposition, kwargs
 end
 
 """
 What one iteration of the algorithm looks like.
 One iteration is likely a full cycle through each block or factor of the model.
 """
-function make_update(decomposition, Y; momentum, constraints, kwargs...)
+function make_update!(decomposition, Y; momentum, constraints, constrain_init, kwargs...)
 	ns = eachfactorindex(decomposition)
 
 	# TODO this looks messy converting the NamedTuple kwargs to a Dictionary so more keywords can be added
 	kwargs = Dict{Symbol,Any}(kwargs)
-	kwargs[:momentum] = momentum # have to add this keyword back since it was extracted by make_update
+	# have to add these keyword back since it was extracted by make_update
+	kwargs[:momentum] = momentum
+	kwargs[:constraints] = constraints
+	kwargs[:constrain_init] = constrain_init
 
 	kwargs[:gradients] = [make_gradient(decomposition, n, Y; kwargs...) for n in ns]
 	kwargs[:steps] = [LipshitzStep(make_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
@@ -130,7 +170,17 @@ function make_update(decomposition, Y; momentum, constraints, kwargs...)
 	end
 
 	if !isnothing(constraints)
-		smart_interlace!(update!, constraints)
+		expanded_constraints! = parse_constraints(constraints, decomposition; kwargs...)
+		kwargs[:constraints] = expanded_constraints! # save the expanded constraints
+		smart_interlace!(update!, expanded_constraints!)
+	end
+
+	if constrain_init
+		expanded_constraints!(decomposition)
+		if !all(C -> check(C, decomposition), expanded_constraints!)
+			indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
+			error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
+		end
 	end
 
 	return update!, kwargs

@@ -69,7 +69,7 @@ function (P::ProjectedNormalization)(A::AbstractArray)
     (P.projection).(whats_normalized_A)
 end
 
-check(P::ProjectedNormalization, A::AbstractArray) = all((P.norm).(P.whats_normalized(A)) .== 1)
+check(P::ProjectedNormalization, A::AbstractArray) = all((P.norm).(P.whats_normalized(A)) .≈ 1)
 
 ### Some standard projections ###
 l2norm(x::AbstractArray) = sqrt(norm2(x))
@@ -169,7 +169,7 @@ function (S::ScaledNormalization{T})(A::AbstractArray) where {T<:Function}
     return A_norm
 end
 
-check(S::ScaledNormalization, A::AbstractArray) = all((S.norm).(S.whats_normalized(A)) .== S.scale)
+check(S::ScaledNormalization, A::AbstractArray) = all((S.norm).(S.whats_normalized(A)) .≈ S.scale)
 
 ### Some standard rescaling ###
 

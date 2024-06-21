@@ -177,11 +177,27 @@ function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
     end
 end
 
+abstract type ConstraintUpdate <: AbstractUpdate end
+
+"""
+    ConstraintUpdate(n, constraint)
+
+Converts an AbstractConstraint to a ConstraintUpdate on the factor n
+"""
+ConstraintUpdate(n, constraint::AbstractConstraint; kwargs...) = error("converting $(typeof(constraint)) to a ConstraintUpdate is not yet supported")
+ConstraintUpdate(n, constraint::ProjectedNormalization; kwargs...) = Projection(n, constraint)
+ConstraintUpdate(n, constraint::ScaledNormalization; whats_rescaled=missing, kwargs...) = Rescale(n, constraint, whats_rescaled)
+ConstraintUpdate(n, constraint::EntryWise; kwargs...) = Projection(n, constraint)
+
+check(_::ConstraintUpdate, _::AbstractDecomposition) = error("checking $(typeof(constraint)) is not yet supported")
+
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
-struct Projection <: AbstractUpdate
+struct Projection <: ConstraintUpdate
     n::Integer
     proj::AbstractConstraint #ProjectedNormalization
 end
+
+check(P::Projection, D::AbstractDecomposition) = check(P.proj, factor(D, P.n))
 
 function (U::Projection)(x::T; kwargs...) where T
     n = U.n
@@ -193,22 +209,47 @@ end
 
 NNProjection(n) = Projection(n, nnegative!)
 
-struct Rescale <: AbstractUpdate
+struct Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
     n::Integer
     scale::ScaledNormalization
-    whats_rescaled::Function
+    whats_rescaled::T
 end
 
-function (U::Rescale)(x; kwargs...)
+check(S::Rescale, D::AbstractDecomposition) = check(S.scale, factor(D, S.n))
+
+function (U::Rescale{<:Function})(x; kwargs...)
     # TODO possible have information about what gets rescaled withthe `ScaledNormalization`.
     # Right now, the scaling is only applied to arrays, not decompositions, so the information
     # about where (`U.whats_rescaled`) and how (only multiplication (*) right now) the weight
     # from Fn gets canceled out is stored with the `Rescale` struct and not
     # the `ScaledNormalization`.
-    Fn_scale = U.scale(Fn)
+    Fn_scale = U.scale(factor(x, U.n))
     to_scale = U.whats_rescaled(x)
     to_scale .*= Fn_scale
 end
+
+(U::Rescale{Nothing})(x; kwargs...) = U.scale(factor(x, U.n))
+function (U::Rescale{Missing})(x; kwargs...)
+    Fn_scale = U.scale(factor(x, U.n))
+    x_factors = factors(x)
+    N = length(x_factors) - 1
+
+    # Nothing to rescale, so return here
+    if N == 0
+        return nothing
+    end
+
+    # Assume we want to evenly rescale all other factors by the Nth root of Fn_scale
+    scale = geomean(Fn_scale)^(1/N)
+    for (i, A) in zip(eachfactorindex(x), x_factors)
+        # skip over the factor we just updated
+        if i == U.n
+            continue
+        end
+        A .*= scale
+    end
+end
+
 
 #=
 struct MomentumUpdate <: AbstractUpdate
@@ -282,31 +323,36 @@ BlockedUpdate(x::Tuple) = BlockedUpdate(x...)
 BlockedUpdate(x...) = BlockedUpdate(vcat(x...))
 
 updates(U::BlockedUpdate) = U.updates
-#BlockedUpdate(updates::NTuple{N, AbstractUpdate{T}}) where {T, N} = BlockedUpdate{T}(updates)
+
+# Forward methods to Vector so BlockedUpdate can behave like a Vector
+Base.getindex(U::BlockedUpdate, i::Int) = getindex(updates(U), i)
+Base.getindex(U::BlockedUpdate, I::Vararg{Int}) = getindex(updates(U), I...)
+Base.length(U::BlockedUpdate) = length(updates(U))
+Base.iterate(U::BlockedUpdate, state=1) = state > length(U) ? nothing : (U[state], state+1)
 
 function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
-    updatesU = updates(U)
+    U_updates = updates(U)
     if random_order
-        order = shuffle(eachindex(updatesU))
-        updatesU = updatesU[order] # not using a view since we need to acess elements in a random order
+        order = shuffle(eachindex(U_updates))
+        U_updates = U_updates[order] # not using a view since we need to acess elements in a random order
                                    # https://docs.julialang.org/en/v1/manual/performance-tips/#Copying-data-is-not-always-bad
     end
 
-    for update! in updatesU
+    for update! in U_updates
         update!(x; kwargs...)
     end
 end
 
 function add_momentum!(U::BlockedUpdate)
     # Find all the GradientDescent updates
-    updatesU = updates(U)
-    indexes = findall(u -> typeof(u) <: GradientDescent, updatesU)
+    U_updates = updates(U)
+    indexes = findall(u -> typeof(u) <: GradientDescent, U_updates)
 
     # insert MomentumUpdates before each GradientDescent
     # do this in reverse order so "i" correctly indexes a GradientDescent
     # as we mutate updates
     for i in reverse(indexes)
-        insert!(updatesU, i, MomentumUpdate(updatesU[i]))
+        insert!(U_updates, i, MomentumUpdate(U_updates[i]))
     end
 end
 
@@ -318,12 +364,12 @@ it updates the same factor/block n.
 See [`smart_interlace!`](@ref)
 """
 function smart_insert!(U::BlockedUpdate, V::AbstractUpdate)
-    updates = updates(U)
-    i = findlast(u -> u.n == V.n, updates)
+    U_updates = updates(U)
+    i = findlast(u -> u.n == V.n, U_updates)
 
     # insert the other update immediately after
     # or if there is no update, push it to the end
-    isnothing(i) ? push!(updates, V) : insert!(updates, i+1, V)
+    isnothing(i) ? push!(U_updates, V) : insert!(U_updates, i+1, V)
 end
 
 """
@@ -334,11 +380,11 @@ See [`smart_insert!`](@ref)
 """
 function smart_interlace!(U::BlockedUpdate, other_updates)
     for V in other_updates
-        match_insert!(U::BlockedUpdate, V::AbstractUpdate)
+        smart_insert!(U::BlockedUpdate, V::AbstractUpdate)
     end
 end
 
-smart_interlace!(U::BlockedUpdate, V::BlockedUpdate) = insert(U::BlockedUpdate, updates(V))
+smart_interlace!(U::BlockedUpdate, V::BlockedUpdate) = smart_interlace!(U::BlockedUpdate, updates(V))
 
 
 ##################################################
