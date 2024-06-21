@@ -213,22 +213,38 @@ end
     Y = Tucker1((10,11,12), 5);
     Y = array(Y);
 
+    fact = BlockTensorDecomposition.factorize
+
     # check hitting maximum number of iterations
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, maxiter=2);
+    decomposition, stats_data = fact(Y; rank=5, momentum=false, maxiter=2);
     # check convergence on first iteration
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=false, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, momentum=false, tolerence=Inf);
     # check momentum
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, momentum=true, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerence=Inf);
     # check constraints
     ## a single constraint, to be applied on every block
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, constraints=nnegative!, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, constraints=nnegative!, tolerence=Inf);
     ## a collection of constraints
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, tolerence=Inf,
+    decomposition, stats_data = fact(Y; rank=5, tolerence=Inf,
         constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
     );
     ## check if you can constrain the initialization
-    decomposition, stats_data = BlockTensorDecomposition.factorize(Y; rank=5, tolerence=Inf, constrain_init=true,
+    decomposition, stats_data = fact(Y; rank=5, tolerence=Inf, constrain_init=true,
         constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
+    );
+
+    C = abs_randn(5, 11, 12)
+    A = abs_randn(10, 5)
+    Y = Tucker1((C, A))
+    Y = array(Y)
+
+    decomposition, stats_data = fact(Y;
+        rank=5,
+        tolerence=(2, 0.05),
+        converged=(GradientNNCone, RelativeError),
+        constrain_init=true,
+        constraints=nnegative!,
+        stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError]
     );
 
     #=
