@@ -39,7 +39,7 @@ function _factorize(Y; kwargs...)
 		updateprevious!(previous, parameters, decomposition)
 	end
 
-	return decomposition, stats_data
+	return decomposition, stats_data, kwargs
 end
 
 """
@@ -79,6 +79,9 @@ function default_kwargs(Y; kwargs...)
 
 	# Update
 	get!(kwargs, :objective, L2())
+	get!(kwargs, :norm, l2norm) # norm to use for data fitting analysis
+	# note L2 <: AbstractObjective that takes two arguments L2()(X,Y) = norm2(X - Y)
+	# whereas l2norm takes a single argument l2norm(X) = sqrt(norm2(X))
 	# get!(kwargs, :random_order) # This default is handled by the BlockedUpdate struct
 
 	# Momentum
@@ -92,17 +95,19 @@ function default_kwargs(Y; kwargs...)
 	# the rest of the constraint parsing is handled later, once the decomposition is initalized
 
 	# Stats
-	get!(kwargs, :stats, [Iteration, GradientNNCone, ObjectiveValue])
+	get!(kwargs, :stats) do
+		[Iteration, ObjectiveValue, isnonnegative(Y) ? GradientNNCone : GradientNorm]
+	end
 	if Iteration ∉ kwargs[:stats]
 		kwargs[:stats] = [Iteration, kwargs[:stats]...] # not using pushfirst! since kwargs[:stats] could be a Tuple
 	end
 	@assert all(s -> s <: AbstractStat, kwargs[:stats])
 
 	# Convergence
-	get!(kwargs, :converged, GradientNNCone) # can be a single AbstractStat or a tuple/vector of them
+	get!(kwargs, :converged, isnonnegative(Y) ? GradientNNCone : GradientNorm) # can be a single AbstractStat or a tuple/vector of them
 											 # and must be a subset of kwargs[:stats]
 	@assert all(s -> s <: AbstractStat, kwargs[:converged])
-	get!(kwargs, :tolerence, 1e-6) # need one tolerence per stat
+	get!(kwargs, :tolerence, 1) # need one tolerence per stat
 	@assert length(kwargs[:tolerence]) == length(kwargs[:converged])
 	get!(kwargs, :maxiter, 300) # Iteration
 	@assert all(c -> c in kwargs[:stats], kwargs[:converged]) # more memory efficient that all(in.(kwargs[:converged], (kwargs[:stats],)))
@@ -183,6 +188,8 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, k
 		end
 	end
 
+	kwargs[:update] = update!
+
 	return update!, kwargs
 end
 
@@ -260,7 +267,7 @@ function make_converged(; converged, tolerence, maxiter, kwargs...)
 			if length(converged) == 1
 				@info "converged based on $converged less than $tolerence"
 			else
-				indexes = findall(((c, t),) -> stats_data[end, Symbol(c)] < t, converged_tol)
+				indexes = findall(((c, t),) -> stats_data[end, Symbol(c)] < t, collect(converged_tol))
 				@info "converged based on $(join(converged[indexes], ", ", " and ")) less than $(join(tolerence[indexes], ", ", " and "))"
 			end
 			return true

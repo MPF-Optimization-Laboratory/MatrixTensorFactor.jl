@@ -46,7 +46,7 @@ export l1norm, l2norm, linftynorm
 
 include("./stats.jl")
 export AbstractStat
-export GradientNorm, GradientNNCone, ObjectiveValue, ObjectiveRatio, IterateNormDiff, IterateRelativeDiff, Iteration
+export GradientNorm, GradientNNCone, IterateNormDiff, IterateRelativeDiff, Iteration, ObjectiveValue, ObjectiveRatio, RelativeError
 
 include("./blockupdates.jl")
 export AbstractStep
