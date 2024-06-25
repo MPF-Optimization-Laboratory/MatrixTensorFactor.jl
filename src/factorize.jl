@@ -22,6 +22,8 @@ function _factorize(Y; kwargs...)
 
 	converged = make_converged(; kwargs...)
 
+	kwargs = NamedTuple(kwargs) # freeze the kwargs from a Dictionary to a NamedTuple for type stability
+
 	while !converged(stats_data; kwargs...)
 		# Update the decomposition
 		# This is possibly one cycle of updates on each factor in the decomposition

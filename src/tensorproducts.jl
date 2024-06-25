@@ -39,8 +39,15 @@ Looks like C[i1, i2, ..., iN] = sum_r A[i1, r] * B[r, i2, ..., iN] entry-wise.
 function mtt(A::AbstractMatrix, B::AbstractArray)
     sizeB = size(B)
     Bmat = reshape(B, sizeB[1], :)
-    Cmat = A * Bmat
-    C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
+
+    #Cmat = A * Bmat
+    #C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
+
+    # Slightly faster implimentation
+    C = zeros(size(A)[1], sizeB[2:end]...)
+    Cmat = reshape(C, size(A)[1], prod(sizeB[2:end]))
+    mul!(Cmat, A, Bmat)
+
     return C
 end
 

@@ -330,7 +330,10 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     ω = min(ω, δ * √(L_last/L))
 
     a, a_last = factor(x, n), factor(x_last, n)
-    @. a += ω * (a - a_last)
+    # @. a = a + ω * (a - a_last)
+    # @. a += ω * (a - a_last)
+    a .*= 1 + ω
+    a .-= ω .* a_last
 end
 #=
 function Base.show(io::IO, ::MIME"text/plain", x::MomentumUpdate)

@@ -2,11 +2,12 @@ module BlockTensorDecomposition
 
 # Dependencies
 using Random: randn, rand, seed!, shuffle
-using LinearAlgebra: ⋅, opnorm, Symmetric
+using LinearAlgebra: ⋅, opnorm, Symmetric, mul!
 using DataFrames: DataFrame, nrow
 
 # Method Extentions
-using Base: copy, deepcopy, eltype, getindex, iterate, length, show, size, ndims, *
+using Base: copy, deepcopy, eltype, getindex, iterate, length, show, size, ndims
+using Base: +, -, *, /, \, ^
 using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality

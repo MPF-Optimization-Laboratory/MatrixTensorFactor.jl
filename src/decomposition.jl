@@ -26,6 +26,28 @@ Base.getindex(D::AbstractDecomposition, I::Vararg{Int}) = getindex(array(D), I..
 Base.copy(D::AbstractDecomposition) = typeof(D)((copy.(getfield(D, p)) for p in propertynames(D))...)
 Base.deepcopy(D::AbstractDecomposition) = typeof(D)((deepcopy.(getfield(D, p)) for p in propertynames(D))...)
 
+#Mathematical Operations
+Base.:+(A::AbstractDecomposition, B::AbstractArray) = array(A) + B
+Base.:+(A::AbstractArray, B::AbstractDecomposition) = A + array(B)
+Base.:+(A::AbstractDecomposition, B::AbstractDecomposition) = array(A) + array(B)
+
+Base.:-(A::AbstractDecomposition, B::AbstractArray) = array(A) - B
+Base.:-(A::AbstractArray, B::AbstractDecomposition) = A - array(B)
+Base.:-(A::AbstractDecomposition, B::AbstractDecomposition) = array(A) - array(B)
+Base.:-(A::AbstractDecomposition) = -array(A)
+
+Base.:*(A::AbstractDecomposition, B::AbstractArray) = array(A) * B
+Base.:*(A::AbstractArray, B::AbstractDecomposition) = A * array(B)
+Base.:*(A::AbstractDecomposition, B::AbstractDecomposition) = array(A) * array(B)
+
+Base.:/(A::AbstractDecomposition, B::AbstractArray) = array(A) / B
+Base.:/(A::AbstractArray, B::AbstractDecomposition) = A / array(B)
+Base.:/(A::AbstractDecomposition, B::AbstractDecomposition) = array(A) / array(B)
+
+Base.:\(A::AbstractDecomposition, B::AbstractArray) = array(A) \ B
+Base.:\(A::AbstractArray, B::AbstractDecomposition) = A \ array(B)
+Base.:\(A::AbstractDecomposition, B::AbstractDecomposition) = array(A) \ array(B)
+
 # AbstractDecomposition functions
 """
     nfactors(D::AbstractDecomposition)
