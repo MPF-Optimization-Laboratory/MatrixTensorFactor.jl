@@ -370,7 +370,7 @@ function Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate)
     for u in x
         println(io, "    ", u)
     end
-    println(io, ")")
+    print(io, ")")
 end
 
 function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
