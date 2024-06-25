@@ -1,13 +1,16 @@
 """
-High level code for taking a tensor a performing a decomposition
+	factorize(Y; rank=1, model=Tucker1, kwargs...)
+
+Factorizes `Y` according to the decomposition `model`.
+
+See [`default_kwargs`](@ref) for the default keywords.
 """
 
 factorize(Y; kwargs...) =
 	_factorize(Y; (default_kwargs(Y; kwargs...))...)
 
 """
-Factor Y = ABC... such that
-X is normalized according to normX for X in (A, B, C...)
+Inner level function once keyword agruments are set
 """
 function _factorize(Y; kwargs...)
 	decomposition, kwargs = initialize_decomposition(Y; kwargs...)
@@ -49,11 +52,33 @@ end
 
 Handles all keywords and options, and sets defaults if not provided.
 
-Keywords & Defaults
-===================
-`decomposition`: `nothing`
-`model`: `Tucker1`
-`rank`: `1`
+# Keywords & Defaults
+## Initialization
+- `decomposition`: `nothing`. Can provide a custom initialized AbstractDecomposition
+- `model`: `Tucker1`, but overridden by the type of AbstractDecomposition if given `decomposition`
+- `rank`: `1`, but overridden by the rank of AbstractDecomposition if given `decomposition`
+- `init`: `abs_randn` for nonnegative inputs `Y`, `randn` otherwise
+- `constrain_init`: `false`. Ensures the initalization satifies all given `constraints`
+- `freeze`: the default froxen factors of the `model`
+
+## Updates
+- `objective`: `L2()`. Objective to minimize
+- `norm`: `l2norm`. Norm to use for statistics, can be unrelated to the objective
+- `random_order`: `false`. Perform the blocked updates in a random order each iteration
+
+Momentum
+- `momentum`: `true`
+- `δ`: `0.9999`. Amount of momentum, between [0,1)
+- `previous_iterates`: `1`. Number of pervious iterates to save and use between iterations
+
+Constraints
+- `constraints`: `nothing`. Can be a list of ConstraintUpdate, or just one
+
+Stats
+- `stats`: `[Iteration, ObjectiveValue, GradientNorm]` or in the case of nonnegative `Y`, `GradientNNCone` in place of `GradientNorm`
+- `converged`: `GradientNorm` or in the case of nonnegative `Y`, `GradientNNCone`. What stat(s) to use for convergence. Will converge is any one of the provided stats is below their respective tolerence
+- `tolerence`: `1`. A list the same length as `converged`
+- `maxiter`: `300`. Additional stopping criterion if the number of iterations exceeds this number
 """
 function default_kwargs(Y; kwargs...)
 	# Set up kwargs as a dictionary
@@ -64,7 +89,7 @@ function default_kwargs(Y; kwargs...)
 	# end
 	isempty(kwargs) ? kwargs = Dict{Symbol,Any}() : kwargs = Dict{Symbol,Any}(kwargs)
 
-	# DecompositionInitialization
+	# Decomposition Initialization
 	get!(kwargs, :decomposition, nothing)
 	get!(kwargs, :model) do
 		isnothing(kwargs[:decomposition]) ? Tucker1 : typeof(kwargs[:decomposition])
@@ -80,7 +105,8 @@ function default_kwargs(Y; kwargs...)
 							# freeze=(...) can still be provided to override the default
 
 	# Update
-	get!(kwargs, :objective, L2())
+	get!(kwargs, :objective, L2()) # TODO handle arbitrary functions but constructing CustomObjective type
+								   # this should call auto diff when making the gradients
 	get!(kwargs, :norm, l2norm) # norm to use for data fitting analysis
 	# note L2 <: AbstractObjective that takes two arguments L2()(X,Y) = norm2(X - Y)
 	# whereas l2norm takes a single argument l2norm(X) = sqrt(norm2(X))
@@ -93,7 +119,6 @@ function default_kwargs(Y; kwargs...)
 
 	# Constraints
 	get!(kwargs, :constraints, nothing)
-	# get!(kwargs, :whats_rescaled, missing) # This default is handled by the ConstraintUpdate function
 	# the rest of the constraint parsing is handled later, once the decomposition is initalized
 
 	# Stats
@@ -160,7 +185,6 @@ One iteration is likely a full cycle through each block or factor of the model.
 function make_update!(decomposition, Y; momentum, constraints, constrain_init, kwargs...)
 	ns = eachfactorindex(decomposition)
 
-	# TODO this looks messy converting the NamedTuple kwargs to a Dictionary so more keywords can be added
 	kwargs = Dict{Symbol,Any}(kwargs)
 	# have to add these keyword back since it was extracted by make_update
 	kwargs[:momentum] = momentum
