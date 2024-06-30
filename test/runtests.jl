@@ -41,8 +41,8 @@ const VERBOSE = true
     @testset verbose=VERBOSE "Products" begin
         A = randn(10, 20)
         B = randn(10, 20)
-        @test slicewise_dot(A, A) == A'A # test this separately since it uses a different routine when the argument is the same
-        @test slicewise_dot(A, B) == A'B
+        @test all(slicewise_dot(A, A) .≈ A*A') # test this separately since it uses a different routine when the argument is the same
+        @test all(slicewise_dot(A, B) .≈ A*B')
     end
 
 @testset verbose=VERBOSE "Constraints" begin

@@ -51,6 +51,8 @@ function mtt(A::AbstractMatrix, B::AbstractArray)
     return C
 end
 
+# TODO boost performance of slicewise_dot by:
+# swapping the dimentions
 """
     slicewise_dot(A::AbstractArray, B::AbstractArray; dims=1, dimsA=dims, dimsB=dims)
 
@@ -58,10 +60,10 @@ Constracts all but the dimentions `dimsA` and `dimsB` of A and B by performing a
 
 Generalizes `@einsum C[s,r] := A[s,j,k]*B[r,j,k]` to arbitrary dimentions.
 
-For example, slicewise_dot(A::AbstractMatrix, B::AbstractMatrix) == A'B
+For example, if A and B are both matricies, slicewise_dot(A, B) == A*B'
 """
 function slicewise_dot(A::AbstractArray, B::AbstractArray; dims=1, dimsA=dims, dimsB=dims)
-    C = zeros(size(A)[1], size(B)[1]) # Array{promote_type(T, U), 2}(undef, size(A)[1], size(B)[1]) doesn't seem to be faster
+    C = zeros(size(A)[dimsA], size(B)[dimsB]) # Array{promote_type(T, U), 2}(undef, size(A)[1], size(B)[1]) doesn't seem to be faster
 
     if A === B && (dimsA == dimsB)# use the faster routine if they are the same array
         return _slicewise_self_dot!(C, A; dims=dimsA)
