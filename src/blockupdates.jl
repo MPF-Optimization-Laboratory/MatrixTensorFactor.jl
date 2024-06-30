@@ -179,7 +179,7 @@ function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
         end
         return gradient0
 
-    elseif n==1 # the matrix is the zeroth factor
+    elseif n==1 # the matrix is the first factor
         function gradient1(T::Tucker1; kwargs...)
             (C, A) = factors(T)
             CC = slicewise_dot(C, C)
@@ -191,6 +191,34 @@ function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
 
     else
         error("No $(n)th factor in Tucker1")
+    end
+end
+
+function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n==0 # the core is the zeroth factor
+        function gradient0(T::Tucker; kwargs...)
+            C = core(T)
+            matricies = matrix_factors(T)
+            gram_matricies = map(A -> A'A, matricies) # gram matricies AA = A'A, BB = B'B...
+            YAB = tuckerproduct(Y, adjoint.(matricies)) # Y ×₁ A' ×₂ B' ...
+            grad = tuckerproduct(C, gram_matricies) - YAB
+            return grad
+        end
+        return gradient0
+
+    elseif n in 1:N # the matrix factors start at m=1
+        function gradient1(T::Tucker; kwargs...)
+            C = core(T)
+            matricies = matrix_factors(T)
+            # TODO optimize this code similar to the other gradients. Check the number of flops for different options
+            grad = slicewise_dot(tuckerproduct(T - Y), tuckerproduct(C, matricies; exclude=n); dims=n)
+            return grad
+        end
+        return gradient1
+
+    else
+        error("No $(n)th factor in Tucker")
     end
 end
 
