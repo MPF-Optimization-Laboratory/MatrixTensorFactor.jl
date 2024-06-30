@@ -55,6 +55,9 @@ end
 
 #######################################################
 
+getnotindex(A, i::Int) = A[eachindex(v) .!= i]
+getnotindex(A, I) = A[eachindex(v) .∉ (I,)]
+
 """
     swapdims(A::AbstractArray, a::Integer, b::Integer=1)
 

@@ -12,8 +12,9 @@ using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
 include("./utils.jl")
-export SuperDiagonal, abs_randn, geomean, identityslice, interlace, norm2
+export SuperDiagonal, abs_randn, getnotindex, geomean, identityslice, interlace, norm2
 include("./tensorproducts.jl")
+export ×₁, nmp, nmode_product, mtt, slicewise_dot
 
 # Low level types and interface
 include("./decomposition.jl")

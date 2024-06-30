@@ -248,7 +248,7 @@ isfrozen(T::AbstractTucker, n::Integer) = frozen(T)[n+1]
 # AbstractDecomposition Interface
 array(T::AbstractTucker) = multifoldl(contractions(T), factors(T))
 factors(T::AbstractTucker) = T.factors
-contractions(T::Tucker) = Tuple((G, A) -> nmp(G, A, n) for n in 1:ndims(T))
+contractions(T::Tucker) = tucker_contractions(ndims(T))
 contractions(_::Tucker1) = ((×₁),)
 rankof(T::Tucker) = map(x -> size(x)[2], matrix_factors(T))
 rankof(T::Tucker1) = size(core(T))[begin]
@@ -285,7 +285,7 @@ function Base.getindex(T::Tucker, I::Vararg{Int})
     ops = Tuple((×₁) for _ in 1:ndims(T)) # the leading index gets collapsed each time, so it is always the 1 mode product
     return multifoldl(ops, (core(T), matrix_factors_slice...))
 end=#
-
+# TODO add optimized indexing for full tucker decomposition
 
 """
 CP decomposition. Takes the form of an outerproduct of multiple matricies.
@@ -319,7 +319,7 @@ end
 
 # AbstractDecomposition Interface
 factors(CPD::CPDecomposition) = CPD.factors
-array(CPD::CPDecomposition) = mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
+array(CPD::CPDecomposition) = cpproduct(factors(CPD))
 frozen(CPD::CPDecomposition) = CPD.frozen
 vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
 eachfactorindex(CPD::CPDecomposition) = 1:nfactors(CPD) # unlike other AbstractTucker's, back to 1 based since there's only matrix factors

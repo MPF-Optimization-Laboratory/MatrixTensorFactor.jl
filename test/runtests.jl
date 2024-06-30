@@ -29,6 +29,20 @@ const VERBOSE = true
             @test geomean(2, 1/2) == 1
             @test geomean((1,2,3)) ≈ 1.8171205928321397
         end
+
+        @testset verbose=VERBOSE "getnotindex" begin
+            @test getnotindex(1:10, 5) == [1, 2, 3, 4, 6, 7, 8, 9, 10]
+            @test getnotindex(1:10, (5, 8)) == [1, 2, 3, 4, 6, 7, 9, 10]
+            @test getnotindex(1:10, [5, 8]) == [1, 2, 3, 4, 6, 7, 9, 10]
+            @test getnotindex(1:10, 4:6) == [1, 2, 3, 7, 8, 9, 10]
+        end
+    end
+
+    @testset verbose=VERBOSE "Products" begin
+        A = randn(10, 20)
+        B = randn(10, 20)
+        @test slicewise_dot(A, A) == A'A # test this separately since it uses a different routine when the argument is the same
+        @test slicewise_dot(A, B) == A'B
     end
 
 @testset verbose=VERBOSE "Constraints" begin
