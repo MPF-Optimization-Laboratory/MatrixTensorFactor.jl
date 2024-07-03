@@ -1,6 +1,6 @@
 # MatrixTensorFactor.jl
 
-Overhauled code comming soon!
+Overhauled code comming soon! See here for prerelease: https://github.com/MPF-Optimization-Laboratory/MatrixTensorFactor.jl/tree/general-block-decomposition 
 
 New features in testing now:
 - More tensor decomposition models like Tucker, Tucker-N, CP and custom factorizations
