@@ -1,5 +1,21 @@
 # MatrixTensorFactor.jl
 
+Overhauled code comming soon!
+
+New features in testing now:
+- More tensor decomposition models like Tucker, Tucker-N, CP and custom factorizations
+- More constraints and along any dimentions (ex. columns sum to 1, second order slices are L2 normalized)
+- Cyclically or randomly update blocks
+- selectively use momentum gradient steps on some blocks
+- More convergence criteria (ex. objective value, stationary)
+- Record any number of stats every iteration
+- Pass in custom initilization 
+
+Planned features:
+- More loss functions to optimize (ex. L1 norm, custom objective with auto diff)
+
+## About
+
 See documentation here: https://mpf-optimization-laboratory.github.io/MatrixTensorFactor.jl/dev/
 
 Factorize a 3rd order tensor Y into a matrix A and 3rd order tensor B: Y=AB. Componentwise, this is:
