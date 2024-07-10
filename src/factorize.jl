@@ -5,7 +5,6 @@ Factorizes `Y` according to the decomposition `model`.
 
 See [`default_kwargs`](@ref) for the default keywords.
 """
-
 factorize(Y; kwargs...) =
 	_factorize(Y; (default_kwargs(Y; kwargs...))...)
 
@@ -59,7 +58,7 @@ Handles all keywords and options, and sets defaults if not provided.
 - `rank`: `1`, but overridden by the rank of AbstractDecomposition if given `decomposition`
 - `init`: `abs_randn` for nonnegative inputs `Y`, `randn` otherwise
 - `constrain_init`: `false`. Ensures the initalization satifies all given `constraints`
-- `freeze`: the default froxen factors of the `model`
+- `freeze`: the default frozen factors of the `model`
 
 ## Updates
 - `objective`: `L2()`. Objective to minimize
