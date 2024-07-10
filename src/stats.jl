@@ -74,12 +74,28 @@ and B to update the other, this would return sqrt(A^2 + B^2).
 struct EuclidianStepSize{T} <: AbstractStat
     steps::T
     function EuclidianStepSize{T}(steps) where T
-        @assert all(x -> x <: AbstractStep, steps)
+        @assert all(x -> typeof(x) <: AbstractStep, steps)
         new{T}(steps)
     end
 end
 
-EuclidianStepSize(; steps, kwargs...) = EuclidianStepSize(steps)
+EuclidianStepSize(; steps, kwargs...) = EuclidianStepSize{typeof(steps)}(steps)
+
+"""
+The 2-norm of the lipshitz constants that would be taken for all blocks.
+
+Need the stepsizes to be lipshitz steps since it is calculated similarly to EuclidianStepSize.
+"""
+struct EuclidianLipshitz{T} <: AbstractStat
+    steps::T
+    function EuclidianLipshitz{T}(steps) where T
+        @assert all(x -> typeof(x) <: AbstractStep, steps)
+        new{T}(steps)
+    end
+end
+
+EuclidianLipshitz(; steps, kwargs...) = EuclidianLipshitz{typeof(steps)}(steps)
+
 
 function (S::Iteration)(_, _, _, parameters, stats)
     @assert nrow(stats) == parameters[:iteration] # make sure these don't drift for some reason
@@ -103,3 +119,4 @@ end
 (S::IterateNormDiff)(X, _, previous, _, _) = S.norm(X - previous[begin])
 (S::IterateRelativeDiff)(X, _, previous, _, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
 (S::EuclidianStepSize)(X, _, _, _, _) = sqrt(mapreduce(calcstep -> calcstep(X)^2, +, S.steps))
+(S::EuclidianLipshitz)(X, _, _, _, _) = sqrt(mapreduce(calcstep -> calcstep(X)^(-2), +, S.steps))
