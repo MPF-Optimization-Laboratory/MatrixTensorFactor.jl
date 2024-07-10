@@ -65,6 +65,22 @@ end
 
 IterateRelativeDiff(; norm, kwargs...) = IterateRelativeDiff(norm)
 
+"""
+The 2-norm of the stepsizes that would be taken for all blocks.
+
+For example, if there are two blocks, and we would take a stepsize of A to update one block
+and B to update the other, this would return sqrt(A^2 + B^2).
+"""
+struct EuclidianStepSize{T} <: AbstractStat
+    steps::T
+    function EuclidianStepSize{T}(steps) where T
+        @assert all(x -> x <: AbstractStep, steps)
+        new{T}(steps)
+    end
+end
+
+EuclidianStepSize(; steps, kwargs...) = EuclidianStepSize(steps)
+
 function (S::Iteration)(_, _, _, parameters, stats)
     @assert nrow(stats) == parameters[:iteration] # make sure these don't drift for some reason
     return parameters[:iteration]
@@ -86,3 +102,4 @@ end
 
 (S::IterateNormDiff)(X, _, previous, _, _) = S.norm(X - previous[begin])
 (S::IterateRelativeDiff)(X, _, previous, _, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
+(S::EuclidianStepSize)(X, _, _, _, _) = sqrt(mapreduce(calcstep -> calcstep(X)^2, +, S.steps))
