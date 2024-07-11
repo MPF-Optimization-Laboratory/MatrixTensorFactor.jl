@@ -116,11 +116,11 @@ function tuckerproduct(core, matricies; exclude=nothing)
     if isnothing(exclude)
         N == length(matricies) ||
             throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
-        return multifoldl(tucker_contractions(N), matricies)
+        return multifoldl(tucker_contractions(N), (core, matricies...))
     else
-        N == length(matricies) - length(exclude) ||
+        N == length(matricies) + length(exclude) ||
         throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
-        return multifoldl(getnotindex(tucker_contractions(N), exclude), matricies)
+        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, matricies...))
     end
 end
 tuckerproduct(core, matricies...; kwargs...) = tuckerproduct(core, matricies; kwargs...)

@@ -57,6 +57,29 @@ function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
     end
 end
 
+function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function lipshitz0(T::Tucker1; kwargs...)
+            matricies = matrix_factors(T)
+            gram_matricies = map(A -> A'A, matricies)
+            return opnorm(gram_matricies) # TODO combine all the gram_matricies into a matrix in some way. need the opnorm of the right part of C ×1 (A1 ×2 A2 ×3 ...)
+        end
+        return lipshitz0
+
+    elseif n in 1:N # the matrix is the zeroth factor
+        function lipshitz1(T::Tucker1; kwargs...)
+            matricies = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
+        end
+        return lipshitz1
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+
+
 struct ConstantStep <: AbstractStep
     stepsize::Real
 end
@@ -209,10 +232,10 @@ function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
 
     elseif n in 1:N # the matrix factors start at m=1
         function gradient1(T::Tucker; kwargs...)
-            C = core(T)
             matricies = matrix_factors(T)
-            # TODO optimize this code similar to the other gradients. Check the number of flops for different options
-            grad = slicewise_dot(tuckerproduct(T - Y), tuckerproduct(C, matricies; exclude=n); dims=n)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            An = factor(T, n)
+            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
             return grad
         end
         return gradient1

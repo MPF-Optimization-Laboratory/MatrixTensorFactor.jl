@@ -135,15 +135,6 @@ factors(G::GenericDecomposition) = G.factors
 contractions(G::GenericDecomposition) = G.contractions
 frozen(G::GenericDecomposition) = G.frozen
 
-function multifoldl(ops, args)
-    @assert (length(ops) + 1) == length(args)
-    x = args[begin]
-    for (op, arg) in zip(ops, args[begin+1:end]) # TODO want @view args[begin+1:end] when possible
-        x = op(x, arg)
-    end
-    return x
-end
-
 #Base.show(io::IO, D::AbstractDecomposition) = show.((io,), factors(D))
 
 # Tucker decompositions

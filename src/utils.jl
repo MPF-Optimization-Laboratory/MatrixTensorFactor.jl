@@ -186,3 +186,17 @@ Geometric mean of a collection of numbers: `prod(v)^(1/length(v))``.
 """
 geomean(v) = prod(v)^(1/length(v))
 geomean(v...) = geomean(v)
+
+"""
+    multifoldl(ops, args)
+
+Like foldl, but with a different folding operation between each argument.
+"""
+function multifoldl(ops, args)
+    @assert (length(ops) + 1) == length(args)
+    x = args[begin]
+    for (op, arg) in zip(ops, args[begin+1:end]) # TODO want @view args[begin+1:end] when possible
+        x = op(x, arg)
+    end
+    return x
+end

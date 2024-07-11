@@ -220,6 +220,33 @@ end
     G = CPDecomposition((A, B, C, D), frozen_factors)
     @test frozen(G) == frozen_factors
 
+    @testset verbose=VERBOSE "TuckerGradient" begin
+        T = Tucker((10,11,12), (3,4,5))
+        Y = randn(10,11,12)
+        C = core(T)
+        matricies = matrix_factors(T)
+
+        for n in 1:3
+            An = factor(T, n)
+            CM = tuckerproduct(C, getnotindex(matricies, n); exclude=n)
+
+            # two ways of calculating the block gradient of ||T - Y||_F^2 w.r.t. An
+            grad1 = slicewise_dot(T - Y, CM; dims=n)
+            grad2 = slicewise_dot(T, CM; dims=n) - slicewise_dot(Y, CM; dims=n)
+            # grad2 is slower to compute than grad1
+
+            # another way, but treat it like the Tucker1 gradient
+            # this is like grad2 but takes advantage of the symetric slicewise_dot
+            # so grad3 is the fastest to compute
+            grad3 = An*slicewise_dot(CM, CM; dims=n) - slicewise_dot(Y, CM; dims=n)
+
+            # should all give the same answer
+            @test all(grad1 .≈ grad2)
+            @test all(grad1 .≈ grad3)
+            @test all(grad2 .≈ grad3)
+        end
+    end
+
 end
 
 @testset verbose=VERBOSE "BlockUpdatedDecomposition" begin
