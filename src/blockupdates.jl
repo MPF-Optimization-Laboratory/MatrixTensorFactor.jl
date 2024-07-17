@@ -57,22 +57,23 @@ function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
     end
 end
 
-function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+function make_lipshitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function lipshitz0(T::Tucker1; kwargs...)
-            matricies = matrix_factors(T)
-            gram_matricies = map(A -> A'A, matricies)
-            return opnorm(gram_matricies) # TODO combine all the gram_matricies into a matrix in some way. need the opnorm of the right part of C ×1 (A1 ×2 A2 ×3 ...)
+        function lipshitz_core(T::Tucker; kwargs...)
+            #matricies = matrix_factors(T)
+            #gram_matricies = map(A -> A'A, matricies)
+            #return prod(opnorm.(gram_matricies))
+            return mapreduce(A -> opnorm(A'A), *, matrix_factors(T)) # TODO use a tigher lipshitz constant
         end
-        return lipshitz0
+        return lipshitz_core
 
     elseif n in 1:N # the matrix is the zeroth factor
-        function lipshitz1(T::Tucker1; kwargs...)
+        function lipshitz_matrix(T::Tucker; kwargs...)
             matricies = matrix_factors(T)
             TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
-        return lipshitz1
+        return lipshitz_matrix
 
     else
         error("No $(n)th factor in Tucker")
@@ -220,7 +221,7 @@ end
 function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n==0 # the core is the zeroth factor
-        function gradient0(T::Tucker; kwargs...)
+        function gradient_core(T::Tucker; kwargs...)
             C = core(T)
             matricies = matrix_factors(T)
             gram_matricies = map(A -> A'A, matricies) # gram matricies AA = A'A, BB = B'B...
@@ -228,17 +229,17 @@ function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
             grad = tuckerproduct(C, gram_matricies) - YAB
             return grad
         end
-        return gradient0
+        return gradient_core
 
     elseif n in 1:N # the matrix factors start at m=1
-        function gradient1(T::Tucker; kwargs...)
+        function gradient_matrix(T::Tucker; kwargs...)
             matricies = matrix_factors(T)
             TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
             An = factor(T, n)
             grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
             return grad
         end
-        return gradient1
+        return gradient_matrix
 
     else
         error("No $(n)th factor in Tucker")
