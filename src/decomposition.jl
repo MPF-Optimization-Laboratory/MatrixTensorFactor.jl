@@ -140,6 +140,19 @@ frozen(G::GenericDecomposition) = G.frozen
 # Tucker decompositions
 abstract type AbstractTucker{T, N} <: AbstractDecomposition{T, N} end
 
+function Base.show(io::IO, X::AbstractTucker)
+    print(io, typeof(X), "(", factors(X), ",", frozen(X), ")")
+    return
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", X::AbstractTucker)
+    summary(io, X); print(io, " of rank ", rankof(X))
+    for (n, f) in zip(eachfactorindex(X), factors(X))
+        println(io, "\nFactor ", n, ":")
+        show(io, mime, f); flush(io)
+    end
+end
+
 """
 Tucker decomposition. Takes the form of a core times a matrix for each dimention.
 
@@ -328,9 +341,3 @@ Base.getindex(CPD::CPDecomposition, I::Vararg{Int})= sum(reduce(.*, (@view f[i,:
 # Additional CPDecomposition interface
 """The single rank for a CP Decomposition"""
 rankof(CPD::CPDecomposition) = size(matrix_factors(CPD)[begin])[2]
-
-function Base.show(io::IO, CPD::CPDecomposition)
-    println(io, size(CPD), " rank ", rankof(CPD), " ", typeof(CPD), ":")
-    display.(io, factors(CPD))
-    return
-end
