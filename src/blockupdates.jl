@@ -58,19 +58,35 @@ function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
 end
 
 function make_lipshitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
     if n==0 # the core is the zeroth factor
-        function lipshitz_core(T::Tucker; kwargs...)
+        function lipshitz_core(T::AbstractTucker; kwargs...)
             #matricies = matrix_factors(T)
             #gram_matricies = map(A -> A'A, matricies)
             #return prod(opnorm.(gram_matricies))
-            return mapreduce(A -> opnorm(A'A), *, matrix_factors(T)) # TODO use a tigher lipshitz constant
+            return prod(A -> opnorm(A'A), matrix_factors(T))
         end
         return lipshitz_core
 
     elseif n in 1:N # the matrix is the zeroth factor
-        function lipshitz_matrix(T::Tucker; kwargs...)
+        function lipshitz_matrix(T::AbstractTucker; kwargs...)
             matricies = matrix_factors(T)
             TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
+        end
+        return lipshitz_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+
+function make_lipshitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n in 1:N # the matrix is the zeroth factor
+        function lipshitz_matrix(T::AbstractTucker; kwargs...)
+            matricies = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipshitz_matrix
@@ -221,7 +237,7 @@ end
 function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n==0 # the core is the zeroth factor
-        function gradient_core(T::Tucker; kwargs...)
+        function gradient_core(T::AbstractTucker; kwargs...)
             C = core(T)
             matricies = matrix_factors(T)
             gram_matricies = map(A -> A'A, matricies) # gram matricies AA = A'A, BB = B'B...
@@ -232,7 +248,24 @@ function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
         return gradient_core
 
     elseif n in 1:N # the matrix factors start at m=1
-        function gradient_matrix(T::Tucker; kwargs...)
+        function gradient_matrix(T::AbstractTucker; kwargs...)
+            matricies = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            An = factor(T, n)
+            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+            return grad
+        end
+        return gradient_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+
+function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n in 1:N # the matrix factors start at m=1
+        function gradient_matrix(T::AbstractTucker; kwargs...)
             matricies = matrix_factors(T)
             TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
             An = factor(T, n)
@@ -257,6 +290,7 @@ ConstraintUpdate(n, constraint::AbstractConstraint; kwargs...) = error("converti
 ConstraintUpdate(n, constraint::ProjectedNormalization; kwargs...) = Projection(n, constraint)
 ConstraintUpdate(n, constraint::ScaledNormalization; whats_rescaled=missing, kwargs...) = Rescale(n, constraint, whats_rescaled)
 ConstraintUpdate(n, constraint::EntryWise; kwargs...) = Projection(n, constraint)
+ConstraintUpdate(n, constraint::ComposedConstraint; kwargs...) = BlockedUpdate(ConstraintUpdate(n, constraint.inner; kwargs...), ConstraintUpdate(n, constraint.outer; kwargs...)) # note we apply inner constraint first
 
 check(_::ConstraintUpdate, _::AbstractDecomposition) = error("checking $(typeof(constraint)) is not yet supported")
 
@@ -316,6 +350,28 @@ function (U::Rescale{Missing})(x; kwargs...)
             continue
         end
         A .*= scale
+    end
+end
+
+function (U::Rescale{Missing})(x::CPDecomposition; kwargs...)
+    Fn_scale = U.scale(factor(x, U.n))
+    x_factors = factors(x)
+    N = length(x_factors) - 1
+
+    # Nothing to rescale, so return here
+    if N == 0
+        return nothing
+    end
+
+    # Assume we want to evenly rescale all other factors by the Nth root of Fn_scale
+    scale = Fn_scale .^ (1/N)
+    for (i, A) in zip(eachfactorindex(x), x_factors)
+        # skip over the factor we just updated
+        if i == U.n
+            continue
+        end
+        A_whats_normalized = U.scale.whats_normalized(A)
+        A_whats_normalized .*= scale
     end
 end
 #=
@@ -409,11 +465,25 @@ end
 BlockedUpdate(x::Tuple) = BlockedUpdate(x...)
 BlockedUpdate(x...) = BlockedUpdate(vcat(x...))
 
+function Base.getproperty(U::BlockedUpdate, sym::Symbol)
+    if sym === :n
+        if allequal(getproperty.(updates(U), :n))
+            return U[begin].n # can safely say U is just multiple updates on factor n
+        else
+            return throw(ErrorException("BlockedUpdate contains updates to multiple factor indicies:\n$(getproperty.(updates(U), :n))"))
+        end
+    else # fallback to other fields
+        return getfield(U, sym)
+    end
+end
+
 updates(U::BlockedUpdate) = U.updates
 
 # Forward methods to Vector so BlockedUpdate can behave like a Vector
 Base.getindex(U::BlockedUpdate, i::Int) = getindex(updates(U), i)
 Base.getindex(U::BlockedUpdate, I::Vararg{Int}) = getindex(updates(U), I...)
+Base.firstindex(U::BlockedUpdate) = firstindex(updates(U))
+Base.lastindex(U::BlockedUpdate) = lastindex(updates(U))
 Base.length(U::BlockedUpdate) = length(updates(U))
 Base.iterate(U::BlockedUpdate, state=1) = state > length(U) ? nothing : (U[state], state+1)
 

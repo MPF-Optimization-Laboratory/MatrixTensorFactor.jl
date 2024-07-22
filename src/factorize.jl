@@ -53,7 +53,7 @@ Handles all keywords and options, and sets defaults if not provided.
 
 # Keywords & Defaults
 ## Initialization
-- `decomposition`: `nothing`. Can provide a custom initialized AbstractDecomposition
+- `decomposition`: `nothing`. Can provide a custom initialized AbstractDecomposition. Note this exact decomposition is mutated.
 - `model`: `Tucker1`, but overridden by the type of AbstractDecomposition if given `decomposition`
 - `rank`: `1`, but overridden by the rank of AbstractDecomposition if given `decomposition`
 - `init`: `abs_randn` for nonnegative inputs `Y`, `randn` otherwise
@@ -65,15 +65,15 @@ Handles all keywords and options, and sets defaults if not provided.
 - `norm`: `l2norm`. Norm to use for statistics, can be unrelated to the objective
 - `random_order`: `false`. Perform the blocked updates in a random order each iteration
 
-Momentum
+## Momentum
 - `momentum`: `true`
 - `δ`: `0.9999`. Amount of momentum, between [0,1)
 - `previous_iterates`: `1`. Number of pervious iterates to save and use between iterations
 
-Constraints
+## Constraints
 - `constraints`: `nothing`. Can be a list of ConstraintUpdate, or just one
 
-Stats
+## Stats
 - `stats`: `[Iteration, ObjectiveValue, GradientNorm]` or in the case of nonnegative `Y`, `GradientNNCone` in place of `GradientNorm`
 - `converged`: `GradientNorm` or in the case of nonnegative `Y`, `GradientNNCone`. What stat(s) to use for convergence. Will converge is any one of the provided stats is below their respective tolerence
 - `tolerence`: `1`. A list the same length as `converged`
@@ -144,16 +144,22 @@ end
 """
 	parse_constraints(constraints, decomposition; kwargs...)
 
-Parses the constraints to make sure we have a valid list of ConstraintUpdate
+Parses the constraints to make sure we have a valid list of ConstraintUpdate.
+
 If only one AbstractConstraint is given, assume we want this constraint to apply to every
 factor in the decomposition, and make a ConstraintUpdate for each factor.
+
+If we are given a list of AbstractConstraint, assume we want them to apply to each factor
+of the decomposition in order.
 """
 function parse_constraints(constraints, decomposition; kwargs...)
 	# Base case
 	if all(c -> typeof(c) <: ConstraintUpdate, constraints)
 		return BlockedUpdate(constraints)
+	elseif all(c -> typeof(c) <: AbstractConstraint, constraints)
+		return BlockedUpdate([ConstraintUpdate(n, c; kwargs...) for (n,c) in zip(eachfactorindex(decomposition), constraints)])
 	else
-		throw(error("got a set of constraints I am not sure how to parse: $constraints"))
+		throw(error("Unsure how to parse the following set of constraints: $constraints"))
 	end
 end
 parse_constraints(constraints::Nothing, decomposition; kwargs...) = nothing
@@ -165,7 +171,7 @@ parse_constraints(constraints::AbstractConstraint, decomposition; kwargs...) =
 """The decomposition model Y will be factored into"""
 function initialize_decomposition(Y; decomposition, model, rank, kwargs...)
 	kwargs = Dict{Symbol,Any}(kwargs)
-	# have to add these keyword back since it was extracted by make_update
+	# have to add these keyword back since it was extracted by make_update # TODO check if I can safely remove these
 	kwargs[:model] = model
 	kwargs[:rank] = rank
 
@@ -272,6 +278,7 @@ function initialize_parameters(decomposition, Y, previous; momentum::Bool, kwarg
 											   # this ensures we only copy over the decomposition
 											   # once since updateparameters! happens before updateprevious!
 
+											   # This is commented since parameters[:x_last] already points to previous[begin]
 		# Momentum
 		if momentum
 			parameters[:t_last] = parameters[:t]

@@ -126,6 +126,28 @@ const VERBOSE = true
         l1normalize_cols!(A)
         @test A == [0 0 0 0; 0 0 0 0; 1 1 1 1]
     end
+
+    @testset "Composition" begin
+        c! = ∘(l1scaled_cols!, nnegative!)
+        @test typeof(c!) <: Function
+        @test typeof(c!) <: AbstractConstraint
+        @test typeof(c!) <: ComposedConstraint
+
+        v = [-1., -1., 2., 1., 2., 3.]
+        c!(v)
+        @test v ≈ [0.0, 0.0, 0.25, 0.125, 0.25, 0.375]
+        @test check(c!, v)
+
+        c! = ∘(nnegative!, l1scaled_cols!)
+        @test typeof(c!) <: Function
+        @test typeof(c!) <: AbstractConstraint
+        @test typeof(c!) <: ComposedConstraint
+
+        v = [-1., -1., 2., 1., 2., 3.]
+        c!(v)
+        @test v ≈ [0., 0., .2, .1, .2, .3]
+        @test_broken check(c!, v) # Only nonnegativity is satisfied. Entries do not sum to 1
+    end
 end
 
 @testset verbose=VERBOSE "SuperDiagonal" begin
@@ -168,6 +190,10 @@ end
         @test !(A === matrix_factor(G_copy,1))
         @test A == matrix_factor(G_deepcopy, 1)
         @test !(A === matrix_factor(G_deepcopy,1))
+        copy(Tucker((2,2,2), (1,1,1)))
+        copy(Tucker1((2,2,2), 1))
+        deepcopy(Tucker((2,2,2), (1,1,1)))
+        deepcopy(Tucker1((2,2,2), 1))
     end
 
     G = CPDecomposition((A, B))
@@ -249,6 +275,23 @@ end
 
 end
 
+@testset verbose=VERBOSE "BlockUpdates" begin
+    G1 = CPDecomposition((3,3,3), 2)
+    G2 = copy(G1)
+    U = ConstraintUpdate(2, l2normalize_cols!)
+
+    U(G1)
+    l2normalize_cols!(factor(G2, 2))
+
+    @test G1 ≈ G2
+
+    U = ConstraintUpdate(1, l2scaled! ∘ nnegative!)
+    @test U.n == 1
+
+    U = BlockedUpdate(ConstraintUpdate(1, l2normalize_cols!), ConstraintUpdate(2, nnegative!))
+    @test_broken U.n
+end
+
 @testset verbose=VERBOSE "BlockUpdatedDecomposition" begin
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
@@ -274,6 +317,17 @@ end
         constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
     );
 
+    # Quick test to make sure Tucker works
+    Y = Tucker((10,11,12), (2,3,4))
+    Y = array(Y)
+    decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2)
+
+    # Quick test to make sure Tucker works
+    Y = CPDecomposition((10,11,12), 3)
+    Y = array(Y)
+    decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
+
+    # Regular run of Tucker1
     C = abs_randn(5, 11, 12)
     A = abs_randn(10, 5)
     Y = Tucker1((C, A))
@@ -287,6 +341,8 @@ end
         constraints=nnegative!,
         stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError]
     );
+
+
 end
 
 end

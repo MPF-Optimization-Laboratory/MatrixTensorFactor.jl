@@ -6,8 +6,9 @@ using LinearAlgebra: ⋅, opnorm, Symmetric, mul!
 using DataFrames: DataFrame, nrow
 
 # Method Extentions
-using Base: copy, deepcopy, eltype, getindex, iterate, length, show, size, ndims
-using Base: +, -, *, /, \, ^
+using Base: copy, deepcopy, eltype, firstindex, getindex, getproperty, iterate, lastindex, length, show, size, ndims
+using Base: +, -, *, /, \ # AbstractDecomposition methods
+using Base: ∘ # AbstractConstraint methods
 using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
@@ -30,6 +31,7 @@ export AbstractConstraint
 export check
 
 export GenericConstraint
+export ComposedConstraint
 
 export ProjectedNormalization
 export l2normalize!, l2normalize_rows!, l2normalize_cols!, l2normalize_1slices!, l2normalize_12slices!
@@ -48,7 +50,7 @@ export l1norm, l2norm, linftynorm
 
 include("./stats.jl")
 export AbstractStat
-export EuclidianLipshitz, EuclidianStepSize, GradientNorm, GradientNNCone, IterateNormDiff, IterateRelativeDiff, Iteration, ObjectiveValue, ObjectiveRatio, RelativeError
+export EuclidianLipshitz, EuclidianStepSize, FactorNorms, GradientNorm, GradientNNCone, IterateNormDiff, IterateRelativeDiff, Iteration, ObjectiveValue, ObjectiveRatio, RelativeError
 
 include("./blockupdates.jl")
 export AbstractStep
@@ -58,7 +60,7 @@ export AbstractUpdate
 export GradientDescent, MomentumUpdate
 
 export ConstraintUpdate
-export Projection, Rescale
+export NNProjection, Projection, Rescale
 
 export BlockedUpdate
 export smart_insert!, smart_interlase!

@@ -61,7 +61,7 @@ getnotindex(A, I) = A[eachindex(A) .∉ (I,)]
 """
     swapdims(A::AbstractArray, a::Integer, b::Integer=1)
 
-Swap dimentions `a` and `b`.
+Swap dimensions `a` and `b`.
 """
 function swapdims(A::AbstractArray, a::Integer, b::Integer=1)
     dims = collect(1:ndims(A)) # TODO construct the permutation even more efficiently
@@ -158,7 +158,7 @@ isnonnegative(x::Real) = (x >= 0)
 
 L2 norm squared, the sum of squares of the entries of x.
 """
-norm2(x) = mapreduce(x -> x^2, +, x)
+norm2(x) = mapreduce(abs2, +, x)
 
 """
     interlace(u, v)

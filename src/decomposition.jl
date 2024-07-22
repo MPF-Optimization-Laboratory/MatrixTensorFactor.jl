@@ -162,7 +162,7 @@ struct Tucker{T, N} <: AbstractTucker{T, N}
         length(frozen) == length(factors) ||
             throw(ArgumentError("Tuple of frozen factors length $(length(frozen)) does not match number of factors $(length(factors))"))
 
-        new{T, N}(factors)
+        new{T, N}(factors, frozen)
     end
 end
 
@@ -215,7 +215,7 @@ end
 Tucker(factors::Tuple{Vararg{AbstractArray{T}}}, frozen=false_tuple(length(factors))) where T = Tucker{T, length(factors) - 1}(factors, frozen)
 #Tucker(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}, frozen=false_tuple(2)) where T = Tucker1(factors, frozen) # use the more specific struct
 Tucker1(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}, frozen=false_tuple(2)) where T = Tucker1{T, ndims(factors[1])}(factors, frozen)
-function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen=false_tuple(length(ranks)+1), init=DEFAULT_INIT) where N
+function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen=false_tuple(length(ranks)+1), init=DEFAULT_INIT, kwargs...) where N
     core = init(ranks)
     matrix_factors = init.(full_size, ranks)
     Tucker((core, matrix_factors...), frozen)
@@ -303,7 +303,7 @@ end
 
 # Constructor
 CPDecomposition(factors, frozen=false_tuple(length(factors))) = CPDecomposition{eltype(factors[begin]), length(factors)}(factors, frozen)
-function CPDecomposition(full_size::Tuple{Vararg{Integer}}, rank::Integer; frozen=false_tuple(length(full_size)), init=DEFAULT_INIT)
+function CPDecomposition(full_size::Tuple{Vararg{Integer}}, rank::Integer; frozen=false_tuple(length(full_size)), init=DEFAULT_INIT, kwargs...)
     factors = init.(full_size, rank)
     CPDecomposition(factors, frozen)
 end
@@ -331,6 +331,6 @@ rankof(CPD::CPDecomposition) = size(matrix_factors(CPD)[begin])[2]
 
 function Base.show(io::IO, CPD::CPDecomposition)
     println(io, size(CPD), " rank ", rankof(CPD), " ", typeof(CPD), ":")
-    display.(io, F)
+    display.(io, factors(CPD))
     return
 end

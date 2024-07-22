@@ -32,19 +32,60 @@ end
 
 check(C::GenericConstraint, A::AbstractArray) = (C.check)(A)
 
-# TODO should I be overloading the composition function like this?
-∘(f::AbstractConstraint, g::AbstractConstraint) = GenericConstraint(f.apply ∘ g.apply, bool_function_and(f.check, g.check))
-∘(f::AbstractConstraint, g::Function) = f.apply ∘ g
-∘(f::Function, g::AbstractConstraint) = f ∘ g.apply
-
-struct BoolFunctionAnd <: Function
-    f::Function
-    g::Function
+struct ComposedConstraint{T<:AbstractConstraint, U<:AbstractConstraint} <: AbstractConstraint
+    outer::T
+    inner::U
 end
 
-(F::BoolFunctionAnd)(x) = F.f(x) & F.g(x) # No short curcit to ensure any warnings are shown from both checks
+# Need to separate inner and outer into two lines
+# since (C.outer ∘ C.inner) would apply f=C.outer to the output of g=C.inner.
+# This is not nessesarily the mutated A.
+# For example, g = l1scaled! would divide A by the 1-norm of A,
+# and return the 1-norm of A, not A itself.
+function (C::ComposedConstraint)(A::AbstractArray)
+    C.inner(A)
+    C.outer(A)
+end
 
-bool_function_and(f::Function, g::Function) = BoolFunctionAnd(f, g)
+check(C::ComposedConstraint, A::AbstractArray) = check(C.outer, A) & check(C.inner, A)
+
+Base.:∘(f::AbstractConstraint, g::AbstractConstraint) = ComposedConstraint(f, g)
+
+# # TODO should I be overloading the composition function like this?
+# function Base.:∘(f::AbstractConstraint, g::AbstractConstraint)
+#     # Need to separate f.apply and g.apply into two lines
+#     # since (f.apply ∘ g.apply) would apply f to the output of g.
+#     # This is not nessesarily the result of g.apply.
+#     # For example, g = l1scaled! would divide X by the 1-norm of X,
+#     # and return the 1-norm of X, not X itself.
+#     function composition(X::AbstractArray)
+#         g(X)
+#         return f(X)
+#     end
+#     function composition_check(X::AbstractArray)
+#         return check(f, X) & check(g, X)
+#     end
+#     GenericConstraint(composition, composition_check)
+# end
+
+# Base.:∘(f::AbstractConstraint, g::Function) = f.apply ∘ g
+
+# function Base.:∘(f::Function, g::AbstractConstraint)
+#     function composition(X::AbstractArray)
+#         g.apply(X)
+#         return f(X)
+#     end
+#     return composition
+# end
+
+# struct BoolFunctionAnd <: Function
+#     f::Function
+#     g::Function
+# end
+
+# (F::BoolFunctionAnd)(x) = F.f(x) & F.g(x) # No short curcit to ensure any warnings are shown from both checks
+
+# bool_function_and(f::Function, g::Function) = BoolFunctionAnd(f, g)
 
 abstract type AbstractNormalization <: AbstractConstraint end
 

@@ -96,18 +96,22 @@ end
 
 EuclidianLipshitz(; steps, kwargs...) = EuclidianLipshitz{typeof(steps)}(steps)
 
+struct FactorNorms{T<:Function} <: AbstractStat
+    norm::T
+end
+FactorNorms(; norm, kwargs...) = FactorNorms(norm)
 
 function (S::Iteration)(_, _, _, parameters, stats)
     @assert nrow(stats) == parameters[:iteration] # make sure these don't drift for some reason
     return parameters[:iteration]
 end
-(S::GradientNorm)(X, _, _, _, _) = sqrt(mapreduce(g -> norm2(g(X)), +, S.gradients))
+(S::GradientNorm)(X, _, _, _, _) = sqrt(sum(g -> norm2(g(X)), S.gradients))
 function (S::GradientNNCone)(X, _, _, _, _)
     function d((A, g))
         grad = g(X)
         return norm2(@view grad[@. (A > 0) | (grad < 0)]) # faster to use full "or" rather than shortcutting "or" in this case
     end
-    return sqrt(mapreduce(d, +, zip(factors(X), S.gradients)))
+    return sqrt(sum(d, zip(factors(X), S.gradients)))
 end
 (S::ObjectiveValue)(X, Y, _, _, _) = S.objective(X, Y)
 (S::ObjectiveRatio)(X, Y, previous, _, _) = S.objective(previous[begin], Y) / S.objective(X, Y) # converged if < 1.01 say
@@ -118,5 +122,6 @@ end
 
 (S::IterateNormDiff)(X, _, previous, _, _) = S.norm(X - previous[begin])
 (S::IterateRelativeDiff)(X, _, previous, _, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
-(S::EuclidianStepSize)(X, _, _, _, _) = sqrt(mapreduce(calcstep -> calcstep(X)^2, +, S.steps))
-(S::EuclidianLipshitz)(X, _, _, _, _) = sqrt(mapreduce(calcstep -> calcstep(X)^(-2), +, S.steps))
+(S::EuclidianStepSize)(X, _, _, _, _) = sqrt(sum(calcstep -> calcstep(X)^2, S.steps))
+(S::EuclidianLipshitz)(X, _, _, _, _) = sqrt(sum(calcstep -> calcstep(X)^(-2), S.steps))
+(S::FactorNorms)(X, _, _, _, _) = S.norm.(factors(X))
