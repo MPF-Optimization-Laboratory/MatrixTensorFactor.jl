@@ -288,15 +288,33 @@ Converts an AbstractConstraint to a ConstraintUpdate on the factor n
 """
 ConstraintUpdate(n, constraint::AbstractConstraint; kwargs...) = error("converting $(typeof(constraint)) to a ConstraintUpdate is not yet supported")
 ConstraintUpdate(n, constraint::ProjectedNormalization; kwargs...) = Projection(n, constraint)
-ConstraintUpdate(n, constraint::ScaledNormalization; whats_rescaled=missing, kwargs...) = Rescale(n, constraint, whats_rescaled)
 ConstraintUpdate(n, constraint::EntryWise; kwargs...) = Projection(n, constraint)
-ConstraintUpdate(n, constraint::ComposedConstraint; kwargs...) = BlockedUpdate(ConstraintUpdate(n, constraint.inner; kwargs...), ConstraintUpdate(n, constraint.outer; kwargs...)) # note we apply inner constraint first
+
+function ConstraintUpdate(n, constraint::ScaledNormalization; skip_rescale=false, whats_rescaled=missing, kwargs...)
+    if skip_rescale
+        ismissing(whats_rescaled) || isnothing(whats_rescaled) || @warn "skip_rescale=true but whats_rescaled=$whats_rescaled was given. Overriding to whats_rescaled=nothing"
+        return Rescale(n, constraint, nothing)
+    else
+        return Rescale(n, constraint, whats_rescaled)
+    end
+end
+
+function ConstraintUpdate(n, constraint::ComposedConstraint; kwargs...)
+    if constraint.inner == nnegative! && typeof(constraint.outer) <: ScaledNormalization
+        norm = constraint.outer.norm
+        return BlockedUpdate(
+            SafeNNProjection(n, ProjectedNormalization(norm, makeNNprojection(norm); whats_normalized=constraint.outer.whats_normalized)),
+            ConstraintUpdate(n, constraint.outer; kwargs...))
+    else
+        return BlockedUpdate(ConstraintUpdate(n, constraint.inner; kwargs...), ConstraintUpdate(n, constraint.outer; kwargs...)) # note we apply inner constraint first
+    end
+end
 
 check(_::ConstraintUpdate, _::AbstractDecomposition) = error("checking $(typeof(constraint)) is not yet supported")
 
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
 struct Projection <: ConstraintUpdate
-    n::Integer
+    n::Integer # TODO should these be Int? Or do we parameterize the update types? Or does it not make a difference?
     proj::AbstractConstraint #ProjectedNormalization
 end
 
@@ -311,6 +329,33 @@ function (U::Projection)(x::T; kwargs...) where T
 end
 
 NNProjection(n) = Projection(n, nnegative!)
+
+struct SafeNNProjection <: ConstraintUpdate
+    n::Integer
+    backup::ProjectedNormalization
+end
+
+function (U::SafeNNProjection)(x::T; kwargs...) where T
+    n = U.n
+    if checkfrozen(x, n)
+        return x
+    end
+
+    A = factor(x, n)
+    @debug display(A)
+    for a in U.backup.whats_normalized(A)
+        if all(a .<= 0)
+            # "a" would be projected to the origin so apply the backup projection
+            U.backup.projection(a)
+        else
+            nnegative!(a)
+        end
+    end
+    @debug display(A)
+    check(U, x) || error("Something went wrong with SafeNNProjection using the backup projection: $(U.backup)")
+end
+
+check(S::SafeNNProjection, D::AbstractDecomposition) = check(nnegative!, factor(D, S.n)) && all(!iszero, S.backup.whats_normalized(factor(D, S.n)))
 
 struct Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
     n::Integer
@@ -332,18 +377,18 @@ function (U::Rescale{<:Function})(x; kwargs...)
 end
 
 (U::Rescale{Nothing})(x; kwargs...) = U.scale(factor(x, U.n))
-function (U::Rescale{Missing})(x; kwargs...)
+function (U::Rescale{Missing})(x; skip_rescale=false, kwargs...)
     Fn_scale = U.scale(factor(x, U.n))
     x_factors = factors(x)
     N = length(x_factors) - 1
 
     # Nothing to rescale, so return here
-    if N == 0
+    if N == 0 || skip_rescale # we keep this option so that we can always override the rescaling part, even after we've constructed the update
         return nothing
     end
 
     # Assume we want to evenly rescale all other factors by the Nth root of Fn_scale
-    scale = geomean(Fn_scale)^(1/N)
+    scale = geomean(Fn_scale)^(1/N) #TODO test this actually works
     for (i, A) in zip(eachfactorindex(x), x_factors)
         # skip over the factor we just updated
         if i == U.n
@@ -353,13 +398,13 @@ function (U::Rescale{Missing})(x; kwargs...)
     end
 end
 
-function (U::Rescale{Missing})(x::CPDecomposition; kwargs...)
+function (U::Rescale{Missing})(x::CPDecomposition; skip_rescale=false, kwargs...)
     Fn_scale = U.scale(factor(x, U.n))
     x_factors = factors(x)
     N = length(x_factors) - 1
 
     # Nothing to rescale, so return here
-    if N == 0
+    if N == 0 || skip_rescale # we keep this option so that we can always override the rescaling part, even after we've constructed the update
         return nothing
     end
 
@@ -482,10 +527,15 @@ updates(U::BlockedUpdate) = U.updates
 # Forward methods to Vector so BlockedUpdate can behave like a Vector
 Base.getindex(U::BlockedUpdate, i::Int) = getindex(updates(U), i)
 Base.getindex(U::BlockedUpdate, I::Vararg{Int}) = getindex(updates(U), I...)
+Base.getindex(U::BlockedUpdate, I) = getindex(updates(U), I) # catch all
 Base.firstindex(U::BlockedUpdate) = firstindex(updates(U))
 Base.lastindex(U::BlockedUpdate) = lastindex(updates(U))
+Base.keys(U::BlockedUpdate) = keys(updates(U))
 Base.length(U::BlockedUpdate) = length(updates(U))
 Base.iterate(U::BlockedUpdate, state=1) = state > length(U) ? nothing : (U[state], state+1)
+
+# for blcoekd update of ConstraintUpdate
+check(U::BlockedUpdate, D::AbstractDecomposition) = all(u -> check(u, D), U)
 
 function Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate)
     println(io, typeof(x), "(")

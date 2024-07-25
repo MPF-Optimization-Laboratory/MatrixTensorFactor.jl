@@ -91,6 +91,8 @@ false_tuple(n::Integer) = Tuple(fill(false, n))
 
 Projects (in Euclidian distance) the vector y into the simplex.
 
+See `projsplx!` for a mutating version.
+
 [1] Yunmei Chen and Xiaojing Ye, "Projection Onto A Simplex", 2011
 """
 function projsplx(y)
@@ -121,8 +123,42 @@ function projsplx(y)
     return ReLU.(y .- t)
 end
 
+function projsplx!(y)
+    y .= projsplx(y)
+end
+
+"""
+    proj_one_hot(x)
+
+Projects an array x to the closest one hot array: an array with all 0's except for a
+single 1. Does not mutate; see `proj_one_hot!` for a mutating version.
+
+This is not a unique projection if there are multiple largest entries. In this case, will
+pick one of the largest entries to be 1 and set the rest to zero.
+"""
+function proj_one_hot(x)
+    i = argmax(x)
+    onehot = zero(x)
+    onehot[i] = 1
+    return onehot
+end
+
+function proj_one_hot!(x)
+    i = argmax(x)
+    x .= 0
+    x[i] = 1
+    return x
+end
+
 """max(0,x)"""
 ReLU(x) = max(0,x)
+
+"""
+    x >= 0
+
+Will be a standard function in Base but using this for now: https://github.com/JuliaLang/julia/pull/53677
+"""
+isnonnegative(x) = x >= 0
 
 """
     identityslice(x::AbstractArray{T, N})

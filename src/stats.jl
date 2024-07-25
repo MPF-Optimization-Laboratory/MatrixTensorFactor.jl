@@ -65,6 +65,18 @@ end
 
 IterateRelativeDiff(; norm, kwargs...) = IterateRelativeDiff(norm)
 
+struct PrintStats <: AbstractStat
+    function PrintStats(; kwargs...) # must define it this way so the constructor can take (and ignore) kwargs
+        new()
+    end
+end
+
+struct DisplayDecomposition <: AbstractStat
+    function DisplayDecomposition(; kwargs...) # must define it this way so the constructor can take (and ignore) kwargs
+        new()
+    end
+end
+
 """
 The 2-norm of the stepsizes that would be taken for all blocks.
 
@@ -125,3 +137,9 @@ end
 (S::EuclidianStepSize)(X, _, _, _, _) = sqrt(sum(calcstep -> calcstep(X)^2, S.steps))
 (S::EuclidianLipshitz)(X, _, _, _, _) = sqrt(sum(calcstep -> calcstep(X)^(-2), S.steps))
 (S::FactorNorms)(X, _, _, _, _) = S.norm.(factors(X))
+(S::PrintStats)(_, _, _, parameters, stats) = if parameters[:iteration] > 0; println(last(stats)); end
+function (S::DisplayDecomposition)(X, _, _, parameters, _)
+    println("iteration ", parameters[:iteration])
+    display(X)
+    return nothing
+end

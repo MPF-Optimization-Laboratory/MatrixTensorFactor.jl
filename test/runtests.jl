@@ -11,41 +11,47 @@ using BlockTensorDecomposition
 
 const VERBOSE = true
 
-@testset verbose=true "BlockTensorDecomposition" begin
-    @testset verbose=VERBOSE "Utils" begin
-        @testset verbose=VERBOSE "interlace" begin
+@testset verbose=VERBOSE "BlockTensorDecomposition" begin
+    @testset "Utils" begin
+        @testset "interlace" begin
         @test interlace(1:10,10:15) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 8, 9, 10]
         @test interlace(1:5,10:20) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 15, 16, 17, 18, 19, 20]
         @test interlace(1:3, ("this", "that", "other")) == Any[1, "this", 2, "that", 3, "other"]
         end
 
-        @testset verbose=VERBOSE "norm2" begin
+        @testset "norm2" begin
             @test norm2([3, 4]) == 25
             @test norm2(1:10) == sum((1:10) .^ 2)
         end
 
-        @testset verbose=VERBOSE "geomean" begin
+        @testset "geomean" begin
             @test geomean(5) == 5
             @test geomean(2, 1/2) == 1
             @test geomean((1,2,3)) ≈ 1.8171205928321397
         end
 
-        @testset verbose=VERBOSE "getnotindex" begin
+        @testset "getnotindex" begin
             @test getnotindex(1:10, 5) == [1, 2, 3, 4, 6, 7, 8, 9, 10]
             @test getnotindex(1:10, (5, 8)) == [1, 2, 3, 4, 6, 7, 9, 10]
             @test getnotindex(1:10, [5, 8]) == [1, 2, 3, 4, 6, 7, 9, 10]
             @test getnotindex(1:10, 4:6) == [1, 2, 3, 7, 8, 9, 10]
         end
+
+        @testset "proj_one_hot" begin
+            @test proj_one_hot([-6,-4,0,2]) == [0, 0, 0, 1]
+            @test proj_one_hot([-6,-4,-1,-2]) == [0, 0, 1, 0]
+            @test proj_one_hot([-6.1,-4.2,-1.3,-2.4]) == [0., 0., 1., 0.]
+        end
     end
 
-    @testset verbose=VERBOSE "Products" begin
+    @testset "Products" begin
         A = randn(10, 20)
         B = randn(10, 20)
         @test all(slicewise_dot(A, A) .≈ A*A') # test this separately since it uses a different routine when the argument is the same
         @test all(slicewise_dot(A, B) .≈ A*B')
     end
 
-@testset verbose=VERBOSE "Constraints" begin
+@testset "Constraints" begin
     @testset "L1" begin
         v = collect(1:5)
         l1normalize!(v)
@@ -148,9 +154,14 @@ const VERBOSE = true
         @test v ≈ [0., 0., .2, .1, .2, .3]
         @test_broken check(c!, v) # Only nonnegativity is satisfied. Entries do not sum to 1
     end
+
+    @testset "Convertion" begin
+        @test ProjectedNormalization(l1scaled!) == l1normalize!
+        @test ScaledNormalization(l1normalize!) == l1scaled!
+    end
 end
 
-@testset verbose=VERBOSE "SuperDiagonal" begin
+@testset "SuperDiagonal" begin
     v = 1:10
     S = SuperDiagonal(v, 2)
     @test diag(S) === v
@@ -173,15 +184,14 @@ end
 
 end
 
-@testset verbose=VERBOSE "AbstractDecomposition" begin
-
+@testset "AbstractDecomposition" begin
     A = randn(3,3);
     B = randn(4,3);
     C = randn(5,3);
 
     G = CPDecomposition((A, B, C))
 
-    @testset verbose=VERBOSE "Copying" begin
+    @testset "Copying" begin
         G_copy = copy(G)
         G_deepcopy = deepcopy(G)
         @test A == matrix_factor(G,1)
@@ -196,13 +206,13 @@ end
         deepcopy(Tucker1((2,2,2), 1))
     end
 
+    G = SingletonDecomposition(A)
+
     G = CPDecomposition((A, B))
 
     G = Tucker((randn(3,3,3), A, B, C))
 
     @test rankof(G) == (3,3,3)
-
-
 
     G = Tucker1(([1 2]', [3 4]))
     @test size(G) == (1, 1)
@@ -213,7 +223,7 @@ end
 
     G = Tucker1((B', A)) # Can it handle types that are an abstract matrix like Ajoint
 
-    @test_throws ArgumentError Tucker((G, A)) # Can handle auto conversion to TuckerN in the future
+    @test_throws ArgumentError Tucker((G, A)) # Can handle auto conversion to TuckerN in the future??
 
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5; init=abs_randn); # check if other initilizations work
@@ -246,7 +256,7 @@ end
     G = CPDecomposition((A, B, C, D), frozen_factors)
     @test frozen(G) == frozen_factors
 
-    @testset verbose=VERBOSE "TuckerGradient" begin
+    @testset "TuckerGradient" begin
         T = Tucker((10,11,12), (3,4,5))
         Y = randn(10,11,12)
         C = core(T)
@@ -275,9 +285,9 @@ end
 
 end
 
-@testset verbose=VERBOSE "BlockUpdates" begin
+@testset "BlockUpdates" begin
     G1 = CPDecomposition((3,3,3), 2)
-    G2 = copy(G1)
+    G2 = deepcopy(G1)
     U = ConstraintUpdate(2, l2normalize_cols!)
 
     U(G1)
@@ -290,9 +300,42 @@ end
 
     U = BlockedUpdate(ConstraintUpdate(1, l2normalize_cols!), ConstraintUpdate(2, nnegative!))
     @test_broken U.n
+
+    A = [-1.8  2.0  0.5;
+          3.0 -4.0 -2.0;
+         -7.2 -5.1  6.3]
+    B = [0.0 2.0 0.5;
+         3.0 0.0 0.0;
+         0.0 0.0 6.3]
+    G = SingletonDecomposition(A)
+    H = SingletonDecomposition(A)
+
+    U = NNProjection(1)
+    U(G)
+    @test all(G .≈ H)
+    @test all(G .≈ B)
+    @test all(A .≈ B)
+
+    A = [-1.8  2.0  0.5;
+    3.0 4.0 -0.2;
+   -7.2 -5.1  0.6]
+    G = SingletonDecomposition(A)
+    U = ConstraintUpdate(1, l1scaled_cols! ∘ nnegative!)
+    U(G)
+    @test all(G .≈ [0.0 0.33333333 0.45454545; 1.0 0.66666667 0.0; 0.0 0.0 0.54545455])
+    @test check(U, G)
+
+    A = [-1.8  2.0  0.5;
+    3.0 4.0 -0.2;
+   -7.2 -5.1  0.6]
+    G = SingletonDecomposition(A)
+    U = ConstraintUpdate(1, simplex_cols!)
+    U(G)
+    @test all(G .≈ [0.0 0.0 0.45; 1.0 1.0 0.0; 0.0 0.0 0.55])
+    @test check(U, G)
 end
 
-@testset verbose=VERBOSE "BlockUpdatedDecomposition" begin
+@testset "BlockUpdatedDecomposition" begin
     G = Tucker1((10,11,12), 5);
     Y = Tucker1((10,11,12), 5);
     Y = array(Y);

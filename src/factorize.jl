@@ -43,6 +43,13 @@ function _factorize(Y; kwargs...)
 		updateprevious!(previous, parameters, decomposition)
 	end
 
+	# Perform one final constrain if requested
+	if kwargs[:constrain_output]
+		kwargs = finalconstrain!(decomposition; kwargs...)
+		updateparameters!(parameters, decomposition, previous)
+		push!(stats_data, getstats(decomposition, Y, previous, parameters, stats_data))
+	end
+
 	return decomposition, stats_data, kwargs
 end
 
@@ -72,12 +79,14 @@ Handles all keywords and options, and sets defaults if not provided.
 
 ## Constraints
 - `constraints`: `nothing`. Can be a list of ConstraintUpdate, or just one
+- `final_constraints`: `nothing`. Constraints to apply after the final iteration. Will apply `constraints` if `constrain_output` is `true` and none are given
+- `constrain_output`: `false`. Apply the `final_constraints`, will override to `true` if `final_constraints` are given
 
 ## Stats
 - `stats`: `[Iteration, ObjectiveValue, GradientNorm]` or in the case of nonnegative `Y`, `GradientNNCone` in place of `GradientNorm`
 - `converged`: `GradientNorm` or in the case of nonnegative `Y`, `GradientNNCone`. What stat(s) to use for convergence. Will converge is any one of the provided stats is below their respective tolerence
 - `tolerence`: `1`. A list the same length as `converged`
-- `maxiter`: `300`. Additional stopping criterion if the number of iterations exceeds this number
+- `maxiter`: `1000`. Additional stopping criterion if the number of iterations exceeds this number
 """
 function default_kwargs(Y; kwargs...)
 	# Set up kwargs as a dictionary
@@ -118,6 +127,10 @@ function default_kwargs(Y; kwargs...)
 
 	# Constraints
 	get!(kwargs, :constraints, nothing)
+	get!(kwargs, :final_constraints, nothing)
+	get!(kwargs, :constrain_output) do
+		isnothing(kwargs[:final_constraints]) ? false : true
+	end
 	# the rest of the constraint parsing is handled later, once the decomposition is initalized
 
 	# Stats
@@ -135,7 +148,7 @@ function default_kwargs(Y; kwargs...)
 	@assert all(s -> s <: AbstractStat, kwargs[:converged])
 	get!(kwargs, :tolerence, 1) # need one tolerence per stat
 	@assert length(kwargs[:tolerence]) == length(kwargs[:converged])
-	get!(kwargs, :maxiter, 300) # Iteration
+	get!(kwargs, :maxiter, 1000) # Iteration
 	@assert all(c -> c in kwargs[:stats], kwargs[:converged]) # more memory efficient that all(in.(kwargs[:converged], (kwargs[:stats],)))
 
     return kwargs
@@ -167,6 +180,34 @@ parse_constraints(constraints::Nothing, decomposition; kwargs...) = nothing
 # Assume we want this constraint to apply to every factor in this case
 parse_constraints(constraints::AbstractConstraint, decomposition; kwargs...) =
 	BlockedUpdate([ConstraintUpdate(n, constraints; kwargs...) for n in eachfactorindex(decomposition)])
+
+
+"""
+    finalconstrain!(decomposition; constraints, final_constraints, kwargs...)
+
+Applies final_constraints (or if its nothing, applies constraints) to the decomposition.
+
+Any RescaleUpdate are applied (the factor is scaled), but the rescaling of other factors is skipped.
+"""
+function finalconstrain!(decomposition; constraints, final_constraints, kwargs...)
+	kwargs = Dict{Symbol,Any}(kwargs)
+	kwargs[:constraints] = constraints # add extracted keyword back into kwargs since we are returning a modified kwargs
+
+	if isnothing(final_constraints)
+		kwargs[:final_constraints] = constraints
+		constraints(decomposition; skip_rescale=true, kwargs...) # apply the constraints one more time, skipping any rescaling
+	else
+		expanded_constraints! = parse_constraints(final_constraints, decomposition; kwargs...)
+		kwargs[:final_constraints] = expanded_constraints!
+		expanded_constraints!(decomposition; skip_rescale=true, kwargs...)
+		if !all(C -> check(C, decomposition), expanded_constraints!)
+			indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
+			error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
+		end
+	end
+
+	return NamedTuple(kwargs) # Freeze Dict into a NamedTuple
+end
 
 """The decomposition model Y will be factored into"""
 function initialize_decomposition(Y; decomposition, model, rank, kwargs...)
@@ -209,13 +250,13 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, k
 		expanded_constraints! = parse_constraints(constraints, decomposition; kwargs...)
 		kwargs[:constraints] = expanded_constraints! # save the expanded constraints
 		smart_interlace!(update!, expanded_constraints!)
-	end
 
-	if constrain_init
-		expanded_constraints!(decomposition)
-		if !all(C -> check(C, decomposition), expanded_constraints!)
-			indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
-			error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
+		if constrain_init
+			expanded_constraints!(decomposition; skip_rescale=true, kwargs...) # in the event we have a Rescale constraint, we just want the constrainted factor scaled, without moving the weights to the other factors
+			if !all(C -> check(C, decomposition), expanded_constraints!)
+				indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
+				error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
+			end
 		end
 	end
 

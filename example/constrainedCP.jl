@@ -2,48 +2,44 @@ using BlockTensorDecomposition
 using Random
 using UnicodePlots
 
-N = 10
+N = 100
 R = 5
-D = 3
+D = 2
 
 fact = BlockTensorDecomposition.factorize
 matricies = [abs_randn(N, R) for _ in 1:D]
-l1normalize_cols!.(matricies)
+l1scaled_cols!.(matricies)
 Ydecomp = CPDecomposition(Tuple(matricies))#abs_randn
 @assert all(check.(l1scaled_cols!, factors(Ydecomp)))
 Y = array(Ydecomp)
 
-X_absrandn = CPDecomposition((N,N,N), R; init=abs_randn)
-X_randexp = CPDecomposition((N,N,N), R; init=randexp)
+X_absrandn = CPDecomposition(ntuple(_ -> N, D), R; init=abs_randn)
+X_randexp = CPDecomposition(ntuple(_ -> N, D), R; init=randexp)
 
-decomposition_randn, stats_data_randn, kwargs = fact(Y;
-    decomposition=X_absrandn,
-    tolerence=.1,
-    maxiter=1,
-    converged=GradientNNCone,
-    constraints=l1scaled_cols! ∘ nnegative!, #[BlockedUpdate([ConstraintUpdate(n, nnegative!), ConstraintUpdate(n, l1scaled_cols!)]) for n in 1:D], #l1scaled_cols!, #[nnegative!, l1scaled_cols!, l1scaled_cols!],
-    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms]
-);
+options = (
+    tolerence=.01,
+    maxiter=1000,
+    converged=RelativeError,
+    constraints=[l1scaled_cols! ∘ nnegative!, simplex_cols!],
+    constrain_init=true,
+    constrain_output=true,
+    momentum=true,
+    final_constraints = l1scaled_cols!,
+    stats=[
+        Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms, EuclidianLipshitz
+    ],
+)
+
+decomposition_randn, stats_data_randn, kwargs = fact(Y; decomposition=X_absrandn, options...);
 
 #display(stats_data_randn[:, :RelativeError])
-lineplot(stats_data_randn[:, :RelativeError]) |> display
+lineplot(log10.(stats_data_randn[:, :RelativeError])) |> display
 
-decomposition_randexp, stats_data_randexp, kwargs = fact(Y;
-    decomposition=X_randexp,
-    tolerence=.1,
-    maxiter=100,
-    converged=GradientNNCone,
-    constraints=l1scaled_cols!,
-    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms]
-);
+decomposition_randexp, stats_data_randexp, kwargs = fact(Y; decomposition=X_randexp, options...);
 #display(stats_data_randexp[:, :RelativeError])
 
+lineplot(log10.(stats_data_randexp[:, :RelativeError])) |> display
 
-lineplot(stats_data_randexp[:, :RelativeError]) |> display
+@show stats_data_randn[end, :RelativeError], stats_data_randexp[end, :RelativeError]
 
 display(kwargs[:update])
-
-# using Pkg
-# Pkg.add("Plots")
-# using Plots
-# plot(stats_data[2:end, :EuclidianLipshitz], stats_data[2:end, :EuclidianStepSize])

@@ -5,6 +5,19 @@ Low level code for the types of constraints
 """Abstract parent type for the verious constraints"""
 abstract type AbstractConstraint <: Function end
 
+function Base.show(io::IO, X::AbstractConstraint)
+    print(io, typeof(X), "(", join((getfield(X, p) for p in propertynames(X)), ", "), ")")
+    return
+end
+
+function Base.show(io::IO, ::MIME"text/plain", X::AbstractConstraint)
+    println(io, typeof(X), "(")
+    for p in propertynames(X)
+        println(io, "  ", p, " = ", getfield(X, p))
+    end
+    print(io, ")")
+end
+
 """
     check(C::AbstractConstraint, A::AbstractArray)::Bool
 
@@ -105,6 +118,30 @@ end
 
 ProjectedNormalization(norm, projection; whats_normalized=identityslice)=ProjectedNormalization(norm, projection, whats_normalized)
 
+function makeprojection(norm)
+    if norm == l2norm
+        return l2project!
+    elseif norm == l1norm
+        return l1project!
+    elseif norm == linftynorm
+        return linftyproject!
+    else
+        throw(ArgumentError("Only l1, l2, lininity norms can be converted to a projection (SO FAR!)"))
+    end
+end
+
+function makeNNprojection(norm)
+    if norm == l1norm
+        return projsplx!
+
+    elseif norm in (l2norm, linftynorm)
+        return proj_one_hot!
+
+    else
+        throw(ArgumentError("Only l1, l2, lininity norms can be converted to a NNprojection (SO FAR!)"))
+    end
+end
+
 function (P::ProjectedNormalization)(A::AbstractArray)
     whats_normalized_A = P.whats_normalized(A)
     (P.projection).(whats_normalized_A)
@@ -147,6 +184,14 @@ const l1normalize_rows! = ProjectedNormalization(l1norm, l1project!; whats_norma
 const l1normalize_cols! = ProjectedNormalization(l1norm, l1project!; whats_normalized=eachcol)
 const l1normalize_1slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=1)))
 const l1normalize_12slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
+isnonnegative_sumtoone(x) = all(isnonnegative, x) && sum(x) ≈ 1
+
+const simplex! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!)
+const simplex_rows! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=eachrow)
+const simplex_cols! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=eachcol)
+const simplex_1slices! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=(x -> eachslice(x; dims=1)))
+const simplex_12slices! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
 linftynorm(x::AbstractArray) = maximum(abs, x)
 function linftyproject!(x::AbstractArray)
@@ -236,6 +281,15 @@ const linftyscaled_cols! = ScaledNormalization(linftynorm; whats_normalized=each
 const linftyscaled_1slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=1)))
 const linftyscaled_12slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
+# Convert between ScaledNormalization and ProjectedNormalization
+ScaledNormalization(P::ProjectedNormalization) = ScaledNormalization(P.norm; whats_normalized=P.whats_normalized)
+
+function ProjectedNormalization(S::ScaledNormalization{T}) where {T <: Real}
+    S.scale == 1 || throw(ArgumentError("Only a ScaledNormalization with scale 1 can be converted to a ProjectedNormalization; got $(S.scale)"))
+    ProjectedNormalization(S.norm, makeprojection(S.norm), S.whats_normalized)
+end
+
+
 """Entrywise constraint. Note both apply and check needs to be performed entrywise on an array"""
 struct EntryWise <: AbstractConstraint
     apply::Function
@@ -254,4 +308,16 @@ Checks if `A` is entrywise constrained
 """
 check(C::EntryWise, A::AbstractArray) = all((C.check).(A))
 
-const nnegative! = EntryWise(x -> max(0, x), x -> x >= 0)
+const nnegative! = EntryWise(ReLU, isnonnegative)
+
+IntervalConstraint(a, b) = EntryWise(x -> clamp(x, a, b), x -> a <= x <= b)
+
+function binaryproject(x)
+    if x > 0.5
+        return one(x)
+    else
+        return zero(x)
+    end
+end
+
+const binary! = EntryWise(binaryproject, x -> x in (0, 1)) # this is a 0, 1 tuple, not an open intervel
