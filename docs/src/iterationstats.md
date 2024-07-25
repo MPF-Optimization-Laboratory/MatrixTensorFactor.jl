@@ -15,4 +15,14 @@ ObjectiveRatio
 RelativeError
 IterateNormDiff
 IterateRelativeDiff
+EuclidianStepSize
+EuclidianLipshitz
+FactorNorms
+```
+
+The following are subtype of `AbstractStat` but are for auxiliary features.
+
+```docs
+PrintStats
+DisplayDecomposition
 ```

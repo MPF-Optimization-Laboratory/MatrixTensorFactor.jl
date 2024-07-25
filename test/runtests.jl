@@ -81,7 +81,7 @@ const VERBOSE = true
         @test all(A .≈ ones(2, 3) / 2)
 
         A = Array{Float64}(reshape(1:12, 3,2,2))
-        l1scaled_1slices!(A)
+        l1scale_1slices!(A)
         @test A ≈ [0.045454545454545456 0.18181818181818182; 0.07692307692307693 0.19230769230769232; 0.1 0.2;;; 0.3181818181818182 0.45454545454545453; 0.3076923076923077 0.4230769230769231; 0.3 0.4]
     end
 
@@ -134,7 +134,7 @@ const VERBOSE = true
     end
 
     @testset "Composition" begin
-        c! = ∘(l1scaled_cols!, nnegative!)
+        c! = ∘(l1scale_cols!, nonnegative!)
         @test typeof(c!) <: Function
         @test typeof(c!) <: AbstractConstraint
         @test typeof(c!) <: ComposedConstraint
@@ -144,7 +144,7 @@ const VERBOSE = true
         @test v ≈ [0.0, 0.0, 0.25, 0.125, 0.25, 0.375]
         @test check(c!, v)
 
-        c! = ∘(nnegative!, l1scaled_cols!)
+        c! = ∘(nonnegative!, l1scale_cols!)
         @test typeof(c!) <: Function
         @test typeof(c!) <: AbstractConstraint
         @test typeof(c!) <: ComposedConstraint
@@ -156,8 +156,8 @@ const VERBOSE = true
     end
 
     @testset "Convertion" begin
-        @test ProjectedNormalization(l1scaled!) == l1normalize!
-        @test ScaledNormalization(l1normalize!) == l1scaled!
+        @test ProjectedNormalization(l1scale!) == l1normalize!
+        @test ScaledNormalization(l1normalize!) == l1scale!
     end
 end
 
@@ -295,10 +295,10 @@ end
 
     @test G1 ≈ G2
 
-    U = ConstraintUpdate(1, l2scaled! ∘ nnegative!)
+    U = ConstraintUpdate(1, l2scale! ∘ nonnegative!)
     @test U.n == 1
 
-    U = BlockedUpdate(ConstraintUpdate(1, l2normalize_cols!), ConstraintUpdate(2, nnegative!))
+    U = BlockedUpdate(ConstraintUpdate(1, l2normalize_cols!), ConstraintUpdate(2, nonnegative!))
     @test_broken U.n
 
     A = [-1.8  2.0  0.5;
@@ -320,7 +320,7 @@ end
     3.0 4.0 -0.2;
    -7.2 -5.1  0.6]
     G = SingletonDecomposition(A)
-    U = ConstraintUpdate(1, l1scaled_cols! ∘ nnegative!)
+    U = ConstraintUpdate(1, l1scale_cols! ∘ nonnegative!)
     U(G)
     @test all(G .≈ [0.0 0.33333333 0.45454545; 1.0 0.66666667 0.0; 0.0 0.0 0.54545455])
     @test check(U, G)
@@ -350,14 +350,14 @@ end
     decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerence=Inf);
     # check constraints
     ## a single constraint, to be applied on every block
-    decomposition, stats_data = fact(Y; rank=5, constraints=nnegative!, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerence=Inf);
     ## a collection of constraints
     decomposition, stats_data = fact(Y; rank=5, tolerence=Inf,
-        constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
+        constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
     );
     ## check if you can constrain the initialization
     decomposition, stats_data = fact(Y; rank=5, tolerence=Inf, constrain_init=true,
-        constraints=[ConstraintUpdate(0, nnegative!), ConstraintUpdate(0, l1scaled_12slices!), ConstraintUpdate(1, nnegative!)],
+        constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
     );
 
     # Quick test to make sure Tucker works
@@ -381,7 +381,7 @@ end
         tolerence=(2, 0.05),
         converged=(GradientNNCone, RelativeError),
         constrain_init=true,
-        constraints=nnegative!,
+        constraints=nonnegative!,
         stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError]
     );
 

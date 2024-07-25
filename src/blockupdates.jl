@@ -287,8 +287,9 @@ abstract type ConstraintUpdate <: AbstractUpdate end
 Converts an AbstractConstraint to a ConstraintUpdate on the factor n
 """
 ConstraintUpdate(n, constraint::AbstractConstraint; kwargs...) = error("converting $(typeof(constraint)) to a ConstraintUpdate is not yet supported")
+ConstraintUpdate(n, constraint::GenericConstraint; kwargs...) = GenericConstraintUpdate(n, constraint)
 ConstraintUpdate(n, constraint::ProjectedNormalization; kwargs...) = Projection(n, constraint)
-ConstraintUpdate(n, constraint::EntryWise; kwargs...) = Projection(n, constraint)
+ConstraintUpdate(n, constraint::Entrywise; kwargs...) = Projection(n, constraint)
 
 function ConstraintUpdate(n, constraint::ScaledNormalization; skip_rescale=false, whats_rescaled=missing, kwargs...)
     if skip_rescale
@@ -300,7 +301,7 @@ function ConstraintUpdate(n, constraint::ScaledNormalization; skip_rescale=false
 end
 
 function ConstraintUpdate(n, constraint::ComposedConstraint; kwargs...)
-    if constraint.inner == nnegative! && typeof(constraint.outer) <: ScaledNormalization
+    if constraint.inner == nonnegative! && typeof(constraint.outer) <: ScaledNormalization
         norm = constraint.outer.norm
         return BlockedUpdate(
             SafeNNProjection(n, ProjectedNormalization(norm, makeNNprojection(norm); whats_normalized=constraint.outer.whats_normalized)),
@@ -312,10 +313,27 @@ end
 
 check(_::ConstraintUpdate, _::AbstractDecomposition) = error("checking $(typeof(constraint)) is not yet supported")
 
+struct GenericConstraintUpdate <: ConstraintUpdate
+    n::Integer
+    constraint::GenericConstraint
+end
+
+check(U::GenericConstraintUpdate, D::AbstractDecomposition) = check(U.constraint, factor(D, U.n))
+
+function (U::GenericConstraintUpdate)(x::T; kwargs...) where T
+    n = U.n
+    if checkfrozen(x, n)
+        return x
+    end
+    A = factor(x, n)
+    U.constraint(A)
+    check(U, A) || error("Something went wrong with GenericConstraintUpdate: $GenericConstraintUpdate")
+end
+
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""
 struct Projection <: ConstraintUpdate
     n::Integer # TODO should these be Int? Or do we parameterize the update types? Or does it not make a difference?
-    proj::AbstractConstraint #ProjectedNormalization
+    proj::Union{ProjectedNormalization, Entrywise} #ProjectedNormalization
 end
 
 check(P::Projection, D::AbstractDecomposition) = check(P.proj, factor(D, P.n))
@@ -328,7 +346,7 @@ function (U::Projection)(x::T; kwargs...) where T
     U.proj(factor(x, n))
 end
 
-NNProjection(n) = Projection(n, nnegative!)
+NNProjection(n) = Projection(n, nonnegative!)
 
 struct SafeNNProjection <: ConstraintUpdate
     n::Integer
@@ -348,15 +366,35 @@ function (U::SafeNNProjection)(x::T; kwargs...) where T
             # "a" would be projected to the origin so apply the backup projection
             U.backup.projection(a)
         else
-            nnegative!(a)
+            nonnegative!(a)
         end
     end
     @debug display(A)
     check(U, x) || error("Something went wrong with SafeNNProjection using the backup projection: $(U.backup)")
 end
 
-check(S::SafeNNProjection, D::AbstractDecomposition) = check(nnegative!, factor(D, S.n)) && all(!iszero, S.backup.whats_normalized(factor(D, S.n)))
+check(S::SafeNNProjection, D::AbstractDecomposition) = check(nonnegative!, factor(D, S.n)) && all(!iszero, S.backup.whats_normalized(factor(D, S.n)))
 
+"""
+    Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
+    Rescale(n, scale::ScaledNormalization, whats_rescaled::T)
+
+Applies the scaled normalization `scale` to factor `n`, and tries to multiply the scaling of
+factor `n` to other factors.
+
+If `whats_rescaled=nothing`, then it will not rescale any other factor.
+
+If `whats_rescaled=missing`, then it will try to evenly distribute the weight to all other
+factors using the (N-1) root of each weight where N is the number of factors. If the weights
+are not brodcastable, (e.g. you want to scale each row but each factor has a different number
+of rows), will use the geometric mean of the weights as the single weight to distribute evenly
+among the other factors.
+
+If `typeof(whats_rescaled) <: Function`, will broadcast the weight to the output of calling
+this function on the entire decomposition. For example,
+    `whats_rescale = x -> eachcol(factor(x, 2))`
+will rescale each column of the second factor of the decomposition.
+"""
 struct Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
     n::Integer
     scale::ScaledNormalization

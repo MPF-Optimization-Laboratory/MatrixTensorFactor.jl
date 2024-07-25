@@ -1,7 +1,7 @@
 """
 An AbstractStat is a type which, when created, can be applied to the four arguments
 (X::AbstractDecomposition, Y::AbstractArray, previous::Vector{<:AbstractDecomposition}, parameters::Dict)
-to return a number.
+to (usually) return a number.
 """
 abstract type AbstractStat <: Function end
 
@@ -65,12 +65,22 @@ end
 
 IterateRelativeDiff(; norm, kwargs...) = IterateRelativeDiff(norm)
 
+"""
+    PrintStats(; kwargs...)
+
+Does not use any of the kwargs. Simply prints the most recent row of the stats.
+"""
 struct PrintStats <: AbstractStat
     function PrintStats(; kwargs...) # must define it this way so the constructor can take (and ignore) kwargs
         new()
     end
 end
 
+"""
+    DisplayDecomposition(; kwargs...)
+
+Does not use any of the kwargs. Simply displays the current iteration.
+"""
 struct DisplayDecomposition <: AbstractStat
     function DisplayDecomposition(; kwargs...) # must define it this way so the constructor can take (and ignore) kwargs
         new()
@@ -108,6 +118,11 @@ end
 
 EuclidianLipshitz(; steps, kwargs...) = EuclidianLipshitz{typeof(steps)}(steps)
 
+"""
+    FactorNorms(; norm, kwargs...)
+
+Makes a tuple containing the norm of each factor in the decomposition.
+"""
 struct FactorNorms{T<:Function} <: AbstractStat
     norm::T
 end

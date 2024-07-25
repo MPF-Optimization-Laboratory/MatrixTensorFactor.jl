@@ -13,7 +13,7 @@ decomposition, stats_data, kwargs = fact(Y;
     tolerence=(1, 0.03),
     converged=(GradientNNCone, RelativeError),
     constrain_init=true,
-    constraints=nnegative!,
+    constraints=nonnegative!,
     stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError, EuclidianLipshitz, EuclidianStepSize]
 );
 

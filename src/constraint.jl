@@ -28,8 +28,7 @@ function check(_::AbstractConstraint, _::AbstractArray); end
 """
     GenericConstraint <: AbstractConstraint
 
-General constraint. Simply applies apply and checks with check. Composing any two
-`AbstractConstraint`s will return this type.
+General constraint. Simply applies the function `apply` and checks it was successful with `check`.
 
 Calling a `GenericConstraint` on an `AbstractArray` will use the function in the
 field `apply`. Use `check(C::GenericConstraint, A)` to use the function in the field `check`.
@@ -45,6 +44,28 @@ end
 
 check(C::GenericConstraint, A::AbstractArray) = (C.check)(A)
 
+"""
+    NoConstraint() <: AbstractConstraint
+
+The constraint that does nothing. Useful for giving a list of AbstractConstraint for each factor
+where you would like one factor to be unconstrained.
+"""
+struct NoConstraint <: AbstractConstraint end
+
+check(::NoConstraint, ::AbstractArray) = true
+(::NoConstraint)(A::AbstractArray) = A
+
+const noconstraint = NoConstraint()
+
+"""
+    ComposedConstraint{T<:AbstractConstraint, U<:AbstractConstraint}
+    outer_constraint ∘ inner_constraint
+
+Composing any two `AbstractConstraint`s with `∘` will return this type.
+
+Applies the inner constraint first, then the outer constraint. Checking a ComposedConstraint
+will check both constraints are satisfied.
+"""
 struct ComposedConstraint{T<:AbstractConstraint, U<:AbstractConstraint} <: AbstractConstraint
     outer::T
     inner::U
@@ -53,7 +74,7 @@ end
 # Need to separate inner and outer into two lines
 # since (C.outer ∘ C.inner) would apply f=C.outer to the output of g=C.inner.
 # This is not nessesarily the mutated A.
-# For example, g = l1scaled! would divide A by the 1-norm of A,
+# For example, g = l1scale! would divide A by the 1-norm of A,
 # and return the 1-norm of A, not A itself.
 function (C::ComposedConstraint)(A::AbstractArray)
     C.inner(A)
@@ -69,7 +90,7 @@ Base.:∘(f::AbstractConstraint, g::AbstractConstraint) = ComposedConstraint(f, 
 #     # Need to separate f.apply and g.apply into two lines
 #     # since (f.apply ∘ g.apply) would apply f to the output of g.
 #     # This is not nessesarily the result of g.apply.
-#     # For example, g = l1scaled! would divide X by the 1-norm of X,
+#     # For example, g = l1scale! would divide X by the 1-norm of X,
 #     # and return the 1-norm of X, not X itself.
 #     function composition(X::AbstractArray)
 #         g(X)
@@ -259,27 +280,33 @@ check(S::ScaledNormalization, A::AbstractArray) = all((S.norm).(S.whats_normaliz
 
 ### Some standard rescaling ###
 
-const l2scaled! = ScaledNormalization(l2norm)
-const l2scaled_rows! = ScaledNormalization(l2norm; whats_normalized=eachrow)
-const l2scaled_cols! = ScaledNormalization(l2norm; whats_normalized=eachcol)
-const l2scaled_1slices! = ScaledNormalization(l2norm; whats_normalized=(x -> eachslice(x; dims=1)))
-const l2scaled_12slices! = ScaledNormalization(l2norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+const l2scale! = ScaledNormalization(l2norm)
+const l2scale_rows! = ScaledNormalization(l2norm; whats_normalized=eachrow)
+const l2scale_cols! = ScaledNormalization(l2norm; whats_normalized=eachcol)
+const l2scale_1slices! = ScaledNormalization(l2norm; whats_normalized=(x -> eachslice(x; dims=1)))
+const l2scale_12slices! = ScaledNormalization(l2norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
-const l1scaled! = ScaledNormalization(l1norm)
-const l1scaled_rows! = ScaledNormalization(l1norm; whats_normalized=eachrow)
-const l1scaled_cols! = ScaledNormalization(l1norm; whats_normalized=eachcol)
-const l1scaled_1slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=1)))
-const l1scaled_12slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+const l1scale! = ScaledNormalization(l1norm)
+const l1scale_rows! = ScaledNormalization(l1norm; whats_normalized=eachrow)
+const l1scale_cols! = ScaledNormalization(l1norm; whats_normalized=eachcol)
+const l1scale_1slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=1)))
+const l1scale_12slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
-const l1scaled_average12slices! = ScaledNormalization(l1norm;
+const linftyscale! = ScaledNormalization(linftynorm)
+const linftyscale_rows! = ScaledNormalization(linftynorm; whats_normalized=eachrow)
+const linftyscale_cols! = ScaledNormalization(linftynorm; whats_normalized=eachcol)
+const linftyscale_1slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=1)))
+const linftyscale_12slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
+const l1scale_average12slices! = ScaledNormalization(l1norm;
     whats_normalized=(x -> eachslice(x; dims=1)),
     scale=(A -> size(A)[2])) # the length of the second dimention "J"
-
-const linftyscaled! = ScaledNormalization(linftynorm)
-const linftyscaled_rows! = ScaledNormalization(linftynorm; whats_normalized=eachrow)
-const linftyscaled_cols! = ScaledNormalization(linftynorm; whats_normalized=eachcol)
-const linftyscaled_1slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=1)))
-const linftyscaled_12slices! = ScaledNormalization(linftynorm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+const l2scale_average12slices! = ScaledNormalization(l2norm;
+    whats_normalized=(x -> eachslice(x; dims=1)),
+    scale=(A -> size(A)[2])) # the length of the second dimention "J"
+const linftyscale_average12slices! = ScaledNormalization(linftynorm;
+    whats_normalized=(x -> eachslice(x; dims=1)),
+    scale=(A -> size(A)[2])) # the length of the second dimention "J"
 
 # Convert between ScaledNormalization and ProjectedNormalization
 ScaledNormalization(P::ProjectedNormalization) = ScaledNormalization(P.norm; whats_normalized=P.whats_normalized)
@@ -291,26 +318,26 @@ end
 
 
 """Entrywise constraint. Note both apply and check needs to be performed entrywise on an array"""
-struct EntryWise <: AbstractConstraint
+struct Entrywise <: AbstractConstraint
     apply::Function
     check::Function
 end
 
 """Make entrywise callable, by applying the constraint entrywise to arrays"""
-function (C::EntryWise)(A::AbstractArray)
+function (C::Entrywise)(A::AbstractArray)
     A .= (C.apply).(A)
 end
 
 """
-    check(C::EntryWise, A::AbstractArray)::Bool
+    check(C::Entrywise, A::AbstractArray)::Bool
 
 Checks if `A` is entrywise constrained
 """
-check(C::EntryWise, A::AbstractArray) = all((C.check).(A))
+check(C::Entrywise, A::AbstractArray) = all((C.check).(A))
 
-const nnegative! = EntryWise(ReLU, isnonnegative)
+const nonnegative! = Entrywise(ReLU, isnonnegative)
 
-IntervalConstraint(a, b) = EntryWise(x -> clamp(x, a, b), x -> a <= x <= b)
+IntervalConstraint(a, b) = Entrywise(x -> clamp(x, a, b), x -> a <= x <= b)
 
 function binaryproject(x)
     if x > 0.5
@@ -320,4 +347,4 @@ function binaryproject(x)
     end
 end
 
-const binary! = EntryWise(binaryproject, x -> x in (0, 1)) # this is a 0, 1 tuple, not an open intervel
+const binary! = Entrywise(binaryproject, x -> x in (0, 1)) # this is a 0, 1 tuple, not an open intervel

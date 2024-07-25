@@ -8,9 +8,9 @@ D = 2
 
 fact = BlockTensorDecomposition.factorize
 matricies = [abs_randn(N, R) for _ in 1:D]
-l1scaled_cols!.(matricies)
+l1scale_cols!.(matricies)
 Ydecomp = CPDecomposition(Tuple(matricies))#abs_randn
-@assert all(check.(l1scaled_cols!, factors(Ydecomp)))
+@assert all(check.(l1scale_cols!, factors(Ydecomp)))
 Y = array(Ydecomp)
 
 X_absrandn = CPDecomposition(ntuple(_ -> N, D), R; init=abs_randn)
@@ -20,11 +20,11 @@ options = (
     tolerence=.01,
     maxiter=1000,
     converged=RelativeError,
-    constraints=[l1scaled_cols! ∘ nnegative!, simplex_cols!],
+    constraints=[l1scale_cols! ∘ nonnegative!, simplex_cols!],
     constrain_init=true,
     constrain_output=true,
     momentum=true,
-    final_constraints = l1scaled_cols!,
+    final_constraints = l1scale_cols!,
     stats=[
         Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms, EuclidianLipshitz
     ],

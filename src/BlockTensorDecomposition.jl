@@ -33,6 +33,7 @@ export AbstractConstraint
 export check
 
 export GenericConstraint
+export NoConstraint, noconstraint
 export ComposedConstraint
 
 export ProjectedNormalization
@@ -42,13 +43,13 @@ export linftynormalize!, linftynormalize_rows!, linftynormalize_cols!, linftynor
 export simplex!, simplex_rows!, simplex_cols!, simplex_1slices!, simplex_12slices!
 
 export ScaledNormalization
-export l2scaled!, l2scaled_rows!, l2scaled_cols!, l2scaled_1slices!, l2scaled_12slices!
-export l1scaled!, l1scaled_rows!, l1scaled_cols!, l1scaled_1slices!, l1scaled_12slices!
+export l2scale!, l2scale_rows!, l2scale_cols!, l2scale_1slices!, l2scale_12slices!
+export l1scale!, l1scale_rows!, l1scale_cols!, l1scale_1slices!, l1scale_12slices!
 export linftynormalize!, linftynormalize_rows!, linftynormalize_cols!, linftynormalize_1slices!, linftynormalize_12slices!
-export l1scaled_average12slices!
+export l1scale_average12slices!, l2scale_average12slices!, linftyscale_average12slices!
 
-export EntryWise, IntervalConstraint
-export nnegative!, binary!, binaryproject
+export Entrywise, IntervalConstraint
+export nonnegative!, binary!, binaryproject
 export l1norm, l2norm, linftynorm
 
 include("./stats.jl")
@@ -63,13 +64,13 @@ export LipshitzStep, ConstantStep, SPGStep
 export AbstractUpdate
 export GradientDescent, MomentumUpdate
 
-export ConstraintUpdate
+export ConstraintUpdate, GenericConstraintUpdate
 export Projection, NNProjection, SafeNNProjection, Rescale
 
 export BlockedUpdate
 export smart_insert!, smart_interlase!
 
-#export block_gradient_decent, nn_block_gradient_decent, scaled_nn_block_gradient_decent, proj_nn_block_gradient_decent
+#export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
 include("./factorize.jl")

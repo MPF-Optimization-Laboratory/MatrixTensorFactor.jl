@@ -30,6 +30,7 @@ AbstractTucker
 
 ```docs
 GenericDecomposition
+SingletonDecomposition
 ```
 
 ## How Julia treats an AbstractDecomposition
