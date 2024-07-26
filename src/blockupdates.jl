@@ -143,11 +143,11 @@ function Base.show(io::IO, x::AbstractUpdate)
     print(io, "(")
     data = Any[]
     for p in propertynames(x)
-        if p == :n
+        if p in (:n, :proj, :scale) # Most verbose
             push!(data, getproperty(x, p))
-        elseif p in (:step, :proj)
+        elseif p in (:step, ) # Only show the type of this property
             push!(data, typeof(getproperty(x, p)))
-        else
+        else # Least verbose, just give the name of this property
             push!(data, p)
         end
     end
@@ -161,22 +161,27 @@ end
 
 (U::GenericUpdate)(x; kwargs...) = U.f(x; kwargs...)
 
-#=
-struct ProxGradientUpdate{T} <: AbstractUpdate{T}
-    gradientstep::Function
-    prox::AbstractConstraint
+function Base.getproperty(U::AbstractUpdate, sym::Symbol)
+    if sym === :n
+        try
+            return getfield(U, :n)
+        catch e
+            @debug "Got $e. $U does not have an assigned factor `n` it updates."
+            return nothing
+        end
+    else # fallback to other fields
+        return getfield(U, sym)
+    end
 end
-
-(U::ProxGradientUpdate{T})(x::T) = (U.prox ∘ U.gradientstep)(x)
-=#
 
 function checkfrozen(x, n)
     frozen = isfrozen(x, n)
     if frozen
-        @warn "Factor $n is frozen, skipping its update."
+        @debug "Factor $n is frozen, skipping its update."
     end
     return frozen
 end
+
 
 """
 Perform a Gradient decent step on the nth factor of an Abstract Decomposition x
@@ -457,42 +462,6 @@ function (U::Rescale{Missing})(x::CPDecomposition; skip_rescale=false, kwargs...
         A_whats_normalized .*= scale
     end
 end
-#=
-function Base.show(io::IO, ::MIME"text/plain", x::GradientDescent)
-    print(io, typeof(x))
-    print(io, "(", x.n, ", ...)")
-end
-
-function Base.show(io::IO, ::MIME"text/plain", x::ConstraintUpdate)
-    print(io, typeof(x))
-    print(io, "(", x.n, ", ...)")
-end
-=#
-
-#=
-struct MomentumUpdate <: AbstractUpdate
-    n::Integer
-    momentum::Function
-end
-
-function (U::MomentumUpdate)(x::T; x_last::T, kwargs...) where T
-    n = U.n
-    if checkfrozen(x, n)
-        return x
-    end
-    ω = U.momentum(x; kwargs...)
-    a, a_last = factor(x, n), factor(x_last, n)
-    @. a += ω * (a - a_last)
-end
-
-function make_momentum(_::Tucker1, n::Integer, Y::AbstractArray; kwargs...)
-    function momentum(T::Tucker1; ω, δ, lipshitz, L_last, kwargs...)
-        L = lipshitz(T)
-        return min(ω, δ * √(L_last/L)) # Safeguarded momentum step
-    end
-    return momentum
-end
-=#
 
 struct MomentumUpdate <: AbstractUpdate
     n::Integer
@@ -526,12 +495,7 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     a .*= 1 + ω
     a .-= ω .* a_last
 end
-#=
-function Base.show(io::IO, ::MIME"text/plain", x::MomentumUpdate)
-    print(io, typeof(x))
-    print(io, "(", x.n, ", ...)")
-end
-=#
+
 struct BlockedUpdate <: AbstractUpdate
     updates::Vector{AbstractUpdate}
     # Note I want exactly AbstractUpdate[] since I want to push any type of AbstractUpdate
@@ -553,7 +517,8 @@ function Base.getproperty(U::BlockedUpdate, sym::Symbol)
         if allequal(getproperty.(updates(U), :n))
             return U[begin].n # can safely say U is just multiple updates on factor n
         else
-            return throw(ErrorException("BlockedUpdate contains updates to multiple factor indicies:\n$(getproperty.(updates(U), :n))"))
+            @debug "BlockedUpdate contains updates to multiple factor indicies:\n$(getproperty.(updates(U), :n))"
+            return nothing #throw(ErrorException("BlockedUpdate contains updates to multiple factor indicies:\n$(getproperty.(updates(U), :n))"))
         end
     else # fallback to other fields
         return getfield(U, sym)
@@ -571,19 +536,22 @@ Base.lastindex(U::BlockedUpdate) = lastindex(updates(U))
 Base.keys(U::BlockedUpdate) = keys(updates(U))
 Base.length(U::BlockedUpdate) = length(updates(U))
 Base.iterate(U::BlockedUpdate, state=1) = state > length(U) ? nothing : (U[state], state+1)
+Base.filter(f, U::BlockedUpdate) = BlockedUpdate(filter(f, updates(U)))
 
-# for blcoekd update of ConstraintUpdate
+# for blocked update of ConstraintUpdate
 check(U::BlockedUpdate, D::AbstractDecomposition) = all(u -> check(u, D), U)
 
-function Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate)
+function Base.show(io::IO, x::BlockedUpdate)
     println(io, typeof(x), "(")
-    for u in x
-        println(io, "    ", u)
-    end
+    out = join(split(join(string.(updates(x)), "\n"), "\n"), "\n    ")
+
+    println(io, "    ", out)
     print(io, ")")
 end
 
-function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
+Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate) = show(io, x)
+
+function (U::BlockedUpdate)(x::T; recursive_random_order::Bool=false, random_order::Bool=recursive_random_order, kwargs...) where T
     U_updates = updates(U)
     if random_order
         order = shuffle(eachindex(U_updates))
@@ -592,7 +560,7 @@ function (U::BlockedUpdate)(x::T; random_order::Bool=false, kwargs...) where T
     end
 
     for update! in U_updates
-        update!(x; kwargs...)
+        update!(x; recursive_random_order, kwargs...) # note random_order does not get passed down
     end
 end
 
@@ -638,3 +606,22 @@ function smart_interlace!(U::BlockedUpdate, other_updates)
 end
 
 smart_interlace!(U::BlockedUpdate, V::BlockedUpdate) = smart_interlace!(U::BlockedUpdate, updates(V))
+
+"""
+    group_by_factor(blockedupdate::BlockedUpdate)
+
+Groups updates according to the factor they operate on.
+
+If blockedupdate contains other `BlockedUpdate`s, the inner updates are grouped when they
+all operate on the same factor.
+
+Updates which do not have an assigned factor are grouped together.
+
+The order which these groups appear in the output follows the same order as the first
+appearence of each unique factor that is operated on.
+"""
+function group_by_factor(blockedupdate::BlockedUpdate)
+    factor_labels = unique(getproperty(U, :n) for U in blockedupdate)
+    updates_by_factor = [filter(U -> U.n == n, blockedupdate) for n in factor_labels]
+    return BlockedUpdate(updates_by_factor)
+end

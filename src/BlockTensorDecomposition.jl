@@ -6,7 +6,7 @@ using LinearAlgebra: ⋅, opnorm, Symmetric, mul!
 using DataFrames: DataFrame, nrow
 
 # Method Extentions
-using Base: copy, deepcopy, eltype, firstindex, getindex, getproperty, iterate, keys, lastindex, length, show, size, ndims
+using Base: copy, deepcopy, eltype, filter, firstindex, getindex, getproperty, iterate, keys, lastindex, length, show, size, ndims
 using Base: +, -, *, /, \ # AbstractDecomposition methods
 using Base: ∘, convert # AbstractConstraint methods
 using LinearAlgebra: LinearAlgebra, diag
@@ -68,7 +68,8 @@ export ConstraintUpdate, GenericConstraintUpdate
 export Projection, NNProjection, SafeNNProjection, Rescale
 
 export BlockedUpdate
-export smart_insert!, smart_interlase!
+export updates
+export smart_insert!, smart_interlase!, group_by_factor
 
 #export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 

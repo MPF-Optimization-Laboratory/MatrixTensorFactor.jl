@@ -70,7 +70,9 @@ Handles all keywords and options, and sets defaults if not provided.
 ## Updates
 - `objective`: `L2()`. Objective to minimize
 - `norm`: `l2norm`. Norm to use for statistics, can be unrelated to the objective
-- `random_order`: `false`. Perform the blocked updates in a random order each iteration
+- `random_order`: `false`. Perform the updates in a random order each iteration, Overrides to `true` when `recursive_random_order=true`
+- `group_updates_by_factor`: `false`. Groups updates on the same factor together. Overrides to `true` when `random_order=true`. Useful when randomizing order of updates but you want to keep matching momentum-gradientstep-constraint together
+- `recursive_random_order`; `false`. Performs inner blocked updates (grouped updates) in a random order (recursively) each iteration. Note the outer most list of updates can be performed in order if `random_order=false`
 
 ## Momentum
 - `momentum`: `true`
@@ -118,7 +120,9 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :norm, l2norm) # norm to use for data fitting analysis
 	# note L2 <: AbstractObjective that takes two arguments L2()(X,Y) = norm2(X - Y)
 	# whereas l2norm takes a single argument l2norm(X) = sqrt(norm2(X))
-	# get!(kwargs, :random_order) # This default is handled by the BlockedUpdate struct
+	get!(kwargs, :recursive_random_order, false)
+	get!(kwargs, :random_order, kwargs[:recursive_random_order])
+	get!(kwargs, :group_updates_by_factor, kwargs[:random_order])
 
 	# Momentum
 	get!(kwargs, :momentum, true)
@@ -228,7 +232,7 @@ end
 What one iteration of the algorithm looks like.
 One iteration is likely a full cycle through each block or factor of the model.
 """
-function make_update!(decomposition, Y; momentum, constraints, constrain_init, kwargs...)
+function make_update!(decomposition, Y; momentum, constraints, constrain_init, group_updates_by_factor, kwargs...)
 	ns = eachfactorindex(decomposition)
 
 	kwargs = Dict{Symbol,Any}(kwargs)
@@ -236,6 +240,7 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, k
 	kwargs[:momentum] = momentum
 	kwargs[:constraints] = constraints
 	kwargs[:constrain_init] = constrain_init
+	kwargs[:group_updates_by_factor] = group_updates_by_factor
 
 	kwargs[:gradients] = [make_gradient(decomposition, n, Y; kwargs...) for n in ns]
 	kwargs[:steps] = [LipshitzStep(make_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
@@ -258,6 +263,10 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, k
 				error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
 			end
 		end
+	end
+
+	if group_updates_by_factor
+		update! = group_by_factor(update!)
 	end
 
 	kwargs[:update] = update!
@@ -296,7 +305,7 @@ function initialize_previous(decomposition, Y; previous_iterates::Integer, kwarg
 end
 
 """update parameters needed for the update"""
-function initialize_parameters(decomposition, Y, previous; momentum::Bool, kwargs...)
+function initialize_parameters(decomposition, Y, previous; momentum::Bool, random_order, recursive_random_order, kwargs...)
 	# parameters for the update step are symbol => value pairs
 	# they are held in a dictionary since we may mutate these for ex. the stepsize
 	parameters = Dict{Symbol, Any}()
@@ -304,6 +313,8 @@ function initialize_parameters(decomposition, Y, previous; momentum::Bool, kwarg
 	# General Looping
 	parameters[:iteration] = 0
 	parameters[:x_last] = previous[begin] # Last iterate
+	parameters[:random_order] = random_order
+	parameters[:recursive_random_order] = recursive_random_order
 
 	# Momentum
 	if momentum

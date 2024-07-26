@@ -299,7 +299,7 @@ end
     @test U.n == 1
 
     U = BlockedUpdate(ConstraintUpdate(1, l2normalize_cols!), ConstraintUpdate(2, nonnegative!))
-    @test_broken U.n
+    @test isnothing(U.n)
 
     A = [-1.8  2.0  0.5;
           3.0 -4.0 -2.0;
@@ -333,6 +333,16 @@ end
     U(G)
     @test all(G .≈ [0.0 0.0 0.45; 1.0 1.0 0.0; 0.0 0.0 0.55])
     @test check(U, G)
+
+    one = ConstraintUpdate(1, simplex!)
+    two = ConstraintUpdate(2, simplex!)
+    three = ConstraintUpdate(3, simplex!)
+    four = ConstraintUpdate(4, l1scale! ∘ nonnegative!)
+    other = BlockedUpdate([ConstraintUpdate(3, l2normalize!), ConstraintUpdate(1, l2normalize!)])
+    before_grouped = BlockedUpdate([two, one, two, four, three, one, other, three])
+
+    grouped_updates = group_by_factor(before_grouped)
+    @test [U.n for U in grouped_updates] == [2, 1, 4, 3, nothing]
 end
 
 @testset "BlockUpdatedDecomposition" begin
