@@ -63,20 +63,6 @@ const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective, :relati
 """
 const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipshitz, :spg))
 
-"""
-    MIN_STEP = 1e-10
-
-Minimum step size allowed for spg stepsize method.
-"""
-const MIN_STEP = 1e-10
-
-"""
-    MAX_STEP = 1e10
-
-Maximum step size allowed for spg stepsize method.
-"""
-const MAX_STEP = 1e10
-
 """Lists all implimented options"""
 const IMPLIMENTED_OPTIONS = Dict(
     "normalizations" => IMPLIMENTED_NORMALIZATIONS,

@@ -18,58 +18,6 @@ function Base.:*(A::AbstractMatrix, B::AbstractArray)
 end
 
 """
-    combined_norm(u, v, ...)
-
-Compute the combined norm of the arguments as if all arguments were part of one large array.
-
-This is equivilent to `norm(cat(u, v, ...))`, but this
-implimentation avoids creating an intermediate array.
-
-```jldoctest
-u = [3 0]
-v = [0 4 0]
-combined_norm(u, v)
-
-# output
-
-5.0
-```
-"""
-combined_norm(vargs...) = sqrt(sum(norm2, vargs))
-
-"""
-    rel_error(x, xhat)
-
-Compute the relative error between x (true value) and xhat (its approximation).
-
-The relative error is given by:
-```math
-\\frac{\\lVert \\hat{x} - x \\rVert}{\\lVert x \\rVert}
-```
-See also [`mean_rel_error`](@ref).
-"""
-function rel_error(xhat, x)
-    return sqrt(norm2(xhat - x) / norm2(x))
-end
-
-"""
-    mean_rel_error(X, Xhat; dims=(1,2))
-
-Compute the mean relative error between the dims-order slices of X and Xhat.
-
-The mean relative error is given by:
-```math
-\\frac{1}{N}\\sum_{j=1}^N\\frac{\\lVert \\hat{X}_j - X_j \\rVert}{\\lVert X_j \\rVert}
-```
-See also [`rel_error`](@ref).
-"""
-function mean_rel_error(Xhat, X; dims=(1,2))
-    hatslices = eachslice(Xhat; dims)
-    slices = eachslice(X; dims)
-    return mean(@. sqrt(norm2(hatslices - slices) / (norm2(slices))))
-end
-
-"""
     d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
 
 Approximates the 2nd derivative of a function using only given samples y of that function.
