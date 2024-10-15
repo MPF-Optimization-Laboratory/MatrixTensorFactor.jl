@@ -71,13 +71,19 @@ function _nnmtf_proxgrad(
         tol /= sqrt(problem_size) # match old tolerance
     end
     (stepsize == :lipshitz) || throw(ArgumentError("stepsize $stepsize is not implimented"))
+    (scaleBtoA == true) || @warn "scaleBtoA==false was considered in initialization, but not during iteration"
 
     #--- Transform them into something factorize can take ---#
     constraintA = parse_normalization_projection(normalizeA, projectionA, metricA)
     constraintB = parse_normalization_projection(normalizeB, projectionB, metricB)
 
     factorize_criterion = parse_criterion[criterion]
-    constrain_output = allequal((metric,metricA,metricB)) ? (metric == :L1) : false
+    constrain_output = false
+    if allequal((metric,metricA,metricB))
+        constrain_output = (metric == :L1)
+    else
+        @warn "(metric, metricA, metricB) = $((metric,metricA,metricB)) are not all the same, setting constrain_output=false"
+    end
     decomposition = Tucker1(B, A)
 
     #--- output = factorize(input) ---#
