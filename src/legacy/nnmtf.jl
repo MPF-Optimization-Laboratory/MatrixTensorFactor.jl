@@ -44,7 +44,7 @@ function _nnmtf_proxgrad(
         A = A_init
     end
 
-    if A_init === nothing
+    if B_init === nothing
         B = _init(R, Ns...)
     else
         size(B_init) == (R, Ns...) || throw(ArgumentError("A_init should have size $((R, Ns...)), got $(size(B_init))"))
@@ -67,6 +67,10 @@ function _nnmtf_proxgrad(
 
     #--- Additional Parse of arguments ---#
     normalizeB = normalize
+    if parse_criterion == :ncone
+        tol /= sqrt(problem_size) # match old tolerance
+    end
+    (stepsize == :lipshitz) || throw(ArgumentError("stepsize $stepsize is not implimented"))
 
     #--- Transform them into something factorize can take ---#
     constraintA = parse_normalization_projection(normalizeA, projectionA, metricA)
@@ -74,10 +78,12 @@ function _nnmtf_proxgrad(
 
     factorize_criterion = parse_criterion[criterion]
     constrain_output = allequal((metric,metricA,metricB)) ? (metric == :L1) : false
+    decomposition = Tucker1(B, A)
 
     #--- output = factorize(input) ---#
     X, stats, _ = factorize(Y;
         model=Tucker1,
+        decomposition,
         rank=R,
         stats=[Iteration, RelativeError, GradientNorm, GradientNNCone, ObjectiveValue],
         constraints=[constraintA, constraintB],
@@ -87,6 +93,7 @@ function _nnmtf_proxgrad(
         momentum,
         δ=delta,
         constrain_output,
+        constrain_init=false,
     )
 
     #--- Process output to return the same types as the old nntf ---#
@@ -98,13 +105,6 @@ function _nnmtf_proxgrad(
     dist_Ncone = stats[:, :GradientNNCone] |> collect
 
     #--- Old post processing ---#
-    # If using nnscale, A and B may only be aproximatly normalized. So we need to project A
-    # and B to the simplex to ensure they are exactly normalized.
-    if projection == :nnscale
-        metricA == :L1 ? proj!(A; projection=:simplex, metric=metricA, dims=to_dims(normalizeA)) : nothing
-        metricB == :L1 ? proj!(B; projection=:simplex, metric=metricB, dims=to_dims(normalize)) : nothing
-    end
-
     # Rescale B back if Y was initialy scaled
     # Only valid if we rescale fibres
     if rescale_Y && normalize == :fibres
