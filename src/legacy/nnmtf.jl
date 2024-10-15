@@ -29,6 +29,7 @@ function _nnmtf_proxgrad(
     A_init::Union{Nothing, AbstractMatrix}=nothing,
     B_init::Union{Nothing, AbstractArray}=nothing,
 )
+    #--- Legacy argument parsing ---#
     # Override scaling if no normalization is requested
     normalize == :nothing ? (rescale_AB = rescale_Y = false) : nothing
 
@@ -64,19 +65,25 @@ function _nnmtf_proxgrad(
         Y, factor_sums = rescaleY(Y; normalize, metric)
     end
 
-    #--- Parse arguments ---#
+    #--- Additional Parse of arguments ---#
     normalizeB = normalize
 
     #--- Transform them into something factorize can take ---#
     constraintA = parse_normalization_projection(normalizeA, projectionA, metricA)
     constraintB = parse_normalization_projection(normalizeB, projectionB, metricB)
 
+    factorize_criterion = parse_criterion[criterion]
+
     #--- output = factorize(input) ---#
     X, stats, _ = factorize(Y;
         model=Tucker1,
         rank=R,
-        stats=[RelativeError, GradientNorm, GradientNNCone],
+        stats=[Iteration, RelativeError, GradientNorm, GradientNNCone, ObjectiveValue],
         constraints=[constraintA, constraintB],
+        converged=factorize_criterion,
+        maxiter,
+        tolerence=tol,
+        momentum,
         #constrain_output=true,
     )
 
@@ -88,6 +95,7 @@ function _nnmtf_proxgrad(
     norm_grad = stats[:, :GradientNorm] |> collect
     dist_Ncone = stats[:, :GradientNNCone] |> collect
 
+    #--- Old post processing ---#
     # If using nnscale, A and B may only be aproximatly normalized. So we need to project A
     # and B to the simplex to ensure they are exactly normalized.
     if projection == :nnscale
@@ -108,6 +116,13 @@ function _nnmtf_proxgrad(
 
     return A, B, rel_errors, norm_grad, dist_Ncone
 end
+
+const parse_criterion = (
+    :ncone => GradientNNCone,
+    :iterates => Iteration,
+    :objective => ObjectiveValue,
+    :relativeerror => RelativeError,
+)
 
 const normalize_to_simplex_constraint = (
     :fibres => simplex_12slices!,
