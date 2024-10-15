@@ -442,7 +442,7 @@ function converged(; dist_Ncone, i, A, B, A_last, B_last, tol, problem_size, cri
         criterion_value = combined_norm(A - A_last, B - B_last)
 
     elseif criterion == :objective
-        criterion_value = 0.5 * norm(Yhat - Y)^2
+        criterion_value = 0.5 * norm2(Yhat - Y)
 
     elseif criterion == :relativeerror
         criterion_value = relative_error(Yhat, Y; normalize)

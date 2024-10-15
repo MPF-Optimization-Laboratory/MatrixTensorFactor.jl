@@ -71,8 +71,7 @@ combined_norm(u, v)
 5.0
 ```
 """
-combined_norm(vargs...) = sqrt(sum(_norm2, vargs))
-_norm2(x) = norm(x)^2
+combined_norm(vargs...) = sqrt(sum(norm2, vargs))
 
 """
     ReLU(x)
@@ -93,7 +92,7 @@ The relative error is given by:
 See also [`mean_rel_error`](@ref).
 """
 function rel_error(xhat, x)
-    return norm(xhat - x) / norm(x)
+    return sqrt(norm2(xhat - x) / norm2(x))
 end
 
 """
@@ -110,7 +109,7 @@ See also [`rel_error`](@ref).
 function mean_rel_error(Xhat, X; dims=(1,2))
     hatslices = eachslice(Xhat; dims)
     slices = eachslice(X; dims)
-    return mean(@. norm(hatslices - slices) / (norm(slices)))
+    return mean(@. sqrt(norm2(hatslices - slices) / (norm2(slices))))
 end
 
 """
