@@ -1,23 +1,6 @@
 """Short helpers and operations for MTF.jl"""
 
 """
-    Base.*(A::AbstractMatrix, B::AbstractArray)
-
-Computes the AbstractArray C where ``C_{i_1 i_2 \\dots i_d} = \\sum_{l=1}^L A_{i_1 l} * B_{l i_2 \\dots i_d}``.
-
-This is equivilent to the ``1``-mode product ``B \\times_1 A``.
-
-Generalizes @einsum C[i,j,k] := A[i,l] * B[l,j,k].
-"""
-function Base.:*(A::AbstractMatrix, B::AbstractArray)
-    sizeB = size(B)
-    Bmat = reshape(B, sizeB[1], :)
-    Cmat = A * Bmat
-    C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
-    return C
-end
-
-"""
     d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
 
 Approximates the 2nd derivative of a function using only given samples y of that function.
