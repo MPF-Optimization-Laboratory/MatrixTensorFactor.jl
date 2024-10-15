@@ -18,42 +18,6 @@ function Base.:*(A::AbstractMatrix, B::AbstractArray)
 end
 
 """
-    slicewise_dot(A::AbstractArray, B::AbstractArray)
-
-Constracts all but the first dimentions of A and B by performing a dot product over each `dim=1` slice.
-
-Generalizes `@einsum C[s,r] := A[s,j,k]*B[r,j,k]` to arbitrary dimentions.
-"""
-function slicewise_dot(A::AbstractArray, B::AbstractArray)
-    C = zeros(size(A)[1], size(B)[1]) # Array{promote_type(T, U), 2}(undef, size(A)[1], size(B)[1]) doesn't seem to be faster
-
-    if A === B # use the faster routine if they are the same array
-        return _slicewise_self_dot!(C, A)
-    end
-
-    for (i, A_slice) in enumerate(eachslice(A, dims=1))
-        for (j, B_slice) in enumerate(eachslice(B, dims=1))
-            C[i, j] = A_slice ⋅ B_slice
-        end
-    end
-    return C
-end
-
-function _slicewise_self_dot!(C, A)
-    enumerated_A_slices = enumerate(eachslice(A, dims=1))
-    for (i, Ai_slice) in enumerated_A_slices
-        for (j, Aj_slice) in enumerated_A_slices
-            if i > j
-                continue
-            else
-                C[i, j] = Ai_slice ⋅ Aj_slice
-            end
-        end
-    end
-    return Symmetric(C)
-end
-
-"""
     combined_norm(u, v, ...)
 
 Compute the combined norm of the arguments as if all arguments were part of one large array.
@@ -72,13 +36,6 @@ combined_norm(u, v)
 ```
 """
 combined_norm(vargs...) = sqrt(sum(norm2, vargs))
-
-"""
-    ReLU(x)
-
-Rectified linear unit; takes the max of 0 and x.
-"""
-ReLU(x) = max(0,x)
 
 """
     rel_error(x, xhat)
@@ -309,42 +266,6 @@ function standard_curvature(y::AbstractVector{<:Real}; kwargs...)
     dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
     dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
     return @. dy2_dx2 / (1 + dy_dx^2)^1.5
-end
-
-"""
-
-    projsplx(y::AbstractVector{<:Real})
-
-Projects (in Euclidian distance) the vector y into the simplex.
-
-[1] Yunmei Chen and Xiaojing Ye, "Projection Onto A Simplex", 2011
-"""
-function projsplx(y)
-    n = length(y)
-
-    if n==1 # quick exit for trivial length-1 "vectors" (i.e. scalars)
-        return [one(eltype(y))]
-    end
-
-    y_sorted = sort(y[:]) # Vectorize/extract input and sort all entries
-    i = n - 1
-    t = 0 # need to ensure t has scope outside the while loop
-    while true
-        t = (sum(@view y_sorted[i+1:end]) - 1) / (n-i)
-        if t >= y_sorted[i]
-            break
-        else
-            i -= 1
-        end
-
-        if i >= 1
-            continue
-        else # i == 0
-            t = (sum(y_sorted) - 1) / n
-            break
-        end
-    end
-    return ReLU.(y .- t)
 end
 
 """
