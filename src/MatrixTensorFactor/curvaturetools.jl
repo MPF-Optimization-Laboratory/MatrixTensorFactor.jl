@@ -1,4 +1,4 @@
-"""Short helpers and operations for MTF.jl"""
+"""Short helpers and operations related to finite differences and curavture"""
 
 """
     d2_dx2(y::AbstractVector{<:Real}; order::Integer=length(y))
