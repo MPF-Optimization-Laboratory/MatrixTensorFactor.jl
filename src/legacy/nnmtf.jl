@@ -73,6 +73,7 @@ function _nnmtf_proxgrad(
     constraintB = parse_normalization_projection(normalizeB, projectionB, metricB)
 
     factorize_criterion = parse_criterion[criterion]
+    constrain_output = allequal((metric,metricA,metricB)) ? (metric == :L1) : false
 
     #--- output = factorize(input) ---#
     X, stats, _ = factorize(Y;
@@ -84,7 +85,8 @@ function _nnmtf_proxgrad(
         maxiter,
         tolerence=tol,
         momentum,
-        #constrain_output=true,
+        δ=delta,
+        constrain_output,
     )
 
     #--- Process output to return the same types as the old nntf ---#
