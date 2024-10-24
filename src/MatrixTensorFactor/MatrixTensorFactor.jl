@@ -8,6 +8,15 @@ using Random: randn
 include("../Core/Core.jl")
 using .Core
 
+# include("../Core/utils.jl")
+# include("../Core/tensorproducts.jl")
+# include("../Core/decomposition.jl")
+# include("../Core/objective.jl")
+# include("../Core/constraint.jl")
+# include("../Core/stats.jl")
+# include("../Core/blockupdates.jl")
+# include("../Core/factorize.jl")
+
 export nnmtf, nnmtf_proxgrad_online # Functions
 export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 

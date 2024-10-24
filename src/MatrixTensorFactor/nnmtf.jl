@@ -72,31 +72,31 @@ const IMPLIMENTED_OPTIONS = Dict(
 )
 
 const parse_criterion = (
-    :ncone => GradientNNCone,
-    :iterates => Iteration,
-    :objective => ObjectiveValue,
-    :relativeerror => RelativeError,
+    ncone = GradientNNCone,
+    iterates = Iteration,
+    objective = ObjectiveValue,
+    relativeerror = RelativeError,
 )
 
 const normalize_to_simplex_constraint = (
-    :fibres => simplex_12slices!,
-    :slices => simplex_1slices!,
-    :rows => simplex_rows!,
-    :cols => simplex_cols!,
+    fibres = simplex_12slices!,
+    slices = simplex_1slices!,
+    rows = simplex_rows!,
+    cols = simplex_cols!,
 )
 
 const normalize_to_scaled_l1_constraint = (
-    :fibres => l1scale_12slices! ∘ nonnegative!,
-    :slices => l1scale_1slices! ∘ nonnegative!,
-    :rows => l1scale_rows! ∘ nonnegative!,
-    :cols => l1scale_cols! ∘ nonnegative!,
+    fibres = l1scale_12slices! ∘ nonnegative!,
+    slices = l1scale_1slices! ∘ nonnegative!,
+    rows = l1scale_rows! ∘ nonnegative!,
+    cols = l1scale_cols! ∘ nonnegative!,
 )
 
 const normalize_to_scaled_linfty_constraint = (
-    :fibres => linftyscale_12slices! ∘ nonnegative!,
-    :slices => linftyscale_1slices! ∘ nonnegative!,
-    :rows => linftyscale_rows! ∘ nonnegative!,
-    :cols => linftyscale_cols! ∘ nonnegative!,
+    fibres = linftyscale_12slices! ∘ nonnegative!,
+    slices = linftyscale_1slices! ∘ nonnegative!,
+    rows = linftyscale_rows! ∘ nonnegative!,
+    cols = linftyscale_cols! ∘ nonnegative!,
 )
 
 function parse_normalization_projection(normalize, projection, metric)
@@ -366,15 +366,15 @@ function _nnmtf_proxgrad(
     else
         @warn "(metric, metricA, metricB) = $((metric,metricA,metricB)) are not all the same, setting constrain_output=false"
     end
-    decomposition = Tucker1(B, A)
+    decomposition = Tucker1((B, A))
 
     #--- output = factorize(input) ---#
-    X, stats, _ = factorize(Y;
+    X, stats, kwargs = factorize(Y;
         model=Tucker1,
         decomposition,
         rank=R,
-        stats=[Iteration, RelativeError, GradientNorm, GradientNNCone, ObjectiveValue],
-        constraints=[constraintA, constraintB],
+        stats=[Iteration, RelativeError, GradientNorm, GradientNNCone, ObjectiveValue],#
+        constraints=[constraintB, constraintA],
         converged=factorize_criterion,
         maxiter,
         tolerence=tol,
@@ -388,9 +388,9 @@ function _nnmtf_proxgrad(
     # Use collect to ensure they are all plain array types
     A = matrix_factor(X, 1) |> collect
     B = core(X) |> collect
-    rel_errors = stats[:, :RelativeError] |> collect
-    norm_grad = stats[:, :GradientNorm] |> collect
-    dist_Ncone = stats[:, :GradientNNCone] |> collect
+    rel_errors = stats[:, Symbol(RelativeError)] |> collect
+    norm_grad = stats[:, Symbol(GradientNorm)] |> collect
+    dist_Ncone = stats[:, Symbol(GradientNNCone)] |> collect
 
     #--- Old post processing ---#
     # Rescale B back if Y was initialy scaled
@@ -403,6 +403,8 @@ function _nnmtf_proxgrad(
         B_lateral_slices = eachslice(B, dims=2)
         B_lateral_slices .*= factor_sums
     end
+
+    @show kwargs
 
     return A, B, rel_errors, norm_grad, dist_Ncone
 end
@@ -486,3 +488,5 @@ function _slice_rescale(Y)
     Y ./= slice_sums
     return Yscaled, slice_sums
 end
+
+mean(x) = sum(x) / length(x)

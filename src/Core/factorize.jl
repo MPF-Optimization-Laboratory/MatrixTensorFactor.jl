@@ -21,7 +21,7 @@ function _factorize(Y; kwargs...)
 	update!, kwargs = make_update!(decomposition, Y; kwargs...)
 
 	stats_data, getstats = initialize_stats(decomposition, Y, previous, parameters; kwargs...)
-
+	@show stats_data
 	converged = make_converged(; kwargs...)
 
 	kwargs = NamedTuple(kwargs) # freeze the kwargs from a Dictionary to a NamedTuple for type stability
@@ -277,7 +277,8 @@ end
 """The stats that will be saved every iteration"""
 function initialize_stats(decomposition, Y, previous, parameters; stats, kwargs...)
 	stat_functions = [S(; kwargs...) for S in stats] # construct the AbstractStats
-
+	#@show stat_functions
+	@show stats
 	getstats(decomposition, Y, previous, parameters, stats_data) =
 		Tuple(f(decomposition, Y, previous, parameters, stats_data) for f in stat_functions)
 
@@ -355,7 +356,7 @@ function make_converged(; converged, tolerence, maxiter, kwargs...)
 				@info "converged based on $(join(converged[indexes], ", ", " and ")) less than $(join(tolerence[indexes], ", ", " and "))"
 			end
 			return true
-		elseif stats_data[end, :Iteration] >= maxiter
+		elseif stats_data[end, Symbol(Iteration)] >= maxiter
 			@warn "maximum iteration $maxiter reached, without convergence"
 			return true
 		else

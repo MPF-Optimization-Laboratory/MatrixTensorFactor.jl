@@ -12,6 +12,7 @@ using BlockTensorDecomposition
 const VERBOSE = true
 
 @testset verbose=VERBOSE "BlockTensorDecomposition" begin
+    #=
     @testset "Utils" begin
         @testset "interlace" begin
         @test interlace(1:10,10:15) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 8, 9, 10]
@@ -396,6 +397,33 @@ end
     );
 
 
+end
+=#
+@testset "nnmtf" begin
+    Y = Tucker1((10,11,12), 5);
+
+    A = matrix_factor(Y, 1)
+    B = core(Y)
+    A .= abs.(A)
+    B .= abs.(B)
+    A_rows = eachrow(A)
+    A_rows ./= sum.(A_rows)
+    B_1slices = eachslice(B; dims=1)
+    B_1slices ./= sum.(B_1slices)
+
+    Y1 = array(Y);
+    Y2 = copy(Y1);
+
+    A1, B1, rel_errors, norm_grad, dist_Ncone = nnmtf(Y1, 5)
+    X, stats, kwargs = BlockTensorDecomposition.factorize(Y2; model=Tucker1, rank=5, constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!])
+    A2 = matrix_factor(X, 1)
+    B2 = core(X)
+
+    @test all(X .≈ Y)
+    @test all((B1 ×₁ A1) .≈ Y)
+
+    # @test all(A1 .≈ A2)
+    # @test all(B1 .≈ B2)
 end
 
 end

@@ -45,7 +45,7 @@ export simplex!, simplex_rows!, simplex_cols!, simplex_1slices!, simplex_12slice
 export ScaledNormalization
 export l2scale!, l2scale_rows!, l2scale_cols!, l2scale_1slices!, l2scale_12slices!
 export l1scale!, l1scale_rows!, l1scale_cols!, l1scale_1slices!, l1scale_12slices!
-export linftynormalize!, linftynormalize_rows!, linftynormalize_cols!, linftynormalize_1slices!, linftynormalize_12slices!
+export linftyscale!, linftyscale_rows!, linftyscale_cols!, linftyscale_1slices!, linftyscale_12slices!
 export l1scale_average12slices!, l2scale_average12slices!, linftyscale_average12slices!
 
 export Entrywise, IntervalConstraint
@@ -76,9 +76,5 @@ export smart_insert!, smart_interlase!, group_by_factor
 # High level / user-interface
 include("./factorize.jl")
 export factorize
-
-# Legacy code
-include("./legacy/MatrixTensorFactor.jl")
-using .MatrixTensorFactor
 
 end # module Core
