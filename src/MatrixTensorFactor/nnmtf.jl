@@ -409,7 +409,7 @@ function _nnmtf_proxgrad(
         B_lateral_slices .*= factor_sums
     end
 
-    @show kwargs
+    #@show kwargs
 
     return A, B, rel_errors, norm_grad, dist_Ncone
 end
