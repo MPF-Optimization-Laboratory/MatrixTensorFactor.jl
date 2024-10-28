@@ -251,12 +251,16 @@ function all_recursive(f, x)
     end
 
     if l == -1
-        return f(x) # assume x is a single element
+        return f(x) # assume x is a single element, and the length function is not defined
     elseif l == 0
         return true # vacuously true
     elseif l == 1
-        return f(first(x)) # using first to work on "scalars" like x=1 and "singletons" like x=[1] and x=(1,)
+        if first(x) == x # some scalar types have a defined length like 5, and π
+            return f(x)
+        else # we have a singlton like [2], [[2]], or [[[3], [1]]] and need to keep recursing
+            return all_recursive(f, first(x))
+        end
     else
-        return all(all_recursive(f, xi) for xi in x)
+        return all(all_recursive(f, xi) for xi in x) # use all to aggregate results
     end
 end

@@ -12,7 +12,7 @@ using BlockTensorDecomposition
 const VERBOSE = true
 
 @testset verbose=VERBOSE "BlockTensorDecomposition" begin
-    #=
+
     @testset "Utils" begin
         @testset "interlace" begin
         @test interlace(1:10,10:15) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 8, 9, 10]
@@ -50,8 +50,10 @@ const VERBOSE = true
             @test all_recursive(x -> typeof(x) <: Function, [(nonnegative!,), sin]) == true
             @test all_recursive(x -> x > 1, []) == true
             @test all_recursive(x -> x > 1, [[],[],[[]]]) == true
-            @test all_recursive(x -> x > 1, [[],[],[[]]]) == true
+            @test all_recursive(x -> x > 0, [[[[]]], [], [1], [[2]]]) == true
+            @test all_recursive(x -> x > 0, [[[[]]], [], [1], [[-1]]]) == false
             @test all_recursive(x -> x > 0, [1:10, 2:11, 3:5, [1:3, 2]]) == true
+            @test all_recursive(x -> x > 0, ((1,), ((2,),), ((3,),(4,)))) == true
             @test all_recursive(x -> x > 0, (1:10, 2:11, 3:5, [1:3, 2])) == true
             @test all_recursive(x -> x > 0, [1:10, 2:11, 3:5, (1:3, 2)]) == true
             @test all_recursive(x -> x > 0, [1:10, 2:11, [1:3, 2], 3:5]) == true
@@ -102,7 +104,7 @@ const VERBOSE = true
 
         A = randn(3,5,10) .|> abs
         l1scale_average12slices!(A)
-        @test all(sum(A; dims=1) .≈ 5)
+        @test all(sum(A; dims=(2,3)) .≈ 5)
         @test check(l1scale_average12slices!, A)
     end
 
@@ -438,7 +440,7 @@ end
 
 
 end
-=#
+
 @testset "nnmtf" begin
     R = 3
     Y = Tucker1((10,11,64), R);
