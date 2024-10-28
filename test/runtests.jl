@@ -43,6 +43,21 @@ const VERBOSE = true
             @test proj_one_hot([-6,-4,-1,-2]) == [0, 0, 1, 0]
             @test proj_one_hot([-6.1,-4.2,-1.3,-2.4]) == [0., 0., 1., 0.]
         end
+
+        @testset "all_recursive" begin
+            @test all_recursive(x -> typeof(x) <: Function, nonnegative!) == true
+            @test all_recursive(x -> typeof(x) <: Function, [nonnegative!, sin]) == true
+            @test all_recursive(x -> typeof(x) <: Function, [(nonnegative!,), sin]) == true
+            @test all_recursive(x -> x > 1, []) == true
+            @test all_recursive(x -> x > 1, [[],[],[[]]]) == true
+            @test all_recursive(x -> x > 1, [[],[],[[]]]) == true
+            @test all_recursive(x -> x > 0, [1:10, 2:11, 3:5, [1:3, 2]]) == true
+            @test all_recursive(x -> x > 0, (1:10, 2:11, 3:5, [1:3, 2])) == true
+            @test all_recursive(x -> x > 0, [1:10, 2:11, 3:5, (1:3, 2)]) == true
+            @test all_recursive(x -> x > 0, [1:10, 2:11, [1:3, 2], 3:5]) == true
+            @test all_recursive(x -> x > 0, collect.([1:10, 2:11, 3:5, [1:3, 2]])) == true
+            @test all_recursive(x -> x < 11, [1:10, 2:11, 3:5, [1:3, 2]]) == false
+        end
     end
 
     @testset "Products" begin
@@ -84,6 +99,11 @@ const VERBOSE = true
         A = Array{Float64}(reshape(1:12, 3,2,2))
         l1scale_1slices!(A)
         @test A ≈ [0.045454545454545456 0.18181818181818182; 0.07692307692307693 0.19230769230769232; 0.1 0.2;;; 0.3181818181818182 0.45454545454545453; 0.3076923076923077 0.4230769230769231; 0.3 0.4]
+
+        A = randn(3,5,10) .|> abs
+        l1scale_average12slices!(A)
+        @test all(sum(A; dims=1) .≈ 5)
+        @test check(l1scale_average12slices!, A)
     end
 
     @testset "L2" begin
@@ -232,6 +252,9 @@ end
     @test isfrozen(G, 0) == false # the core is not frozen
     @test isfrozen(G, 1) == false # the matrix factor A is not frozen
 
+    @test G[1] == array(G)[1] # vectorized indexing
+    @test G[1,1,1] == array(G)[1] # regular indexing
+
     # CPDecomposition test
     A = reshape(1:6, 3, 2)
     B = reshape(1:8, 4, 2)
@@ -245,6 +268,9 @@ end
 
     T = [361 434 507 580; 452 544 636 728; 543 654 765 876;;; 482 580 678 776; 604 728 852 976; 726 876 1026 1176;;;; 422 508 594 680; 529 638 747 856; 636 768 900 1032;;; 564 680 796 912; 708 856 1004 1152; 852 1032 1212 1392;;;; 483 582 681 780; 606 732 858 984; 729 882 1035 1188;;; 646 780 914 1048; 812 984 1156 1328; 978 1188 1398 1608;;;; 544 656 768 880; 683 826 969 1112; 822 996 1170 1344;;; 728 880 1032 1184; 916 1112 1308 1504; 1104 1344 1584 1824;;;; 605 730 855 980; 760 920 1080 1240; 915 1110 1305 1500;;; 810 980 1150 1320; 1020 1240 1460 1680; 1230 1500 1770 2040]
 
+    @test all(G[1] .== G[begin:1])
+    @test G[1] == 361
+    @test G[begin:1] == [361]
     @test array(G) == T
     @test ndims(G) == 4
     @test rankof(G) == 2
@@ -344,6 +370,12 @@ end
 
     grouped_updates = group_by_factor(before_grouped)
     @test [U.n for U in grouped_updates] == [2, 1, 4, 3, nothing]
+
+    X = Tucker1((10,11,64), 3)
+    core_constraint_update! = ConstraintUpdate(0, l1scale_average12slices! ∘ nonnegative!; whats_rescaled=(x -> eachcol(matrix_factor(x, 1))))
+    core_constraint_update!(X)
+
+    @test check(core_constraint_update!, X)
 end
 
 @testset "BlockUpdatedDecomposition" begin
@@ -371,12 +403,20 @@ end
         constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
     );
 
+    fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+        constraints=[l1scale_12slices! ∘ nonnegative!, nonnegative!],
+    ); # constraints are ok since l1scale_12slices! can be applied to the core (the 0th factor)
+
+    @test_broken fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+        constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!],
+    ); # the constraint l1scale_12slices! cannot be applied to a matrix (the 1st factor)
+
     # Quick test to make sure Tucker works
     Y = Tucker((10,11,12), (2,3,4))
     Y = array(Y)
     decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2)
 
-    # Quick test to make sure Tucker works
+    # Quick test to make sure CP works
     Y = CPDecomposition((10,11,12), 3)
     Y = array(Y)
     decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
@@ -400,7 +440,8 @@ end
 end
 =#
 @testset "nnmtf" begin
-    Y = Tucker1((10,11,12), 5);
+    R = 3
+    Y = Tucker1((10,11,64), R);
 
     A = matrix_factor(Y, 1)
     B = core(Y)
@@ -408,19 +449,26 @@ end
     B .= abs.(B)
     A_rows = eachrow(A)
     A_rows ./= sum.(A_rows)
-    B_1slices = eachslice(B; dims=1)
+    B_1slices = eachslice(B; dims=(1,2))
     B_1slices ./= sum.(B_1slices)
 
     Y1 = array(Y);
     Y2 = copy(Y1);
 
-    A1, B1, rel_errors, norm_grad, dist_Ncone = nnmtf(Y1, 5)
-    X, stats, kwargs = BlockTensorDecomposition.factorize(Y2; model=Tucker1, rank=5, constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!])
+    core_constraint_update! = ConstraintUpdate(0, l1scale_average12slices! ∘ nonnegative!; whats_rescaled=(x -> eachcol(matrix_factor(x, 1))))
+
+    X, stats, kwargs = BlockTensorDecomposition.factorize(Y2;
+        model=Tucker1, rank=R, tolerence=0.001, converged=RelativeError,
+        constraints=[core_constraint_update!, ConstraintUpdate(1, nonnegative!)],
+        )
     A2 = matrix_factor(X, 1)
     B2 = core(X)
 
-    @test all(X .≈ Y)
-    @test all((B1 ×₁ A1) .≈ Y)
+    @test norm(X-Y1)/norm(Y1) <= 0.001 # less than 0.1% relative error
+
+    A1, B1, rel_errors, norm_grad, dist_Ncone = nnmtf(Y1, R)
+
+    @test norm((B1 ×₁ A1) - Y1)/ norm(Y1) <= 0.01 # expect less than 1% relative error (convergence criterion is GradientNNCone)
 
     # @test all(A1 .≈ A2)
     # @test all(B1 .≈ B2)

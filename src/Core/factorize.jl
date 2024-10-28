@@ -21,7 +21,7 @@ function _factorize(Y; kwargs...)
 	update!, kwargs = make_update!(decomposition, Y; kwargs...)
 
 	stats_data, getstats = initialize_stats(decomposition, Y, previous, parameters; kwargs...)
-	@show stats_data
+	#@show stats_data
 	converged = make_converged(; kwargs...)
 
 	kwargs = NamedTuple(kwargs) # freeze the kwargs from a Dictionary to a NamedTuple for type stability
@@ -64,7 +64,7 @@ Handles all keywords and options, and sets defaults if not provided.
 - `model`: `Tucker1`, but overridden by the type of AbstractDecomposition if given `decomposition`
 - `rank`: `1`, but overridden by the rank of AbstractDecomposition if given `decomposition`
 - `init`: `abs_randn` for nonnegative inputs `Y`, `randn` otherwise
-- `constrain_init`: `false`. Ensures the initalization satifies all given `constraints`
+- `constrain_init`: `true`. Ensures the initalization satifies all given `constraints`. Defaults to `false` if given `decomposition`
 - `freeze`: the default frozen factors of the `model`
 
 ## Updates
@@ -110,7 +110,7 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :init) do
 		isnonnegative(Y) ? abs_randn : randn
 	end
-	get!(kwargs, :constrain_init, false)
+	get!(kwargs, :constrain_init, isnothing(kwargs[:decomposition]))
 	# get!(kwargs, :freeze) # This default is handled by the model constructor
 							# freeze=(...) can still be provided to override the default
 
@@ -152,7 +152,9 @@ function default_kwargs(Y; kwargs...)
 	@assert all(s -> s <: AbstractStat, kwargs[:converged])
 	get!(kwargs, :tolerence, 1) # need one tolerence per stat
 	@assert length(kwargs[:tolerence]) == length(kwargs[:converged])
-	get!(kwargs, :maxiter, 1000) # Iteration
+	get!(kwargs, :maxiter, 1000) # maximum number of iterations
+
+	union!(kwargs[:stats], kwargs[:converged]) # add any missing converged criteria to stats
 	@assert all(c -> c in kwargs[:stats], kwargs[:converged]) # more memory efficient that all(in.(kwargs[:converged], (kwargs[:stats],)))
 
     return kwargs
@@ -171,7 +173,7 @@ of the decomposition in order.
 """
 function parse_constraints(constraints, decomposition; kwargs...)
 	# Base case
-	if all(c -> typeof(c) <: ConstraintUpdate, constraints)
+	if all_recursive(c -> typeof(c) <: ConstraintUpdate, constraints)
 		return BlockedUpdate(constraints)
 	elseif all(c -> typeof(c) <: AbstractConstraint, constraints)
 		return BlockedUpdate([ConstraintUpdate(n, c; kwargs...) for (n,c) in zip(eachfactorindex(decomposition), constraints)])
@@ -256,11 +258,18 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, g
 		kwargs[:constraints] = expanded_constraints! # save the expanded constraints
 		smart_interlace!(update!, expanded_constraints!)
 
-		if constrain_init
-			expanded_constraints!(decomposition; skip_rescale=true, kwargs...) # in the event we have a Rescale constraint, we just want the constrainted factor scaled, without moving the weights to the other factors
-			if !all(C -> check(C, decomposition), expanded_constraints!)
-				indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
+		decomposition_to_check = constrain_init ? decomposition : deepcopy(decomposition)
+
+		# Ensures 1) the constraints can be applied to the decomposition
+		# Also 2) enforces the constraint if constrain_init
+		expanded_constraints!(decomposition_to_check; skip_rescale=true, kwargs...) # in the event we have a Rescale constraint, we just want the constrainted factor scaled, without moving the weights to the other factors
+
+		if !all(C -> check(C, decomposition), expanded_constraints!)
+			indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
+			if constrain_init
 				error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
+			else
+				@warn "Initial decomposition does not satisfy the following constraints: $(expanded_constraints![indexes]). This may be ok if later iterations satisfy the constraints"
 			end
 		end
 	end
@@ -278,7 +287,7 @@ end
 function initialize_stats(decomposition, Y, previous, parameters; stats, kwargs...)
 	stat_functions = [S(; kwargs...) for S in stats] # construct the AbstractStats
 	#@show stat_functions
-	@show stats
+	#@show stats
 	getstats(decomposition, Y, previous, parameters, stats_data) =
 		Tuple(f(decomposition, Y, previous, parameters, stats_data) for f in stat_functions)
 

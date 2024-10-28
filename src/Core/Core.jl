@@ -13,7 +13,7 @@ using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
 include("./utils.jl")
-export SuperDiagonal, abs_randn, getnotindex, geomean, identityslice, interlace, norm2, proj_one_hot, projsplx, proj_one_hot!, projsplx!
+export SuperDiagonal, abs_randn, all_recursive, getnotindex, geomean, identityslice, interlace, norm2, proj_one_hot, projsplx, proj_one_hot!, projsplx!
 include("./tensorproducts.jl")
 export ×₁, nmp, nmode_product, mtt, slicewise_dot, tuckerproduct, cpproduct
 

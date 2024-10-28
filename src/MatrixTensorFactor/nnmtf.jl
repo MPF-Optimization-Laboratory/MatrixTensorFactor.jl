@@ -86,14 +86,14 @@ const normalize_to_simplex_constraint = (
 )
 
 const normalize_to_scaled_l1_constraint = (
-    fibres = l1scale_12slices! ∘ nonnegative!,
+    fibres = l1scale_average12slices! ∘ nonnegative!,
     slices = l1scale_1slices! ∘ nonnegative!,
     rows = l1scale_rows! ∘ nonnegative!,
     cols = l1scale_cols! ∘ nonnegative!,
 )
 
 const normalize_to_scaled_linfty_constraint = (
-    fibres = linftyscale_12slices! ∘ nonnegative!,
+    fibres = linftyscale_average12slices! ∘ nonnegative!,
     slices = linftyscale_1slices! ∘ nonnegative!,
     rows = linftyscale_rows! ∘ nonnegative!,
     cols = linftyscale_cols! ∘ nonnegative!,
@@ -359,6 +359,11 @@ function _nnmtf_proxgrad(
     constraintA = parse_normalization_projection(normalizeA, projectionA, metricA)
     constraintB = parse_normalization_projection(normalizeB, projectionB, metricB)
 
+    if projectionB == :nnscale # move the weights from the tensor B to the matrix A
+        constraintB = ConstraintUpdate(0, constraintB; whats_rescaled=(x -> eachcol(matrix_factor(x, 1))))
+        constraintA = ConstraintUpdate(1, constraintA) # need to wrap constraintA to match type of constraintB
+    end
+
     factorize_criterion = parse_criterion[criterion]
     constrain_output = false
     if allequal((metric,metricA,metricB))
@@ -381,7 +386,7 @@ function _nnmtf_proxgrad(
         momentum,
         δ=delta,
         constrain_output,
-        constrain_init=false,
+        constrain_init=true, # new to this version
     )
 
     #--- Process output to return the same types as the old nntf ---#

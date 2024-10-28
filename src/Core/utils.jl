@@ -154,13 +154,6 @@ end
 ReLU(x) = max(0,x)
 
 """
-    x >= 0
-
-Will be a standard function in Base but using this for now: https://github.com/JuliaLang/julia/pull/53677
-"""
-isnonnegative(x) = x >= 0
-
-"""
     identityslice(x::AbstractArray{T, N})
 
 Useful for returning an iterable with a single iterate x
@@ -185,6 +178,7 @@ abs_randn(x...) = abs.(randn(x...))
     isnonnegative(x::Real)
 
 Checks if all entries of X are bigger or equal to zero.
+Will be a standard function in Base but using this for now: https://github.com/JuliaLang/julia/pull/53677
 """
 isnonnegative(X::AbstractArray{<:Real}) = all(isnonnegative, X)
 isnonnegative(x::Real) = (x >= 0)
@@ -235,4 +229,34 @@ function multifoldl(ops, args)
         x = op(x, arg)
     end
     return x
+end
+
+"""
+    all_recursive(x)
+    all_recursive(f, x)
+
+Like `all` but checks recursively on nested types like arrays of vectors,
+tuples of sets of arrays, etc.
+"""
+all_recursive(x) = all_recursive(identity, x)
+
+function all_recursive(f, x)
+    l = -1
+    try
+        l = length(x)
+    catch e # If length is not defined, assume we have hit a single element
+        if !isa(e, MethodError)
+            throw(e) # throw any other errors
+        end
+    end
+
+    if l == -1
+        return f(x) # assume x is a single element
+    elseif l == 0
+        return true # vacuously true
+    elseif l == 1
+        return f(first(x)) # using first to work on "scalars" like x=1 and "singletons" like x=[1] and x=(1,)
+    else
+        return all(all_recursive(f, xi) for xi in x)
+    end
 end
