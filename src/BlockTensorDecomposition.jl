@@ -41,6 +41,7 @@ export l2normalize!, l2normalize_rows!, l2normalize_cols!, l2normalize_1slices!,
 export l1normalize!, l1normalize_rows!, l1normalize_cols!, l1normalize_1slices!, l1normalize_12slices!
 export linftynormalize!, linftynormalize_rows!, linftynormalize_cols!, linftynormalize_1slices!, l1normalize_12slices!
 export simplex!, simplex_rows!, simplex_cols!, simplex_1slices!, simplex_12slices!
+export l1scale_average12slices!
 
 export ScaledNormalization
 export l2scale!, l2scale_rows!, l2scale_cols!, l2scale_1slices!, l2scale_12slices!
@@ -74,6 +75,11 @@ export smart_insert!, smart_interlase!, group_by_factor
 #export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
+include("./MultiFactorize.jl")
+export MultiFactorizeSimplex
+export MultiFactorize
+
+
 include("./factorize.jl")
 export factorize
 
