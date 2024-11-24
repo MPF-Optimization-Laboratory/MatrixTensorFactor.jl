@@ -278,7 +278,8 @@ function (S::ScaledNormalization{T})(A::AbstractArray) where {T<:Function}
     return A_norm
 end
 
-check(S::ScaledNormalization, A::AbstractArray) = all((S.norm).(S.whats_normalized(A)) .≈ S.scale)
+check(S::ScaledNormalization{<:Union{Real,AbstractArray{<:Real}}}, A::AbstractArray) = all((S.norm).(S.whats_normalized(A)) .≈ S.scale)
+check(S::ScaledNormalization{<:Function}, A::AbstractArray) = all((S.norm).(S.whats_normalized(A)) .≈ S.scale(A))
 
 ### Some standard rescaling ###
 

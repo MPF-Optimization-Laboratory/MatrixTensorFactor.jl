@@ -289,6 +289,7 @@ eachfactorindex(D::AbstractTucker) = 0:(nfactors(D)-1) # 0 based, where core is 
 # Efficient size and indexing for CPDecomposition
 Base.size(T::Tucker) = map(x -> size(x)[1], matrix_factors(T))
 Base.size(T::Tucker1) = (size(matrix_factors(T)[begin])[1], size(core(T))[begin+1:end]...)
+Base.getindex(T::Tucker1, i::Int) = array(T)[i]
 function Base.getindex(T::Tucker1, I::Vararg{Int})
     G, A = factors(T)
     i = I[1]
@@ -350,7 +351,8 @@ core(CPD::CPDecomposition) = SuperDiagonal(ones(eltype(CPD), rankof(CPD)), ndims
 # Efficient size and indexing for CPDecomposition
 Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))
 # Example: CPD[i, j, k] = sum(A[i, :] .* B[j, :] .* C[k, :])
-Base.getindex(CPD::CPDecomposition, I::Vararg{Int})= sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
+Base.getindex(CPD::CPDecomposition, i::Int) = array(CPD)[i]
+Base.getindex(CPD::CPDecomposition, I::Vararg{Int}) = sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
 
 # Additional CPDecomposition interface
 """The single rank for a CP Decomposition"""

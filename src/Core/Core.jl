@@ -1,27 +1,34 @@
-module BlockTensorDecomposition
+module Core
 
-include("./Core/Core.jl")
+# Dependencies
+using Random: randn, rand, seed!, shuffle
+using LinearAlgebra: ⋅, opnorm, Symmetric, mul!
+using DataFrames: DataFrame, nrow
 
-using .Core
+# Method Extentions
+using Base: copy, deepcopy, eltype, filter, firstindex, getindex, getproperty, iterate, keys, lastindex, length, show, size, ndims
+using Base: +, -, *, /, \ # AbstractDecomposition methods
+using Base: ∘, convert # AbstractConstraint methods
+using LinearAlgebra: LinearAlgebra, diag
 
 # Basic functionality
-#include("./utils.jl")
+include("./utils.jl")
 export SuperDiagonal, abs_randn, all_recursive, getnotindex, geomean, identityslice, interlace, norm2, proj_one_hot, projsplx, proj_one_hot!, projsplx!
-#include("./tensorproducts.jl")
+include("./tensorproducts.jl")
 export ×₁, nmp, nmode_product, mtt, slicewise_dot, tuckerproduct, cpproduct
 
 # Low level types and interface
-#include("./decomposition.jl")
+include("./decomposition.jl")
 export array, contractions, core, eachfactorindex, factor, factors, frozen, isfrozen, matrix_factor, matrix_factors, rankof
 export AbstractDecomposition
 export GenericDecomposition, SingletonDecomposition
 export AbstractTucker, Tucker, Tucker1, CPDecomposition
 
-#include("./objective.jl")
+include("./objective.jl")
 export AbstractObjective
 export L2
 
-#include("./constraint.jl")
+include("./constraint.jl")
 export AbstractConstraint
 export check
 
@@ -34,7 +41,6 @@ export l2normalize!, l2normalize_rows!, l2normalize_cols!, l2normalize_1slices!,
 export l1normalize!, l1normalize_rows!, l1normalize_cols!, l1normalize_1slices!, l1normalize_12slices!
 export linftynormalize!, linftynormalize_rows!, linftynormalize_cols!, linftynormalize_1slices!, l1normalize_12slices!
 export simplex!, simplex_rows!, simplex_cols!, simplex_1slices!, simplex_12slices!
-export l1scale_average12slices!
 
 export ScaledNormalization
 export l2scale!, l2scale_rows!, l2scale_cols!, l2scale_1slices!, l2scale_12slices!
@@ -46,12 +52,12 @@ export Entrywise, IntervalConstraint
 export nonnegative!, binary!, binaryproject
 export l1norm, l2norm, linftynorm
 
-#include("./stats.jl")
+include("./stats.jl")
 export AbstractStat
 export DisplayDecomposition, EuclidianLipshitz, EuclidianStepSize, FactorNorms, GradientNorm, GradientNNCone
 export IterateNormDiff, IterateRelativeDiff, Iteration, ObjectiveValue, ObjectiveRatio, PrintStats, RelativeError
 
-#include("./blockupdates.jl")
+include("./blockupdates.jl")
 export AbstractStep
 export LipshitzStep, ConstantStep, SPGStep
 
@@ -68,29 +74,7 @@ export smart_insert!, smart_interlase!, group_by_factor
 #export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
-include("./MultiFactorize.jl")
-export MultiFactorizeSimplex
-export MultiFactorize
-
-
 include("./factorize.jl")
 export factorize
 
-# Legacy code
-include("./MatrixTensorFactor/MatrixTensorFactor.jl")
-using .MatrixTensorFactor
-
-export nnmtf, nnmtf_proxgrad_online # Functions
-export d_dx, d2_dx2, curvature, standard_curvature # Approximations
-
-export IMPLIMENTED_OPTIONS, IMPLIMENTED_NORMALIZATIONS, IMPLIMENTED_METRICS
-export IMPLIMENTED_PROJECTIONS, IMPLIMENTED_CRITERIA, IMPLIMENTED_STEPSIZES # implimented options
-
-include("./DensityEstimationTools/DensityEstimationTools.jl")
-using .DensityEstimationTools
-
-export DEFAULT_ALPHA, DEFAULT_N_SAMPLES
-export default_bandwidth, make_densities, make_densities2d, standardize_KDEs, standardize_2d_KDEs, filter_inner_percentile, filter_2d_inner_percentile # Functions
-export repeatcoord, kde2d, coordzip # 2d density estimation functions
-
-end # module BlockTensorDecomposition
+end # module Core
