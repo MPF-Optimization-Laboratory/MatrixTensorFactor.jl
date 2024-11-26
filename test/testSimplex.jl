@@ -1,6 +1,6 @@
 using BlockTensorDecomposition
 
-include("../test/SyntheticDataGenerator.jl")
+include("../src/SyntheticDataGenerator.jl")
 
 MultiFactorizeSimplex = BlockTensorDecomposition.MultiFactorizeSimplex
 fact = BlockTensorDecomposition.factorize 

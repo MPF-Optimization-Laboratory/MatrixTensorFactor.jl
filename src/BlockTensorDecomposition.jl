@@ -68,12 +68,12 @@ export smart_insert!, smart_interlase!, group_by_factor
 #export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
-include("./MultiFactorize.jl")
+include("./Core/MultiFactorize.jl")
 export MultiFactorizeSimplex
 export MultiFactorize
 
 
-include("./factorize.jl")
+include("./Core/factorize.jl")
 export factorize
 
 # Legacy code
