@@ -206,6 +206,7 @@ const l1normalize_cols! = ProjectedNormalization(l1norm, l1project!; whats_norma
 const l1normalize_1slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=1)))
 const l1normalize_12slices! = ProjectedNormalization(l1norm, l1project!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
 
+
 isnonnegative_sumtoone(x) = all(isnonnegative, x) && sum(x) ≈ 1
 
 const simplex! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!)
@@ -213,6 +214,7 @@ const simplex_rows! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; 
 const simplex_cols! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=eachcol)
 const simplex_1slices! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=(x -> eachslice(x; dims=1)))
 const simplex_12slices! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
 
 linftynorm(x::AbstractArray) = maximum(abs, x)
 function linftyproject!(x::AbstractArray)
@@ -292,6 +294,7 @@ const l1scale_rows! = ScaledNormalization(l1norm; whats_normalized=eachrow)
 const l1scale_cols! = ScaledNormalization(l1norm; whats_normalized=eachcol)
 const l1scale_1slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=1)))
 const l1scale_12slices! = ScaledNormalization(l1norm; whats_normalized=(x -> eachslice(x; dims=(1,2))))
+
 
 const linftyscale! = ScaledNormalization(linftynorm)
 const linftyscale_rows! = ScaledNormalization(linftynorm; whats_normalized=eachrow)
