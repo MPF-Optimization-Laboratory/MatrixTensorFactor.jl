@@ -77,4 +77,8 @@ export smart_insert!, smart_interlase!, group_by_factor
 include("./factorize.jl")
 export factorize
 
+include("./MultiFactorize.jl")
+export MultiFactorize
+export MultiFactorizeSimplex
+
 end # module Core
