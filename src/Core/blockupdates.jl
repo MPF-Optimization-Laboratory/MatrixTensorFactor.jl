@@ -33,7 +33,7 @@ end
 
 function (step::LipshitzStep)(x; kwargs...)
     L = step.lipshitz(x)
-    return 1/L
+    return L^(-1) # allow for Lipshitz to be a diagonal matrix
 end
 #LipshitzStep(L::Real) = 1/L
 
@@ -61,17 +61,17 @@ function make_lipshitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
     N = ndims(T)
     if n==0 # the core is the zeroth factor
         function lipshitz_core(T::AbstractTucker; kwargs...)
-            #matricies = matrix_factors(T)
-            #gram_matricies = map(A -> A'A, matricies)
-            #return prod(opnorm.(gram_matricies))
+            #matrices = matrix_factors(T)
+            #gram_matrices = map(A -> A'A, matrices)
+            #return prod(opnorm.(gram_matrices))
             return prod(A -> opnorm(A'A), matrix_factors(T))
         end
         return lipshitz_core
 
     elseif n in 1:N # the matrix is the zeroth factor
         function lipshitz_matrix(T::AbstractTucker; kwargs...)
-            matricies = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipshitz_matrix
@@ -85,8 +85,8 @@ function make_lipshitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objecti
     N = ndims(T)
     if n in 1:N # the matrix is the zeroth factor
         function lipshitz_matrix(T::AbstractTucker; kwargs...)
-            matricies = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipshitz_matrix
@@ -96,6 +96,25 @@ function make_lipshitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objecti
     end
 end
 
+function make_block_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function lipshitz0(T::Tucker1; kwargs...)
+            A = matrix_factor(T, 1)
+            return Diagonal(norm2.(eachcol(A)))
+        end
+        return lipshitz0
+
+    elseif n==1 # the matrix is the zeroth factor
+        function lipshitz1(T::Tucker1; kwargs...)
+            C = core(T)
+            return Diagonal(norm2.(eachslice(C; dims=1)))
+        end
+        return lipshitz1
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+end
 
 struct ConstantStep <: AbstractStep
     stepsize::Real
@@ -118,7 +137,7 @@ SPGStep(;min=1e-10, max=1e10) = SPGStep(min, max)
 # option to override the set defaults from step
 # TODO SPG has a linesearch/negative momentum update part to the fill iteration
 # but in the best case, this linesearch just uses the value given by this step
-# so I will skip implimenting it for now, but may want to add that once
+# so I will skip implementing it for now, but may want to add that once
 # I add a line search
 function (step::SPGStep)(x; grad, x_last, grad_last, stepmin=step.min, stepmax=step.max, kwargs...)
     s = x - x_last
@@ -182,6 +201,7 @@ function checkfrozen(x, n)
     return frozen
 end
 
+abstract type AbstractGradientDescent <: AbstractUpdate end
 
 """
 Perform a Gradient decent step on the nth factor of an Abstract Decomposition x
@@ -189,7 +209,7 @@ Perform a Gradient decent step on the nth factor of an Abstract Decomposition x
 The n is only to keep track of the factor that gets updated, and to check if a frozen
 factor was requested to be updated.
 """
-struct GradientDescent <: AbstractUpdate
+struct GradientDescent <: AbstractGradientDescent
     n::Integer
     gradient::Function
     step::AbstractStep
@@ -208,7 +228,7 @@ function (U::GradientDescent)(x; x_last, kwargs...)
 end
 
 function make_gradient(D::AbstractDecomposition, n::Integer, Y::AbstractArray; objective::AbstractObjective, kwargs...)
-    error("Gradient not implimented for ", typeof(D), " with ", typeof(objective), " objective")
+    error("Gradient not implemented for ", typeof(D), " with ", typeof(objective), " objective")
 end
 
 # Using this patter of inputs so that gradients for a generic decomposition could be calculated
@@ -219,7 +239,7 @@ function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
             (C, A) = factors(T)
             AA = A'A
             YA = Y×₁A'
-            grad = C×₁AA - YA # TODO define multiplication generaly
+            grad = C×₁AA - YA # TODO define multiplication generally
             return grad
         end
         return gradient0
@@ -244,18 +264,18 @@ function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
     if n==0 # the core is the zeroth factor
         function gradient_core(T::AbstractTucker; kwargs...)
             C = core(T)
-            matricies = matrix_factors(T)
-            gram_matricies = map(A -> A'A, matricies) # gram matricies AA = A'A, BB = B'B...
-            YAB = tuckerproduct(Y, adjoint.(matricies)) # Y ×₁ A' ×₂ B' ...
-            grad = tuckerproduct(C, gram_matricies) - YAB
+            matrices = matrix_factors(T)
+            gram_matrices = map(A -> A'A, matrices) # gram matrices AA = A'A, BB = B'B...
+            YAB = tuckerproduct(Y, adjoint.(matrices)) # Y ×₁ A' ×₂ B' ...
+            grad = tuckerproduct(C, gram_matrices) - YAB
             return grad
         end
         return gradient_core
 
     elseif n in 1:N # the matrix factors start at m=1
         function gradient_matrix(T::AbstractTucker; kwargs...)
-            matricies = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
             An = factor(T, n)
             grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
             return grad
@@ -271,8 +291,8 @@ function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objecti
     N = ndims(T)
     if n in 1:N # the matrix factors start at m=1
         function gradient_matrix(T::AbstractTucker; kwargs...)
-            matricies = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matricies, n); exclude=n)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
             An = factor(T, n)
             grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
             return grad
@@ -284,6 +304,51 @@ function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objecti
     end
 end
 
+"""
+Perform a Block Gradient decent step on the nth factor of an Abstract Decomposition x
+
+The n is only to keep track of the factor that gets updated, and to check if a frozen
+factor was requested to be updated.
+
+This type allows for more complicated step sizes such as individual steps for sub-blocks of
+the nth factor.
+"""
+struct BlockGradientDescent <: AbstractGradientDescent
+    n::Integer
+    gradient::Function
+    step::AbstractStep
+    combine::Function # takes a step (number, matrix, or tensor) and combines it with a gradient
+end
+
+function (U::BlockGradientDescent)(x; x_last, kwargs...)
+    n = U.n
+    if checkfrozen(x, n)
+        return x
+    end
+    grad = U.gradient(x; kwargs...)
+    # Note we pass a function for grad_last (lazy) so that we only compute it if needed for the step
+    s = U.step(x; n, x_last, grad, grad_last=(x -> U.gradient(x; kwargs...)), kwargs...)
+    a = factor(x, n)
+    @. a -= U.combine(grad, s)
+end
+
+function make_blockGD_combines(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function combine0(T::Tucker1; kwargs...)
+            return (grad, step) -> step * grad # need left matrix multiplication
+        end
+        return combine0
+
+    elseif n==1 # the matrix is the zeroth factor
+        function combine1(T::Tucker1; kwargs...)
+            return (grad, step) ->  grad * step # need right matrix multiplication
+        end
+        return combine1
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+end
 abstract type ConstraintUpdate <: AbstractUpdate end
 
 """
@@ -409,7 +474,7 @@ end
 check(S::Rescale, D::AbstractDecomposition) = check(S.scale, factor(D, S.n))
 
 function (U::Rescale{<:Function})(x; kwargs...)
-    # TODO possible have information about what gets rescaled withthe `ScaledNormalization`.
+    # TODO possible have information about what gets rescaled with the `ScaledNormalization`.
     # Right now, the scaling is only applied to arrays, not decompositions, so the information
     # about where (`U.whats_rescaled`) and how (only multiplication (*) right now) the weight
     # from Fn gets canceled out is stored with the `Rescale` struct and not
@@ -501,7 +566,7 @@ struct BlockedUpdate <: AbstractUpdate
     # Note I want exactly AbstractUpdate[] since I want to push any type of AbstractUpdate
     # like MomentumUpdate or another BlockedUpdate, even if not already present.
     # This means it cannot be Vector{<:AbstractUpdate} since a BlockedUpdate with only
-    # GradientDescent would give a GradientDescent[] and we couldnt push a MomentumUpdate.
+    # GradientDescent would give a GradientDescent[] and we couldn't push a MomentumUpdate.
     # And it cannot be AbstractVector{AbstractUpdate} since we may not be able to insert!/push!
     # into other AbstractVectors like Views.
 end
@@ -517,8 +582,8 @@ function Base.getproperty(U::BlockedUpdate, sym::Symbol)
         if allequal(getproperty.(updates(U), :n))
             return U[begin].n # can safely say U is just multiple updates on factor n
         else
-            @debug "BlockedUpdate contains updates to multiple factor indicies:\n$(getproperty.(updates(U), :n))"
-            return nothing #throw(ErrorException("BlockedUpdate contains updates to multiple factor indicies:\n$(getproperty.(updates(U), :n))"))
+            @debug "BlockedUpdate contains updates to multiple factor indices:\n$(getproperty.(updates(U), :n))"
+            return nothing #throw(ErrorException("BlockedUpdate contains updates to multiple factor indices:\n$(getproperty.(updates(U), :n))"))
         end
     else # fallback to other fields
         return getfield(U, sym)
@@ -567,7 +632,7 @@ end
 function add_momentum!(U::BlockedUpdate)
     # Find all the GradientDescent updates
     U_updates = updates(U)
-    indexes = findall(u -> typeof(u) <: GradientDescent, U_updates)
+    indexes = findall(u -> typeof(u) <: AbstractGradientDescent, U_updates)
 
     # insert MomentumUpdates before each GradientDescent
     # do this in reverse order so "i" correctly indexes a GradientDescent

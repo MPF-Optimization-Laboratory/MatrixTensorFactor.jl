@@ -149,8 +149,8 @@ end
 
 (S::IterateNormDiff)(X, _, previous, _, _) = S.norm(X - previous[begin])
 (S::IterateRelativeDiff)(X, _, previous, _, _) = S.norm(X - previous[begin]) / S.norm(previous[begin])
-(S::EuclidianStepSize)(X, _, _, _, _) = sqrt(sum(calcstep -> calcstep(X)^2, S.steps))
-(S::EuclidianLipshitz)(X, _, _, _, _) = sqrt(sum(calcstep -> calcstep(X)^(-2), S.steps))
+(S::EuclidianStepSize)(X, _, _, _, _) = sqrt.(sum(calcstep -> calcstep(X)^2, S.steps))
+(S::EuclidianLipshitz)(X, _, _, _, _) = sqrt.(sum(calcstep -> calcstep(X)^(-2), S.steps))
 (S::FactorNorms)(X, _, _, _, _) = S.norm.(factors(X))
 (S::PrintStats)(_, _, _, parameters, stats) = if parameters[:iteration] > 0; println(last(stats)); end
 function (S::DisplayDecomposition)(X, _, _, parameters, _)

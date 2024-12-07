@@ -72,7 +72,8 @@ Handles all keywords and options, and sets defaults if not provided.
 - `norm`: `l2norm`. Norm to use for statistics, can be unrelated to the objective
 - `random_order`: `false`. Perform the updates in a random order each iteration, Overrides to `true` when `recursive_random_order=true`
 - `group_updates_by_factor`: `false`. Groups updates on the same factor together. Overrides to `true` when `random_order=true`. Useful when randomizing order of updates but you want to keep matching momentum-gradientstep-constraint together
-- `recursive_random_order`; `false`. Performs inner blocked updates (grouped updates) in a random order (recursively) each iteration. Note the outer most list of updates can be performed in order if `random_order=false`
+- `recursive_random_order`: `false`. Performs inner blocked updates (grouped updates) in a random order (recursively) each iteration. Note the outer most list of updates can be performed in order if `random_order=false`
+- `do_subblock_updates`: `false`. Performs gradient descent on subblocks within a factor separately. May result in smaller Lipshitz constants and hence larger step sizes being used.
 
 ## Momentum
 - `momentum`: `true`
@@ -123,6 +124,7 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :recursive_random_order, false)
 	get!(kwargs, :random_order, kwargs[:recursive_random_order])
 	get!(kwargs, :group_updates_by_factor, kwargs[:random_order])
+	get!(kwargs, :do_subblock_updates, false)
 
 	# Momentum
 	get!(kwargs, :momentum, true)
@@ -234,7 +236,7 @@ end
 What one iteration of the algorithm looks like.
 One iteration is likely a full cycle through each block or factor of the model.
 """
-function make_update!(decomposition, Y; momentum, constraints, constrain_init, group_updates_by_factor, kwargs...)
+function make_update!(decomposition, Y; momentum, constraints, constrain_init, group_updates_by_factor, do_subblock_updates, kwargs...)
 	ns = eachfactorindex(decomposition)
 
 	kwargs = Dict{Symbol,Any}(kwargs)
@@ -245,9 +247,16 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, g
 	kwargs[:group_updates_by_factor] = group_updates_by_factor
 
 	kwargs[:gradients] = [make_gradient(decomposition, n, Y; kwargs...) for n in ns]
-	kwargs[:steps] = [LipshitzStep(make_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
 
-	update! = BlockedUpdate((GradientDescent(n, g, s) for (n, g, s) in zip(ns, kwargs[:gradients], kwargs[:steps]))...)
+	update! = nothing #ensure scope of update outside the following if block
+	if do_subblock_updates
+		kwargs[:steps] = [LipshitzStep(make_block_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
+		kwargs[:combines] = [make_blockGD_combines(decomposition, n, Y; kwargs...) for n in ns]
+		update! = BlockedUpdate((BlockGradientDescent(n, g, s, c) for (n, g, s, c) in zip(ns, kwargs[:gradients], kwargs[:steps], kwargs[:combines]))...)
+	else
+		kwargs[:steps] = [LipshitzStep(make_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
+		update! = BlockedUpdate((GradientDescent(n, g, s) for (n, g, s) in zip(ns, kwargs[:gradients], kwargs[:steps]))...)
+	end
 
 	if momentum
 		add_momentum!(update!)
