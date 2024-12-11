@@ -16,7 +16,7 @@ RelativeError
 IterateNormDiff
 IterateRelativeDiff
 EuclidianStepSize
-EuclidianLipshitz
+EuclidianLipschitz
 FactorNorms
 ```
 

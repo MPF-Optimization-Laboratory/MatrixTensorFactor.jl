@@ -14,7 +14,7 @@ decomposition, stats_data, kwargs = fact(Y;
     converged=(GradientNNCone, RelativeError),
     constrain_init=true,
     constraints=nonnegative!,
-    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError, EuclidianLipshitz, EuclidianStepSize]
+    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError, EuclidianLipschitz, EuclidianStepSize]
 );
 
 display(stats_data)
@@ -24,4 +24,4 @@ display(kwargs[:update])
 # using Pkg
 # Pkg.add("Plots")
 # using Plots
-# plot(stats_data[2:end, :EuclidianLipshitz], stats_data[2:end, :EuclidianStepSize])
+# plot(stats_data[2:end, :EuclidianLipschitz], stats_data[2:end, :EuclidianStepSize])

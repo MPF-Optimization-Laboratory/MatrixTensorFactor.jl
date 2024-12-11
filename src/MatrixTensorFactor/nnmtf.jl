@@ -58,10 +58,10 @@ const IMPLIMENTED_CRITERIA = Set{Symbol}((:ncone, :iterates, :objective, :relati
 """
     IMPLIMENTED_STEPSIZES::Set{Symbol}
 
-- `:lipshitz`: gradient step 1/L for lipshitz constant L
+- `:lipschitz`: gradient step 1/L for lipschitz constant L
 - `:spg`: spectral projected gradient stepsize
 """
-const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipshitz, :spg))
+const IMPLIMENTED_STEPSIZES = Set{Symbol}((:lipschitz, :spg))
 
 """Lists all implimented options"""
 const IMPLIMENTED_OPTIONS = Dict(
@@ -169,7 +169,7 @@ Note there may NOT be a unique optimal solution
 - `projection::Symbol=:nnscale`: constraint to use and method for enforcing it (must be in IMPLIMENTED_PROJECTIONS)
 - `metric::Symbol=:L1`: under what metric the fibres/slices are normalized (must be in IMPLIMENTED_METRICS)
 - `criterion::Symbol=:ncone`: how to determine if the algorithm has converged (must be in IMPLIMENTED_CRITERIA)
-- `stepsize::Symbol=:lipshitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
+- `stepsize::Symbol=:lipschitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
 - `momentum::Bool=false`: use momentum updates
 - `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq (3.5) Xu & Yin 2013)
 - `R_max::Integer=size(Y)[1]`: maximum rank to try if R is not given
@@ -190,7 +190,7 @@ Note there may NOT be a unique optimal solution
 - If R was estimated, also returns the optimal `R::Integer`
 
 # Implimentation of block coordinate decent updates
-We calculate the partial gradients and corresponding Lipshitz constants like so:
+We calculate the partial gradients and corresponding Lipschitz constants like so:
 
 ```math
 \begin{align}
@@ -232,7 +232,7 @@ function nnmtf(Y::AbstractArray, R::Union{Nothing, Integer}=nothing;
     normalize::Symbol=:fibres,
     projection::Symbol=:nnscale,
     criterion::Symbol=:ncone,
-    stepsize::Symbol=:lipshitz,
+    stepsize::Symbol=:lipschitz,
     momentum::Bool=false,
     R_max::Integer=size(Y)[1], # Number of observed mixtures
     online_rank_estimation::Bool=false,
@@ -250,8 +250,8 @@ function nnmtf(Y::AbstractArray, R::Union{Nothing, Integer}=nothing;
         throw(ArgumentError("stepsize is not an implimented stepsize"))
     end
 
-    if momentum && stepsize != :lipshitz
-        throw(ArgumentError("Momentum is only compatible with lipshitz stepsize"))
+    if momentum && stepsize != :lipschitz
+        throw(ArgumentError("Momentum is only compatible with lipschitz stepsize"))
     end
 
     if isnothing(R) #&& (online_rank_estimation == true)
@@ -297,7 +297,7 @@ function _nnmtf_proxgrad(
     normalizeA::Symbol=:rows,
     projection::Symbol=:nonnegative,
     metric::Symbol=:L1,
-    stepsize::Symbol=:lipshitz,
+    stepsize::Symbol=:lipschitz,
     criterion::Symbol=:ncone,
     momentum::Bool=false,
     delta::Real=0.9999,
@@ -352,7 +352,7 @@ function _nnmtf_proxgrad(
     if parse_criterion == :ncone
         tol /= sqrt(problem_size) # match old tolerance
     end
-    (stepsize == :lipshitz) || throw(ArgumentError("stepsize $stepsize is not implimented"))
+    (stepsize == :lipschitz) || throw(ArgumentError("stepsize $stepsize is not implimented"))
     (scaleBtoA == true) || @warn "scaleBtoA==false was considered in initialization, but not during iteration"
 
     #--- Transform them into something factorize can take ---#

@@ -73,7 +73,7 @@ Handles all keywords and options, and sets defaults if not provided.
 - `random_order`: `false`. Perform the updates in a random order each iteration, Overrides to `true` when `recursive_random_order=true`
 - `group_updates_by_factor`: `false`. Groups updates on the same factor together. Overrides to `true` when `random_order=true`. Useful when randomizing order of updates but you want to keep matching momentum-gradientstep-constraint together
 - `recursive_random_order`: `false`. Performs inner blocked updates (grouped updates) in a random order (recursively) each iteration. Note the outer most list of updates can be performed in order if `random_order=false`
-- `do_subblock_updates`: `false`. Performs gradient descent on subblocks within a factor separately. May result in smaller Lipshitz constants and hence larger step sizes being used.
+- `do_subblock_updates`: `false`. Performs gradient descent on subblocks within a factor separately. May result in smaller Lipschitz constants and hence larger step sizes being used.
 
 ## Momentum
 - `momentum`: `true`
@@ -250,11 +250,11 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, g
 
 	update! = nothing #ensure scope of update outside the following if block
 	if do_subblock_updates
-		kwargs[:steps] = [LipshitzStep(make_block_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
+		kwargs[:steps] = [LipschitzStep(make_block_lipschitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipschitz step
 		kwargs[:combines] = [make_blockGD_combines(decomposition, n, Y; kwargs...) for n in ns]
 		update! = BlockedUpdate((BlockGradientDescent(n, g, s, c) for (n, g, s, c) in zip(ns, kwargs[:gradients], kwargs[:steps], kwargs[:combines]))...)
 	else
-		kwargs[:steps] = [LipshitzStep(make_lipshitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipshitz step
+		kwargs[:steps] = [LipschitzStep(make_lipschitz(decomposition, n, Y; kwargs...)) for n in ns] # TODO avoid hard coded lipschitz step
 		update! = BlockedUpdate((GradientDescent(n, g, s) for (n, g, s) in zip(ns, kwargs[:gradients], kwargs[:steps]))...)
 	end
 

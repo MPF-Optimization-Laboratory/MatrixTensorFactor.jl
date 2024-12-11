@@ -54,12 +54,12 @@ export l1norm, l2norm, linftynorm
 
 include("./stats.jl")
 export AbstractStat
-export DisplayDecomposition, EuclidianLipshitz, EuclidianStepSize, FactorNorms, GradientNorm, GradientNNCone
+export DisplayDecomposition, EuclidianLipschitz, EuclidianStepSize, FactorNorms, GradientNorm, GradientNNCone
 export IterateNormDiff, IterateRelativeDiff, Iteration, ObjectiveValue, ObjectiveRatio, PrintStats, RelativeError
 
 include("./blockupdates.jl")
 export AbstractStep
-export LipshitzStep, ConstantStep, SPGStep
+export LipschitzStep, ConstantStep, SPGStep
 
 export AbstractUpdate
 export GradientDescent, MomentumUpdate

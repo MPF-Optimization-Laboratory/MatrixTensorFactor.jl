@@ -5,14 +5,14 @@ The default order the blocks are updated is cyclicaly through each factor of the
 As an example, this would be the default order of updates for nonegative CP decomposition on an order 3 tensor.
 ```julia
 BlockedUpdate(
-    MomentumUpdate(1, lipshitz)
-    GradientStep(1, gradient, LipshitzStep)
+    MomentumUpdate(1, lipschitz)
+    GradientStep(1, gradient, LipschitzStep)
     Projection(1, Entrywise(ReLU, isnonnegative))
-    MomentumUpdate(2, lipshitz)
-    GradientStep(2, gradient, LipshitzStep)
+    MomentumUpdate(2, lipschitz)
+    GradientStep(2, gradient, LipschitzStep)
     Projection(2, Entrywise(ReLU, isnonnegative))
-    MomentumUpdate(3, lipshitz)
-    GradientStep(3, gradient, LipshitzStep)
+    MomentumUpdate(3, lipschitz)
+    GradientStep(3, gradient, LipschitzStep)
     Projection(3, Entrywise(ReLU, isnonnegative))
 )
 ```
@@ -30,18 +30,18 @@ A possible order of updates could be the following. Note that the updates for ea
 ```julia
 BlockedUpdate(
     BlockedUpdate(
-        MomentumUpdate(2, lipshitz)
-        GradientStep(2, gradient, LipshitzStep)
+        MomentumUpdate(2, lipschitz)
+        GradientStep(2, gradient, LipschitzStep)
         Projection(2, Entrywise(ReLU, isnonnegative))
     )
     BlockedUpdate(
-        MomentumUpdate(1, lipshitz)
-        GradientStep(1, gradient, LipshitzStep)
+        MomentumUpdate(1, lipschitz)
+        GradientStep(1, gradient, LipschitzStep)
         Projection(1, Entrywise(ReLU, isnonnegative))
     )
     BlockedUpdate(
-        MomentumUpdate(3, lipshitz)
-        GradientStep(3, gradient, LipshitzStep)
+        MomentumUpdate(3, lipschitz)
+        GradientStep(3, gradient, LipschitzStep)
         Projection(3, Entrywise(ReLU, isnonnegative))
     )
 )
@@ -57,18 +57,18 @@ A possible order of updates could now be the following. The updates for each fac
 BlockedUpdate(
     BlockedUpdate(
         Projection(2, Entrywise(ReLU, isnonnegative))
-        MomentumUpdate(2, lipshitz)
-        GradientStep(2, gradient, LipshitzStep)
+        MomentumUpdate(2, lipschitz)
+        GradientStep(2, gradient, LipschitzStep)
     )
     BlockedUpdate(
-        MomentumUpdate(1, lipshitz)
+        MomentumUpdate(1, lipschitz)
         Projection(1, Entrywise(ReLU, isnonnegative))
-        GradientStep(1, gradient, LipshitzStep)
+        GradientStep(1, gradient, LipschitzStep)
     )
     BlockedUpdate(
-        GradientStep(3, gradient, LipshitzStep)
+        GradientStep(3, gradient, LipschitzStep)
         Projection(3, Entrywise(ReLU, isnonnegative))
-        MomentumUpdate(3, lipshitz)
+        MomentumUpdate(3, lipschitz)
     )
 )
 ```
@@ -83,17 +83,17 @@ A possible order of updates could now be the following. Note the order of factor
 BlockedUpdate(
     BlockedUpdate(
         Projection(1, Entrywise(ReLU, isnonnegative))
-        MomentumUpdate(1, lipshitz)
-        GradientStep(1, gradient, LipshitzStep)
+        MomentumUpdate(1, lipschitz)
+        GradientStep(1, gradient, LipschitzStep)
     )
     BlockedUpdate(
-        MomentumUpdate(2, lipshitz)
+        MomentumUpdate(2, lipschitz)
         Projection(2, Entrywise(ReLU, isnonnegative))
-        GradientStep(2, gradient, LipshitzStep)
+        GradientStep(2, gradient, LipschitzStep)
     )
     BlockedUpdate(
-        GradientStep(3, gradient, LipshitzStep)
-        MomentumUpdate(3, lipshitz)
+        GradientStep(3, gradient, LipschitzStep)
+        MomentumUpdate(3, lipschitz)
         Projection(3, Entrywise(ReLU, isnonnegative))
     )
 )
@@ -108,15 +108,15 @@ A possible order of updates could now be the following. Note that every update c
 ```julia
 BlockedUpdate(
     Projection(3, Entrywise(ReLU, isnonnegative))
-    MomentumUpdate(2, lipshitz)
-    GradientStep(2, gradient, LipshitzStep)
-    MomentumUpdate(1, lipshitz)
-    GradientStep(1, gradient, LipshitzStep)
+    MomentumUpdate(2, lipschitz)
+    GradientStep(2, gradient, LipschitzStep)
+    MomentumUpdate(1, lipschitz)
+    GradientStep(1, gradient, LipschitzStep)
     Projection(2, Entrywise(ReLU, isnonnegative))
-    MomentumUpdate(3, lipshitz)
-    MomentumUpdate(2, lipshitz)
+    MomentumUpdate(3, lipschitz)
+    MomentumUpdate(2, lipschitz)
     Projection(1, Entrywise(ReLU, isnonnegative))
-    GradientStep(3, gradient, LipshitzStep)
+    GradientStep(3, gradient, LipschitzStep)
 )
 ```
 

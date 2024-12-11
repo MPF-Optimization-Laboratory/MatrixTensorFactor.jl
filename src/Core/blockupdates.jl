@@ -27,89 +27,89 @@ to compute the step size.
 """
 abstract type AbstractStep <: Function end
 
-struct LipshitzStep <: AbstractStep
-    lipshitz::Function
+struct LipschitzStep <: AbstractStep
+    lipschitz::Function
 end
 
-function (step::LipshitzStep)(x; kwargs...)
-    L = step.lipshitz(x)
-    return L^(-1) # allow for Lipshitz to be a diagonal matrix
+function (step::LipschitzStep)(x; kwargs...)
+    L = step.lipschitz(x)
+    return L^(-1) # allow for Lipschitz to be a diagonal matrix
 end
-#LipshitzStep(L::Real) = 1/L
+#LipschitzStep(L::Real) = 1/L
 
-function make_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+function make_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function lipshitz0(T::Tucker1; kwargs...)
+        function lipschitz0(T::Tucker1; kwargs...)
             A = matrix_factor(T, 1)
             return opnorm(A'A)
         end
-        return lipshitz0
+        return lipschitz0
 
     elseif n==1 # the matrix is the zeroth factor
-        function lipshitz1(T::Tucker1; kwargs...)
+        function lipschitz1(T::Tucker1; kwargs...)
             C = core(T)
             return opnorm(slicewise_dot(C, C))
         end
-        return lipshitz1
+        return lipschitz1
 
     else
         error("No $(n)th factor in Tucker1")
     end
 end
 
-function make_lipshitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+function make_lipschitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n==0 # the core is the zeroth factor
-        function lipshitz_core(T::AbstractTucker; kwargs...)
+        function lipschitz_core(T::AbstractTucker; kwargs...)
             #matrices = matrix_factors(T)
             #gram_matrices = map(A -> A'A, matrices)
             #return prod(opnorm.(gram_matrices))
             return prod(A -> opnorm(A'A), matrix_factors(T))
         end
-        return lipshitz_core
+        return lipschitz_core
 
     elseif n in 1:N # the matrix is the zeroth factor
-        function lipshitz_matrix(T::AbstractTucker; kwargs...)
+        function lipschitz_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
             TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
-        return lipshitz_matrix
+        return lipschitz_matrix
 
     else
         error("No $(n)th factor in Tucker")
     end
 end
 
-function make_lipshitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+function make_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n in 1:N # the matrix is the zeroth factor
-        function lipshitz_matrix(T::AbstractTucker; kwargs...)
+        function lipschitz_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
             TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
-        return lipshitz_matrix
+        return lipschitz_matrix
 
     else
         error("No $(n)th factor in Tucker")
     end
 end
 
-function make_block_lipshitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+function make_block_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function lipshitz0(T::Tucker1; kwargs...)
+        function lipschitz0(T::Tucker1; kwargs...)
             A = matrix_factor(T, 1)
             return Diagonal(norm2.(eachcol(A)))
         end
-        return lipshitz0
+        return lipschitz0
 
     elseif n==1 # the matrix is the zeroth factor
-        function lipshitz1(T::Tucker1; kwargs...)
+        function lipschitz1(T::Tucker1; kwargs...)
             C = core(T)
             return Diagonal(norm2.(eachslice(C; dims=1)))
         end
-        return lipshitz1
+        return lipschitz1
 
     else
         error("No $(n)th factor in Tucker1")
@@ -530,17 +530,17 @@ end
 
 struct MomentumUpdate <: AbstractUpdate
     n::Integer
-    lipshitz::Function
+    lipschitz::Function
 end
 
 """
-Makes a MomentumUpdate from a GradientDescent assuming the GradientDescent has a lipshitz step size
+Makes a MomentumUpdate from a GradientDescent assuming the GradientDescent has a lipschitz step size
 """
 function MomentumUpdate(GD::GradientDescent)
     n, step = GD.n, GD.step
-    @assert typeof(step) <: LipshitzStep
+    @assert typeof(step) <: LipschitzStep
 
-    return MomentumUpdate(n, step.lipshitz)
+    return MomentumUpdate(n, step.lipschitz)
 end
 
 function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
@@ -548,10 +548,10 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     if checkfrozen(x, n)
         return x
     end
-    # TODO avoid redoing this lipshitz calculation and instead store the previous L
+    # TODO avoid redoing this lipschitz calculation and instead store the previous L
     # TODO generalize this momentum update to allow for other decaying momentums ω
-    L = U.lipshitz(x; kwargs...)
-    L_last = U.lipshitz(x_last; kwargs...)
+    L = U.lipschitz(x; kwargs...)
+    L_last = U.lipschitz(x_last; kwargs...)
     ω = min(ω, δ * √(L_last/L))
 
     a, a_last = factor(x, n), factor(x_last, n)
