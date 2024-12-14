@@ -10,6 +10,7 @@ const id = I # often use `I` for a dimension size, e.g. i ∈ 1:I, so here's a w
 # Method Extensions
 using Base: copy, deepcopy, eltype, filter, firstindex, getindex, getproperty, iterate, keys, lastindex, length, show, size, ndims
 using Base: +, -, *, /, \ # AbstractDecomposition methods
+using Base: ^, √, min # DiagonalTuple method
 using Base: ∘, convert # AbstractConstraint methods
 using LinearAlgebra: LinearAlgebra, diag
 

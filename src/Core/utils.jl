@@ -55,6 +55,31 @@ end
 
 #######################################################
 
+const DiagonalTuple{N, T} = NTuple{N, Diagonal{T}} # Tuple type where you have a tuple of Diagonal matrices, possibly of varying sizes
+
+Base.:+(X, DT::DiagonalTuple) = map(D -> X + D, DT)
+Base.:+(DT::DiagonalTuple, X) = map(D -> D + X, DT)
+Base.:+(DT1::DiagonalTuple{N}, DT2::DiagonalTuple{N}) where {N} = Tuple(C + D for (C, D) in zip(DT1, DT2))
+Base.:-(X, DT::DiagonalTuple) = map(D -> X - D, DT)
+Base.:-(DT::DiagonalTuple, X) = map(D -> D - X, DT)
+Base.:-(DT1::DiagonalTuple{N}, DT2::DiagonalTuple{N}) where {N} = Tuple(C - D for (C, D) in zip(DT1, DT2))
+Base.:*(X, DT::DiagonalTuple) = map(D -> X * D, DT)
+Base.:*(DT::DiagonalTuple, X) = map(D -> D * X, DT)
+Base.:*(DT1::DiagonalTuple{N}, DT2::DiagonalTuple{N}) where {N} = Tuple(C * D for (C, D) in zip(DT1, DT2))
+Base.:/(X, DT::DiagonalTuple) = map(D -> X / D, DT)
+Base.:/(DT::DiagonalTuple, X) = map(D -> D / X, DT)
+Base.:/(DT1::DiagonalTuple{N}, DT2::DiagonalTuple{N}) where {N} = Tuple(C / D for (C, D) in zip(DT1, DT2))
+Base.:\(X, DT::DiagonalTuple) = map(D -> X \ D, DT)
+Base.:\(DT::DiagonalTuple, X) = map(D -> D \ X, DT)
+Base.:\(DT1::DiagonalTuple{N}, DT2::DiagonalTuple{N}) where {N} = Tuple(C \ D for (C, D) in zip(DT1, DT2))
+Base.:^(DT::DiagonalTuple, x) = map(D -> D ^ x, DT)
+Base.:√(DT::DiagonalTuple) = map(D -> √D, DT)
+
+Base.min(x::Number, A::AbstractArray) = min.(x, A)
+Base.min(A::AbstractArray, x::Number) = min.(A, x)
+
+########################################################
+
 getnotindex(A, i::Int) = A[eachindex(A) .!= i]
 getnotindex(A, I) = A[eachindex(A) .∉ (I,)]
 
@@ -264,3 +289,12 @@ function all_recursive(f, x)
         return all(all_recursive(f, xi) for xi in x) # use all to aggregate results
     end
 end
+
+"""
+    Diagonal_col_norm(X)
+
+Calculates a diagonal matrix with entries that are the Euclidean norm of each column of `X`.
+
+Shorthand for `Diagonal(norm.(eachcol(X)))`.
+"""
+Diagonal_col_norm(X) = Diagonal(norm.(eachcol(X)))

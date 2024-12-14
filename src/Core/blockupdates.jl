@@ -35,7 +35,19 @@ function (step::LipschitzStep)(x; kwargs...)
     L = step.lipschitz(x)
     return L^(-1) # allow for Lipschitz to be a diagonal matrix
 end
+
+function (step::LipschitzStep)(x::Tucker; kwargs...)
+    L = step.lipschitz(x)
+    if typeof(L) <: Tuple # Currently the only case is when we are updating the core of a Tucker factorization
+                          # Using this condition as a way to tell if it is the core we are calculating the constant for
+        return map(X -> X^(-1), L)
+    else
+        return L^(-1) # allow for Lipschitz to be a diagonal matrix
+    end
+end
 #LipschitzStep(L::Real) = 1/L
+
+# TODO have these be functions that act on decompositions more generally
 
 function make_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
@@ -100,19 +112,55 @@ function make_block_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objectiv
     if n==0 # the core is the zeroth factor
         function lipschitz0(T::Tucker1; kwargs...)
             A = matrix_factor(T, 1)
-            return Diagonal(norm.(eachcol(A'A))) # Diagonal(norm2.(eachcol(A)))
+            return Diagonal_col_norm(A'A) # Diagonal(norm2.(eachcol(A)))
         end
         return lipschitz0
 
     elseif n==1 # the matrix is the zeroth factor
         function lipschitz1(T::Tucker1; kwargs...)
             C = core(T)
-            return Diagonal(norm.(eachcol(slicewise_dot(C, C)))) #Diagonal(norm2.(eachslice(C; dims=1)))
+            return Diagonal_col_norm(slicewise_dot(C, C)) #Diagonal(norm2.(eachslice(C; dims=1)))
         end
         return lipschitz1
 
     else
         error("No $(n)th factor in Tucker1")
+    end
+end
+
+function make_block_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n in 1:N # the matrix is the zeroth factor
+        function lipschitz_matrix(T::AbstractTucker; kwargs...)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
+            return Diagonal_col_norm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
+        end
+        return lipschitz_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+
+function make_block_lipschitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n==0 # the core is the zeroth factor
+        function lipschitz_core(T::AbstractTucker; kwargs...)
+            return map(A -> Diagonal_col_norm(A'A), matrix_factors(T)) # Return a tuple of diagonal matrices
+        end
+        return lipschitz_core
+
+    elseif n in 1:N # the matrix is the zeroth factor
+        function lipschitz_matrix(T::AbstractTucker; kwargs...)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
+            return Diagonal_col_norm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
+        end
+        return lipschitz_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
     end
 end
 
@@ -345,6 +393,33 @@ function make_blockGD_combines(T::Tucker1, n::Integer, Y::AbstractArray; objecti
         error("No $(n)th factor in Tucker1")
     end
 end
+
+function make_blockGD_combines(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n==0 # the core is the zeroth factor
+        combine_core(grad, step) = tuckerproduct(grad, step) # need to multiply grad (a tensor) by each Lipschitz matrix
+        return combine_core
+
+    elseif n in 1:N # the matrix factors start at m=1
+        combine_matrix(grad, step) = grad * step # need right matrix multiplication
+        return combine_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+
+function make_blockGD_combines(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n in 1:N # the matrix is the zeroth factor
+        combine_matrix(grad, step) = grad * step # need right matrix multiplication
+        return combine_matrix
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+end
+
 abstract type ConstraintUpdate <: AbstractUpdate end
 
 """

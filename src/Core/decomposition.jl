@@ -248,6 +248,8 @@ function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen
     Tucker((core, matrix_factors...), frozen)
 end
 
+# TODO throw a readable error if the length of `ranks` does not match the number of dimensions of full_size
+
 function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tuple(2), init=DEFAULT_INIT, kwargs...) where N
     I, J... = full_size
     core = init((rank, J...))

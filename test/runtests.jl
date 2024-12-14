@@ -423,10 +423,20 @@ end
     Y = array(Y)
     decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
 
-    # Quick test for Sub Block Updates
+    # Quick test for Sub Block Updates Tucker1
     Y = Tucker1((10,10,10), 3)
     Y = array(Y)
     decomposition, stats_data = fact(Y; model=Tucker1, rank=3, maxiter=2, do_subblock_updates=true)
+
+    # Quick test for Sub Block Updates Tucker
+    Y = Tucker((10,11,12), (2,3,4))
+    Y = array(Y)
+    decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2, do_subblock_updates=true)
+
+    # Quick test for Sub Block Updates CPDecomposition
+    Y = CPDecomposition((10,11,12), 3)
+    Y = array(Y)
+    decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2, do_subblock_updates=true)
 
     # Regular run of Tucker1
     C = abs_randn(5, 11, 12)
