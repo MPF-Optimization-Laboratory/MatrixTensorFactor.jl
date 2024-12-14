@@ -188,7 +188,7 @@ isnonnegative(x::Real) = (x >= 0)
 
 L2 norm squared, the sum of squares of the entries of x.
 """
-norm2(x) = mapreduce(abs2, +, x)
+norm2(x) = mapreduce(abs2, +, x) # looks like it is faster than norm(x)^2 from LinearAlgebra, perhaps not as safe
 
 """
     interlace(u, v)

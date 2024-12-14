@@ -2,10 +2,12 @@ module Core
 
 # Dependencies
 using Random: randn, rand, seed!, shuffle
-using LinearAlgebra: ⋅, opnorm, Symmetric, mul!
+using LinearAlgebra: ⋅, opnorm, Symmetric, mul!, Diagonal, I, norm
 using DataFrames: DataFrame, nrow
 
-# Method Extentions
+const id = I # often use `I` for a dimension size, e.g. i ∈ 1:I, so here's a way to get the identity matrix
+
+# Method Extensions
 using Base: copy, deepcopy, eltype, filter, firstindex, getindex, getproperty, iterate, keys, lastindex, length, show, size, ndims
 using Base: +, -, *, /, \ # AbstractDecomposition methods
 using Base: ∘, convert # AbstractConstraint methods
@@ -61,8 +63,8 @@ include("./blockupdates.jl")
 export AbstractStep
 export LipschitzStep, ConstantStep, SPGStep
 
-export AbstractUpdate
-export GradientDescent, MomentumUpdate
+export AbstractUpdate, AbstractGradientDescent
+export GradientDescent, BlockGradientDescent, MomentumUpdate
 
 export ConstraintUpdate, GenericConstraintUpdate
 export Projection, NNProjection, SafeNNProjection, Rescale

@@ -254,8 +254,8 @@ end
     @test isfrozen(G, 0) == false # the core is not frozen
     @test isfrozen(G, 1) == false # the matrix factor A is not frozen
 
-    @test G[1] == array(G)[1] # vectorized indexing
-    @test G[1,1,1] == array(G)[1] # regular indexing
+    @test G[1] ≈ array(G)[1] # vectorized indexing, check approx because it calculates in a slightly different way
+    @test G[1,1,1] ≈ array(G)[1] # regular indexing, check approx because it calculates in a slightly different way
 
     # CPDecomposition test
     A = reshape(1:6, 3, 2)
@@ -422,6 +422,11 @@ end
     Y = CPDecomposition((10,11,12), 3)
     Y = array(Y)
     decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
+
+    # Quick test for Sub Block Updates
+    Y = Tucker1((10,10,10), 3)
+    Y = array(Y)
+    decomposition, stats_data = fact(Y; model=Tucker1, rank=3, maxiter=2, do_subblock_updates=true)
 
     # Regular run of Tucker1
     C = abs_randn(5, 11, 12)

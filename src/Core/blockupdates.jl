@@ -100,14 +100,14 @@ function make_block_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objectiv
     if n==0 # the core is the zeroth factor
         function lipschitz0(T::Tucker1; kwargs...)
             A = matrix_factor(T, 1)
-            return Diagonal(norm2.(eachcol(A)))
+            return Diagonal(norm.(eachcol(A'A))) # Diagonal(norm2.(eachcol(A)))
         end
         return lipschitz0
 
     elseif n==1 # the matrix is the zeroth factor
         function lipschitz1(T::Tucker1; kwargs...)
             C = core(T)
-            return Diagonal(norm2.(eachslice(C; dims=1)))
+            return Diagonal(norm.(eachcol(slicewise_dot(C, C)))) #Diagonal(norm2.(eachslice(C; dims=1)))
         end
         return lipschitz1
 
@@ -329,20 +329,16 @@ function (U::BlockGradientDescent)(x; x_last, kwargs...)
     # Note we pass a function for grad_last (lazy) so that we only compute it if needed for the step
     s = U.step(x; n, x_last, grad, grad_last=(x -> U.gradient(x; kwargs...)), kwargs...)
     a = factor(x, n)
-    @. a -= U.combine(grad, s)
+    a .-= U.combine(grad, s)
 end
 
 function make_blockGD_combines(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function combine0(T::Tucker1; kwargs...)
-            return (grad, step) -> step * grad # need left matrix multiplication
-        end
+        combine0(grad, step) = grad ×₁ step # need to multiply grad (a tensor) by the Lipschitz matrix
         return combine0
 
     elseif n==1 # the matrix is the zeroth factor
-        function combine1(T::Tucker1; kwargs...)
-            return (grad, step) ->  grad * step # need right matrix multiplication
-        end
+        combine1(grad, step) = grad * step # need right matrix multiplication
         return combine1
 
     else
@@ -456,7 +452,7 @@ If `whats_rescaled=nothing`, then it will not rescale any other factor.
 
 If `whats_rescaled=missing`, then it will try to evenly distribute the weight to all other
 factors using the (N-1) root of each weight where N is the number of factors. If the weights
-are not brodcastable, (e.g. you want to scale each row but each factor has a different number
+are not broadcastable, (e.g. you want to scale each row but each factor has a different number
 of rows), will use the geometric mean of the weights as the single weight to distribute evenly
 among the other factors.
 
@@ -531,16 +527,26 @@ end
 struct MomentumUpdate <: AbstractUpdate
     n::Integer
     lipschitz::Function
+    combine::Function # How to combine the momentum variable `ω` with a factor `a`
 end
 
+MomentumUpdate(n, lipschitz) = MomentumUpdate(n, lipschitz, (ω, a) -> ω * a)
+
 """
-Makes a MomentumUpdate from a GradientDescent assuming the GradientDescent has a lipschitz step size
+Makes a MomentumUpdate from an AbstractGradientDescent assuming the AbstractGradientDescent has a lipschitz step size
 """
-function MomentumUpdate(GD::GradientDescent)
+function MomentumUpdate(GD::AbstractGradientDescent)
     n, step = GD.n, GD.step
     @assert typeof(step) <: LipschitzStep
 
     return MomentumUpdate(n, step.lipschitz)
+end
+
+function MomentumUpdate(GD::BlockGradientDescent)
+    n, step, combine = GD.n, GD.step, GD.combine
+    @assert typeof(step) <: LipschitzStep
+
+    return MomentumUpdate(n, step.lipschitz, combine)
 end
 
 function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
@@ -552,13 +558,20 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     # TODO generalize this momentum update to allow for other decaying momentums ω
     L = U.lipschitz(x; kwargs...)
     L_last = U.lipschitz(x_last; kwargs...)
-    ω = min(ω, δ * √(L_last/L))
+    ω = min.(ω, δ .* .√(L_last/L))
 
     a, a_last = factor(x, n), factor(x_last, n)
+
+    # Equivalent mathematically, but slightly less efficient ways of applying momentum
     # @. a = a + ω * (a - a_last)
+
     # @. a += ω * (a - a_last)
-    a .*= 1 + ω
-    a .-= ω .* a_last
+
+    # a .*= 1 + a
+    # a .-= ω .* a_last
+
+    a = U.combine(a, id + ω) # handle diagonal Lipschitz constants
+    a .-= U.combine(a_last, ω)
 end
 
 struct BlockedUpdate <: AbstractUpdate
