@@ -1,0 +1,4 @@
+project:
+   post-render:
+     - "julia ./fixtypst.jl"
+     - "typst compile paper.typ"

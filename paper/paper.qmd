@@ -1,0 +1,45 @@
+---
+title: "BlockTensorDecompositions.jl: A Unified Constrained Tensor Decomposition Julia Package"
+subtitle: ""
+authors:
+  - name: "Nicholas J. E. Richardson"
+    affiliations:
+      - ref: math
+  - name: "Noah Marusenko"
+    affiliations:
+      - ref: cs
+  - name: "Michael P. Friedlander"
+    affiliations:
+      - ref: mathcs
+affiliations:
+  - id: math
+    name: "Department of Mathematics\n"
+  - id: cs
+    name: "Department of Computer Science\n"
+  - id: mathcs
+    name: "Departments of Mathematics and Computer Science\n"
+date: ""
+date-format: "D MMMM YYYY"
+slide-number: true
+categories: [tensors, signal processing, julia]
+execute:
+  freeze: true
+bibliography: references.bib
+csl: citationstyles/ieee-compressed-in-text-citations.csl # Citation Style
+callout-appearance: minimal
+callout-icon: false
+format:
+  typst:
+    toc: true
+    section-numbering: 1.1.a.i
+    keep-typ: true
+    mainfont: "Libertinus Serif"
+editor:
+  render-on-save: true
+#appendix-style: plain
+# nocite: |
+#   @firstCitation
+#embed-resources: true ## uncomment when sharing HTML file
+---
+
+# Introduction
