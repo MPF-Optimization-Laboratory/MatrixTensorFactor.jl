@@ -269,14 +269,10 @@
   title: [BlockTensorDecompositions.jl: A Unified Constrained Tensor Decomposition Julia Package],
   authors: (
     ( name: [Nicholas J. E. Richardson],
-      affiliation: [Department of Mathematics
-
-],
+      affiliation: [Department of Mathematics],
       email: [] ),
     ( name: [Noah Marusenko],
-      affiliation: [Department of Computer Science
-
-],
+      affiliation: [Department of Computer Science],
       email: [] ),
     ( name: [Michael P. Friedlander],
       affiliation: [Departments of Mathematics and Computer Science
@@ -296,8 +292,103 @@
 
 = Introduction
 <introduction>
+- Tenors are useful in many applications
+- Need tools for fast and efficient decompositions
 
+For the scientific user, it would be most useful for there to be a single piece of software that can take as input, any reasonable type of factorization model, and constraints on the individual factors, and produce a factorization without worrying the user about the details of what rank to select, how the constraints should be enforced, and how to optimize for performance. Of course a knowledgeable user may still want the ability to tweak the convergence criteria used, the loss function optimized, or what statistics to record each iteration. These are the core specification for BlockTensorDecompositions.jl.
 
+== Related tools
+<related-tools>
+- Packages within Julia
+- Other languages
+- Hint at why I developed this
+
+Beyond the external usefulness already mentioned, this package offers a playground for fair comparisons of different parameters and options for performing tensor factorizations across various decomposition models. There exist packages for working with tensors in languages like Python (TensorFlow @martin_abadi_tensorflow_2015, PyTorch @ansel_pytorch_2024, and TensorLy @kossaifi_tensorly_2019), MATLAB (Tensor Toolbox @bader_tensor_2023), R (rTensor @li_rtensor_2018), and Julia (TensorKit.jl @jutho_juthotensorkitjl_2024, Tullio.jl @abbott_mcabbotttulliojl_2023, OMEinsum.jl @peter_under-peteromeinsumjl_2024, and TensorDecompositions.jl @wu_yunjhongwutensordecompositionsjl_2024). But they only provide a groundwork for basic manipulation of tensors and the most common tensor decomposition models and algorithms, and are not equipped to handle arbitrary user defined constraints and factorization models.
+
+Some progress towards building a unified framework has been made @xu_BlockCoordinateDescent_2013@kim_algorithms_2014@yang_unified_2011. But these approaches don’t operate on the high dimensional tensor data natively and rely on matricizations of the problem, or only consider nonnegative constraints. They also don’t provide an all-in-one package for executing their frameworks.
+
+== Contributions
+<contributions>
+- Fast and flexible tensor decomposition package
+- Framework for creating and performing custom
+  - tensor decompositions
+  - constrained factorization (the what)
+  - iterative updates (the how)
+- Implement new "tricks"
+  - a (Lipschitz) matrix step size for efficient sub-block updates
+  - multi-scaled factorization when tensor entries are discretizations of a continuous function
+  - partial projection and rescaling to enforce linear constraints (rather than Euclidean projection)
+  - ?? rank detection ??
+
+= Tensor Decompositions
+<tensor-decompositions>
+- the math section of the paper
+
+== Notation
+<notation>
+- tensor notation, use MATLAB notation for indexing so subscripts can be used for a sequence of tensors
+
+== Common Decompositions
+<common-decompositions>
+- Extensions of PCA/ICA/NMF to higher dimensions
+- talk about the most popular Tucker, Tucker-n, CP
+- other decompositions
+  - high order SVD (see Kolda and Bader)
+  - HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
+
+== Tensor rank
+<tensor-rank>
+- tensor rank
+- constrained rank (nonnegative etc.)
+
+= Computing Decompositions
+<computing-decompositions>
+- Given a data tensor and a model, how do we fit the model?
+
+== Optimization Problem
+<optimization-problem>
+- Least squares (can use KL, 1 norm, etc.)
+
+== Base algorithm
+<base-algorithm>
+- Use Block Coordinate Descent / Alternating Proximal Descent
+  - do #emph[not] use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
+
+= Techniques for speeding up convergences
+<techniques-for-speeding-up-convergences>
+- As stated, algorithm works
+- But can be slow, especially for constrained or large problems
+
+== Sub-block Descent
+<sub-block-descent>
+- Use smaller blocks, but descent in parallel (sub-blocks don’t wait for other sub-blocks)
+- Can perform this efficiently with a "matrix step-size"
+
+== Momentum
+<momentum>
+- This one is standard
+- Use something similar to @xu_BlockCoordinateDescent_2013
+- This is compatible with sub-block descent with appropriately defined matrix operations
+
+== Partial Projection and Rescaling
+<partial-projection-and-rescaling>
+- for bounded linear constraints
+  - first project
+  - then rescale to enforce linear constraints
+- faster to execute then a projection
+- often does not loose progress because of the rescaling (decomposition dependent)
+
+== Multi-scale
+<multi-scale>
+- use a coarse discretization along continuous dimensions
+- factorize
+- linearly interpolate decomposition to warm start larger decompositions
+
+= Conclusion
+<conclusion>
+- all-in-one package
+- provide a playground to invent new decompositions
+- like auto-diff for factorizations
 
 #bibliography("references.bib", style: "citationstyles/ieee-compressed-in-text-citations.csl")
 
