@@ -34,7 +34,7 @@ patterns = (
     "fa-info()" => "\"❕\"",
 
     # Custom citation style in bibliography
-    ".bib\")" => ".bib\", style: \"citationstyles/ieee-compressed-in-text-citations.csl\")",
+    #".bib\")" => ".bib\", style: \"citationstyles/ieee-compressed-in-text-citations.csl\")",
 
     # Theorem numbering base_level (only show Definition 4.1, not 4.1.1.1 for sub-subsections)
     r"thmbox\(([\w\W]+?)\)" => s"thmbox(\1, base_level: 1)"

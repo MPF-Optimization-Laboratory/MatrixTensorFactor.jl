@@ -47,8 +47,7 @@ editor:
 - Tenors are useful in many applications
 - Need tools for fast and efficient decompositions
 
-For the scientific user, it would be most useful for there to be a single piece of software that can take as input, any reasonable type of factorization model, and constraints on the individual factors, and produce a factorization without worrying the user about the details of what rank to select, how the constraints should be enforced, and how to optimize for performance. Of course a knowledgeable user may still want the ability to tweak the convergence criteria used, the loss function optimized, or what statistics to record each iteration. These are the core specification for BlockTensorDecompositions.jl.
-
+For the scientific user, it would be most useful for there to be a single piece of software that can take as input 1) any reasonable type of factorization model and 2) constraints on the individual factors, and produce a factorization. Details like what rank to select, how the constraints should be enforced, and convergence criteria should be handled automatically, but customizable to the knowledgable user. These are the core specification for BlockTensorDecompositions.jl.
 
 ## Related tools
 
@@ -71,13 +70,44 @@ Some progress towards building a unified framework has been made [@xu_BlockCoord
   - a (Lipschitz) matrix step size for efficient sub-block updates
   - multi-scaled factorization when tensor entries are discretizations of a continuous function
   - partial projection and rescaling to enforce linear constraints (rather than Euclidean projection)
-  - ?? rank detection ??
+- ?? rank detection ??
+
+The main contribution is a description of a fast and flexible tensor decomposition package, along with a public implementation written in Julia: BlockTensorDecompositions.jl. This package provides a framework for creating and performing custom tensor decompositions. To the author's knowledge, it is the first package to provide automatic factorization to a large class of constrained tensor decompositions problems, as well as a framework for implementing new constraints and iterative algorithms. This paper also describes three new techniques not found in the literature that empirically convergence faster than traditional block-coordinate descent.
 
 # Tensor Decompositions
 - the math section of the paper
 
+This section reviews the notation used throughout the paper and commonly used tensor decompositions.
+
 ## Notation
 - tensor notation, use MATLAB notation for indexing so subscripts can be used for a sequence of tensors
+
+We use $[N]=\{1, 2, \dots, N\}=\{n\}_{n=1}^N$ to denote integers from $1$ to $N$.
+
+Usually, lower case symbols will be used for the running index, and the capitalized letter will be the maximum letter it runs to. This leads to the convenient shorthand $i\in[I]$, $j\in[J]$, etc.
+
+The set of nonnegative numbers is denoted as $\mathbb{R}_+=\mathbb{R}_{\geq 0}=\left\{x\in \mathbb{R} \middle| x\geq 0\right\}$.
+
+Vectors are denoted with lowercase letters ($x$, $y$, etc.), and matrices and higher order tensors with uppercase letters (commonly $A$, $B$, $C$ and $X$, $Y$, $Z$). The order of a tensor is the number of axes it has. We would call vectors "order-1" or "1st order" tensors, and matrices "order-2" or "2nd order" tensors.
+
+To avoid confusion between entries of a vector/matrix/tensor and indexing a list of objects, we use square brackets to denote the former, and subscripts to denote the later. For example, the entry in the $i$th row and $j$th column of a matrix $A\in\mathbb{R}$ is $A[i,j]$. This follows MATLAB/Julia notation where `A[i,j]` points to the entry $A[i,j]$. We contrast this with a list of $I$ objects being denoted as $a_1, \dots, a_I$, or more compactly, $\{a_i\}$ when it is clear the index $i\in[I]$.
+
+The $n$-fibres, $n$th mode fibres, or mode $n$ fibres of an $N$th order tensor $A$ are denoted $A[i_1,~\dots,~i_{n-1},~:,~i_{n+1},~\dots,~i_{N}]$. For example, the 1-fibres of a matrix $M$ are the column vectors\
+$M[:,~j]$, and the 2-fibres are the row vectors $M[i,~:]$. For order-3 tensors, the $1$st, $2$nd, and $3$rd mode fibres $A[:, j, k]$, $A[i,:,:]$, and $A[i,j,:]$ are called the vertical/column, horizontal/row, and depth/tube fibres respectively and are displayed in @fig-tensor-fibres. In Julia, the 1-, 2-, and 3-fibres of a third order array `A` would be `eachslice(A, dims=(2,3))`, `eachslice(A, dims=(1,3))`, and `eachslice(A, dims=(1,2))`.
+
+![Fibres of an order $3$ tensor $A$.](figure/tensor_fibres.png){#fig-tensor-fibres}
+
+The $n$-slices, $n$th mode slices, or mode $n$ slices of an $N$th order tensor $A$ are notated with the slice $A[:,~\dots,~:,~i_{n},~:,~\dots,~:]$. For matrices, the 1-fibres are the same as the 2-slices (and vice versa), but for $N$th order tensors in general, fibres are always vectors, whereas $n$-slices are $(N-1)$th order tensors. For a $3$rd order tensor $A$, the $1$st, $2$nd, and $3$rd mode slices $A[i,:,:]$, $A[:,j,:]$, and $A[:,:,k]$ have special names and are called the horizontal, lateral, and frontal slices and are displayed in @fig-tensor-slices. In Julia, the 1-, 2-, and 3-slices of a third order array `A` would be `eachslice(A, dims=1)`, `eachslice(A, dims=2)`, and `eachslice(A, dims=3)`.
+
+![Slices of an order $3$ tensor $A$.](figure/tensor_slices.png){#fig-tensor-slices}
+
+The Frobenius inner product between two tensors $A,B\in\mathbb{R}^{I_1\times\dots\times I_N}$ is denoted
+
+$$
+\left\langle A, B\right\rangle = A \cdot B = \sum_{i_1=1}^{I_1}\dots\sum_{i_N=1}^{I_N} A[i_1,\dots,i_N] B[i_1,\dots,i_N].
+$$
+
+Since we commonly use $I$ as the size of a tensor's dimension, we use $\mathrm{id}_I$ to denote the identity tensor of size $I$ (of the appropriate order). When the order is $2$, $\mathrm{id}_I$ is an $I\times I$ matrix with ones along the main diagonal, and zeros elsewhere. For higher orders $N$, this is an $\underbrace{I\times \cdots \times I}_{N \text{times}}$ tensor where $\mathrm{id}_I[i_1,\dots,i_N]=1$ when $i_1=\dots=i_N\in[I]$, and is zero otherwise.
 
 ## Common Decompositions
 - Extensions of PCA/ICA/NMF to higher dimensions
@@ -85,6 +115,99 @@ Some progress towards building a unified framework has been made [@xu_BlockCoord
 - other decompositions
   - high order SVD (see Kolda and Bader)
   - HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
+
+<!-- From my thesis proposal: -->
+
+<!-- This section gives a brief tour of the most common tensor factorizations, heavily relying on the framework and notation given by Kolda and Bader [@kolda_TensorDecompositionsApplications_2009]. They are, however, presented in my own interpretation as matrix factorization generalizations and as different instances of the Tucker factorization.
+
+One way we can extend matrix factorization to multidimensional signals is with a *Tucker-1* factorization. Here, each mixture is an $N$th order tensor $Y_i\in\mathbb{R}^{J_1\times \dots\times J_N}$ stored in the $1$-slices of an order-$(N+1)$ tensor $Y\in\mathbb{R}^{I\times J_1\times \dots\times J_N}$, $Y[i, :, \dots, :]=Y_i$, and similarly for $B$. Slice-wise, we have the equation
+
+$$
+Y_i = \sum_{r=1}^R A[i,r] B_r,
+$$ {#eq-tucker-1-slices}
+
+which is entry-wise
+
+$$
+Y[i, j_1, \dots, j_N] = \sum_{r=1}^R A[i,r] B[r,j_1, \dots, j_N].
+$$ {#eq-tucker-1}
+
+![Example of a rank $R=3$ Tucker-1 factorization coloured according to @eq-tucker-1-slices. Here we have $Y\in\mathbb{R}^{5\times J \times K}, A\in\mathbb{R}^{5\times 3}$, and $B\in\mathbb{R}^{3\times J \times K}$. The first horizontal slice of $Y$, $Y_1$, is equal to $A[1,1]B_1+A[1,2]B_2+A[1,3]B_3$.](figure/tucker_1_example.png){#fig-tucker-1-example}
+
+Seeing @eq-tucker-1-slices alongside @fig-tucker-1-example makes it clear that the decomposition is performing a compression along the first axis of $Y$. This makes sense in the model where the mixtures are just linear combinations of sources with the same size and dimensions.
+
+
+In the case where the sources can be further factored along other axes, specifically the first $n$ dimensions, we can use the more general *Tucker-$n$* factorization of an order $N$ tensor $Y$,
+
+$$
+\begin{split}
+Y[i_1,\dots,i_n, & j_1, \dots, j_{N-n+1}] = \\ &\sum_{r_1=1}^{R_1} \dots \sum_{r_n=1}^{R_n} A_1[i_1,r_1]\cdots A_r[i_n,r_n] B[r_1,\dots,r_n, j_1, \dots, j_{N-n+1}].
+\end{split}
+$$ {#eq-tucker-n}
+
+In the case where $n=N$ is the order of the tensor $Y$, we omit the $n$ and call this a *Tucker* factorization. So a Tucker factorization of an order $N$ tensor $Y$ is
+
+$$
+Y[i_1,\dots,i_N] = \sum_{r_1=1}^{R_1} \dots \sum_{r_n=1}^{R_n} A_1[i_1,r_1]\cdots A_r[i_n,r_N] B[r_1,\dots,r_N].
+$$ {#eq-tucker}
+
+All the Tucker decompositions can be written using the $n$-mode product $\times_n$ between a tensor $A$ and matrix $B$, defined as
+
+$$
+(A \times_n B)[i_1, \dots, i_{n-1},j,i_{n+1},\dots,N] = \sum_{i_{n}=1}^{I_n} A[i_1, \dots, i_{n-1},i_n,i-{n+1},\dots,N]B[i_n,j].
+$$
+
+They can also be written with an $n$ product shorthand, or with bracket notation. For example, the full tucker decomposition shown in @eq-tucker can be written as
+
+$$
+\begin{align*}
+Y &= B\times_1 A_1 \times_2 \dots\times_N A_N = B \bigtimes_n A_n = \llbracket B; A_1, \dots, A_N \rrbracket \\
+\text{or}\quad Y &= A_0\times_1 \dots\times_N A_N = A_0 \bigtimes_n A_n = \llbracket A_0; A_1, \dots, A_N \rrbracket.
+\end{align*}
+$$
+
+To ease notation further, we sometimes consider the *core* tensor $B$ to be the zeroth factor $A_0=B$ so we can say $\{A_n\}_{n=0}^N$ are the factors of $Y$. Since it can be hard to visualize the product, consider the case of a Tucker factorization of a third order tensor $Y$:
+
+$$
+Y[i,j,k] = \sum_{r=1}^R\sum_{s=1}^S\sum_{t=1}^T A_1[i,r] A_2[j,s] A_3[k,t] B[r,s,t].
+$$
+
+We can picture this as multiplying the core factor $B$ with matrix factors $A_1, A_2, A_3$ on all sizes to construct $Y$ as shown in @fig-tucker.
+
+![Tucker factorization of a $3$rd order tensor $Y$.](figure/tucker_decomposition_order_3.png){#fig-tucker}
+
+The Tucker-$n$ factorization of an order $N$ tensor can be thought of as a special case of the (full) Tucker factorization, where the matrix factors $A_{n+1}, \dots, A_{N}$ are identity matrices.
+
+In the case where the core tensor $B\in\mathbb{R}^{R_1\times \dots\times R_N}$ of the Tucker factorization is cubic ($R_1=\dots=R_N$) and diagonal ($B[r_1,\dots,r_N]=\lambda_r$ if $r_1=\dots=r_N=r$ and $0$ otherwise), we have the **can**onical **decomp**osition/**para**llel **fac**tors model (CANDECOMP/PARAFAC or CP for short):
+
+$$
+Y[i_1,\dots,i_N] = \sum_{r=1}^{R} \lambda_r A_1[i_1,r]\cdots A_N[i_N,r].
+$$
+
+This can be written as
+
+$$
+Y = \llbracket \lambda; A_1, \dots, A_N\rrbracket.
+$$
+
+Sometimes the factor $\lambda_r$ is scaled so that the columns $A[:,r]$ are normalized $\lVert A[:,r]\rVert_2=1$ for each $r\in[R]$, or it is absorbed into the matrix factors and omitted from the decomposition. For the remainder of this text, I'll use CP decomposition to mean the latter case where $\lambda_r=1$ for all $r\in[R]$, as showing in @eq-cp:
+
+$$
+Y[i_1,\dots,i_N] = \sum_{r=1}^{R} A_1[i_1,r]\cdots A_N[i_N,r].
+$$ {#eq-cp}
+
+Other factorization models are used that combine aspects of CP and Tucker decomposition [@kolda_TensorDecompositionsApplications_2009], are specialized for order $3$ tensors [@qi_TripleDecompositionTensor_2020; @wu_manifold_2022], or provide alternate decomposition models entirely like tensor-trains [@oseledets_tensor-train_2011]. But the (full) Tucker, and its special cases Tucker-$n$, and CP decomposition are most commonly used extensions of the low-rank matrix factorization. These factorizations are summarized in @tbl-tensor-factorizations.
+
+| Name       | Bracket Notation                             | $n$-mode Product                                         | Entry-wise   |
+|------------|----------------------------------------------|----------------------------------------------------------|--------------|
+| Tucker-$1$ | $\llbracket A_0; A_1 \rrbracket$             | $A_0\times_1 A_1$                                        | @eq-tucker-1 |
+| Tucker-$n$ | $\llbracket A_0; A_1, \dots, A_n \rrbracket$ | $A_0\times_1 A_1 \times_2 \dots\times_n A_n$             | @eq-tucker-n |
+| Tucker     | $\llbracket A_0; A_1, \dots, A_N \rrbracket$ | $A_0\times_1 A_1 \times_2 \dots\times_N A_N$             | @eq-tucker   |
+| CP         | $\llbracket A_1, \dots, A_N \rrbracket$      | $\mathrm{id}_{R}\times_1 A_1 \times_2 \dots\times_N A_N$ | @eq-cp       |
+
+: Summary of common tensor factorizations. Here, $N$ is the order of the factorized tensor. {#tbl-tensor-factorizations tbl-colwidths="[15,25,35,25]"}
+ -->
+
 
 ## Tensor rank
 - tensor rank

@@ -23,10 +23,10 @@
 
 // Some quarto-specific definitions.
 
-#show raw.where(block: true): block.with(
-    fill: luma(230), 
-    width: 100%, 
-    inset: 8pt, 
+#show raw.where(block: true): set block(
+    fill: luma(230),
+    width: 100%,
+    inset: 8pt,
     radius: 2pt
   )
 
@@ -142,7 +142,7 @@
       new_title))
 
   block_with_new_content(old_callout,
-    new_title_block +
+    block(below: 0pt, new_title_block) +
     old_callout.body.children.at(1))
 }
 
@@ -175,6 +175,7 @@
 
 #let article(
   title: none,
+  subtitle: none,
   authors: none,
   date: none,
   abstract: none,
@@ -184,8 +185,15 @@
   paper: "us-letter",
   lang: "en",
   region: "US",
-  font: (),
+  font: "linux libertine",
   fontsize: 11pt,
+  title-size: 1.5em,
+  subtitle-size: 1.25em,
+  heading-family: "linux libertine",
+  heading-weight: "bold",
+  heading-style: "normal",
+  heading-color: black,
+  heading-line-height: 0.65em,
   sectionnumbering: none,
   toc: false,
   toc_title: none,
@@ -204,10 +212,25 @@
            font: font,
            size: fontsize)
   set heading(numbering: sectionnumbering)
-
   if title != none {
     align(center)[#block(inset: 2em)[
-      #text(weight: "bold", size: 1.5em)[#title]
+      #set par(leading: heading-line-height)
+      #if (heading-family != none or heading-weight != "bold" or heading-style != "normal"
+           or heading-color != black or heading-decoration == "underline"
+           or heading-background-color != none) {
+        set text(font: heading-family, weight: heading-weight, style: heading-style, fill: heading-color)
+        text(size: title-size)[#title]
+        if subtitle != none {
+          parbreak()
+          text(size: subtitle-size)[#subtitle]
+        }
+      } else {
+        text(weight: "bold", size: title-size)[#title]
+        if subtitle != none {
+          parbreak()
+          text(weight: "bold", size: subtitle-size)[#subtitle]
+        }
+      }
     ]]
   }
 
@@ -265,6 +288,7 @@
   inset: 6pt,
   stroke: none
 )
+
 #show: doc => article(
   title: [BlockTensorDecompositions.jl: A Unified Constrained Tensor Decomposition Julia Package],
   authors: (
@@ -289,13 +313,12 @@
   doc,
 )
 
-
 = Introduction
 <introduction>
 - Tenors are useful in many applications
 - Need tools for fast and efficient decompositions
 
-For the scientific user, it would be most useful for there to be a single piece of software that can take as input, any reasonable type of factorization model, and constraints on the individual factors, and produce a factorization without worrying the user about the details of what rank to select, how the constraints should be enforced, and how to optimize for performance. Of course a knowledgeable user may still want the ability to tweak the convergence criteria used, the loss function optimized, or what statistics to record each iteration. These are the core specification for BlockTensorDecompositions.jl.
+For the scientific user, it would be most useful for there to be a single piece of software that can take as input 1) any reasonable type of factorization model and 2) constraints on the individual factors, and produce a factorization. Details like what rank to select, how the constraints should be enforced, and convergence criteria should be handled automatically, but customizable to the knowledgable user. These are the core specification for BlockTensorDecompositions.jl.
 
 == Related tools
 <related-tools>
@@ -318,15 +341,66 @@ Some progress towards building a unified framework has been made @xu_BlockCoordi
   - a (Lipschitz) matrix step size for efficient sub-block updates
   - multi-scaled factorization when tensor entries are discretizations of a continuous function
   - partial projection and rescaling to enforce linear constraints (rather than Euclidean projection)
-  - ?? rank detection ??
+- ?? rank detection ??
+
+The main contribution is a description of a fast and flexible tensor decomposition package, along with a public implementation written in Julia: BlockTensorDecompositions.jl. This package provides a framework for creating and performing custom tensor decompositions. To the author’s knowledge, it is the first package to provide automatic factorization to a large class of constrained tensor decompositions problems, as well as a framework for implementing new constraints and iterative algorithms. This paper also describes three new techniques not found in the literature that empirically convergence faster than traditional block-coordinate descent.
 
 = Tensor Decompositions
 <tensor-decompositions>
 - the math section of the paper
 
+This section reviews the notation used throughout the paper and commonly used tensor decompositions.
+
 == Notation
 <notation>
 - tensor notation, use MATLAB notation for indexing so subscripts can be used for a sequence of tensors
+
+We use $[N] = { 1 , 2 , dots.h , N } = { n }_(n = 1)^N$ to denote integers from $1$ to $N$.
+
+Usually, lower case symbols will be used for the running index, and the capitalized letter will be the maximum letter it runs to. This leads to the convenient shorthand $i in [I]$, $j in [J]$, etc.
+
+The set of nonnegative numbers is denoted as $bb(R)_(+) = bb(R)_(gt.eq 0) = {x in bb(R) mid(bar.v) x gt.eq 0}$.
+
+Vectors are denoted with lowercase letters ($x$, $y$, etc.), and matrices and higher order tensors with uppercase letters (commonly $A$, $B$, $C$ and $X$, $Y$, $Z$). The order of a tensor is the number of axes it has. We would call vectors "order-1" or "1st order" tensors, and matrices "order-2" or "2nd order" tensors.
+
+To avoid confusion between entries of a vector/matrix/tensor and indexing a list of objects, we use square brackets to denote the former, and subscripts to denote the later. For example, the entry in the $i$th row and $j$th column of a matrix $A in bb(R)$ is $A [i , j]$. This follows MATLAB/Julia notation where `A[i,j]` points to the entry $A [i , j]$. We contrast this with a list of $I$ objects being denoted as $a_1 , dots.h , a_I$, or more compactly, ${ a_i }$ when it is clear the index $i in [I]$.
+
+The $n$-fibres, $n$th mode fibres, or mode $n$ fibres of an $N$th order tensor $A$ are denoted $A [i_1 , med dots.h , med i_(n - 1) , med : , med i_(n + 1) , med dots.h , med i_N]$. For example, the 1-fibres of a matrix $M$ are the column vectors \
+$M [: , med j]$, and the 2-fibres are the row vectors $M [i , med :]$. For order-3 tensors, the $1$st, $2$nd, and $3$rd mode fibres $A [: , j , k]$, $A [i , : , :]$, and $A [i , j , :]$ are called the vertical/column, horizontal/row, and depth/tube fibres respectively and are displayed in @fig-tensor-fibres. In Julia, the 1-, 2-, and 3-fibres of a third order array `A` would be `eachslice(A, dims=(2,3))`, `eachslice(A, dims=(1,3))`, and `eachslice(A, dims=(1,2))`.
+
+#figure([
+#box(image("figure/tensor_fibres.png"))
+], caption: figure.caption(
+position: bottom, 
+[
+Fibres of an order $3$ tensor $A$.
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-tensor-fibres>
+
+
+The $n$-slices, $n$th mode slices, or mode $n$ slices of an $N$th order tensor $A$ are notated with the slice $A [: , med dots.h , med : , med i_n , med : , med dots.h , med :]$. For matrices, the 1-fibres are the same as the 2-slices (and vice versa), but for $N$th order tensors in general, fibres are always vectors, whereas $n$-slices are $(N - 1)$th order tensors. For a $3$rd order tensor $A$, the $1$st, $2$nd, and $3$rd mode slices $A [i , : , :]$, $A [: , j , :]$, and $A [: , : , k]$ have special names and are called the horizontal, lateral, and frontal slices and are displayed in @fig-tensor-slices. In Julia, the 1-, 2-, and 3-slices of a third order array `A` would be `eachslice(A, dims=1)`, `eachslice(A, dims=2)`, and `eachslice(A, dims=3)`.
+
+#figure([
+#box(image("figure/tensor_slices.png"))
+], caption: figure.caption(
+position: bottom, 
+[
+Slices of an order $3$ tensor $A$.
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-tensor-slices>
+
+
+The Frobenius inner product between two tensors $A , B in bb(R)^(I_1 times dots.h times I_N)$ is denoted
+
+$ ⟨A , B⟩ = A dot.op B = sum_(i_1 = 1)^(I_1) dots.h sum_(i_N = 1)^(I_N) A [i_1 , dots.h , i_N] B [i_1 , dots.h , i_N] . $
+
+Since we commonly use $I$ as the size of a tensor’s dimension, we use $upright(i d)_I$ to denote the identity tensor of size $I$ (of the appropriate order). When the order is $2$, $upright(i d)_I$ is an $I times I$ matrix with ones along the main diagonal, and zeros elsewhere. For higher orders $N$, this is an $underbrace(I times dots.h.c times I, N upright("times"))$ tensor where $upright(i d)_I [i_1 , dots.h , i_N] = 1$ when $i_1 = dots.h = i_N in [I]$, and is zero otherwise.
 
 == Common Decompositions
 <common-decompositions>
@@ -390,5 +464,10 @@ Some progress towards building a unified framework has been made @xu_BlockCoordi
 - provide a playground to invent new decompositions
 - like auto-diff for factorizations
 
-#bibliography("references.bib", style: "citationstyles/ieee-compressed-in-text-citations.csl")
+ 
+  
+#set bibliography(style: "citationstyles/ieee-compressed-in-text-citations.csl") 
+
+
+#bibliography("references.bib")
 
