@@ -57,6 +57,8 @@ end
 
 const DiagonalTuple{N, T} = NTuple{N, Diagonal{T}} # Tuple type where you have a tuple of Diagonal matrices, possibly of varying sizes
 
+# TODO: Use meta programming to define these DiagonalTuple methods
+
 Base.:+(X, DT::DiagonalTuple) = map(D -> X + D, DT)
 Base.:+(DT::DiagonalTuple, X) = map(D -> D + X, DT)
 Base.:+(DT1::DiagonalTuple{N}, DT2::DiagonalTuple{N}) where {N} = Tuple(C + D for (C, D) in zip(DT1, DT2))
