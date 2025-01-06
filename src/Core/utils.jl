@@ -86,6 +86,20 @@ getnotindex(A, i::Int) = A[eachindex(A) .!= i]
 getnotindex(A, I) = A[eachindex(A) .∉ (I,)]
 
 """
+    eachfibre(A::AbstractArray; n::Integer, kwargs...)
+
+Creates views of `A` that are that `n`-fibres of `A`.
+
+Shorthand for `eachslice(A; dims=(1,...,n-1,n+1,...,ndims(A)))`.
+
+See `eachslice`.
+"""
+function eachfibre(A::AbstractArray; n::Integer, kwargs...)
+    dims = Tuple([1:n-1; n+1:ndims(A)]) # each integer from 1 to N, excluding n
+    return eachslice(A; dims, kwargs...)
+end
+
+"""
     swapdims(A::AbstractArray, a::Integer, b::Integer=1)
 
 Swap dimensions `a` and `b`.

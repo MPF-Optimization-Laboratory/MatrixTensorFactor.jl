@@ -60,6 +60,13 @@ const VERBOSE = true
             @test all_recursive(x -> x > 0, collect.([1:10, 2:11, 3:5, [1:3, 2]])) == true
             @test all_recursive(x -> x < 11, [1:10, 2:11, 3:5, [1:3, 2]]) == false
         end
+
+        @testset "eachfibre" begin
+            A = reshape(collect(1:60), 3,4,5)
+            @test eachfibre(A; n=1) == eachslice(A; dims=(2,3))
+            @test eachfibre(A; n=2) == eachslice(A; dims=(1,3))
+            @test eachfibre(A; n=3) == eachslice(A; dims=(1,2))
+        end
     end
 
     @testset "Products" begin
