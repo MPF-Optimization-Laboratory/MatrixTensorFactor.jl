@@ -18,8 +18,8 @@ end
 
 # SuperDiagonal Interface
 SuperDiagonal(v::AbstractVector, ndims::Integer=2) = SuperDiagonal{eltype(v), ndims, typeof(v)}(v)
-#superones(T::DataType, size::Integer, ndims::Integer=2) = SuperDiagonal(ones(T, size), ndims) # TODO make interface for a super diagonal of ones
 SuperDiagonal{T}(v::AbstractVector, ndims::Integer=2) where {T} = SuperDiagonal(convert(AbstractVector{T}, v)::AbstractVector{T}, ndims)
+
 LinearAlgebra.diag(S::SuperDiagonal) = S.diag
 function array(S::SuperDiagonal)
     A = zeros(eltype(S), size(S))
@@ -54,12 +54,15 @@ function Base.getindex(S::SuperDiagonal, I::Vararg{Int})
 end
 
 """
-    identity_tensor(N, ndims)
+    identity_tensor(I, ndims)
+    identity_tensor(T, I, ndims)
 
-Creates a SuperDiagonal array of ones with size N × ... × N of order `ndims`.
+Creates a SuperDiagonal array of ones with size I × ... × I of order `ndims`.
+
+Can provide a type `T` for the identity tensor.
 """
-identity_tensor(N, ndims) = SuperDiagonal(ones(Int, N), ndims)
-identity_tensor(T, N, ndims) = SuperDiagonal(ones(T, N), ndims)
+identity_tensor(I, ndims) = SuperDiagonal(ones(Int, I), ndims)
+identity_tensor(T, I, ndims) = SuperDiagonal(ones(T, I), ndims)
 
 #######################################################
 

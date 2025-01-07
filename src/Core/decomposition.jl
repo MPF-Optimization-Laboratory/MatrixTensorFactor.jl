@@ -348,7 +348,7 @@ isfrozen(CPD::CPDecomposition, n::Integer) = n == 0 ? true : frozen(CPD)[n] # si
 
 # AbstractTucker Interface
 matrix_factors(CPD::CPDecomposition) = factors(CPD)
-core(CPD::CPDecomposition) = SuperDiagonal(ones(eltype(CPD), rankof(CPD)), ndims(CPD))
+core(CPD::CPDecomposition{T, N}) where {T, N} = identity_tensor(T, rankof(CPD), N) #SuperDiagonal(ones(eltype(CPD), rankof(CPD)), ndims(CPD))
 
 # Efficient size and indexing for CPDecomposition
 Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))
