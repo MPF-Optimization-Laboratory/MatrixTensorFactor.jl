@@ -53,6 +53,14 @@ function Base.getindex(S::SuperDiagonal, I::Vararg{Int})
     end
 end
 
+"""
+    identity_tensor(N, ndims)
+
+Creates a SuperDiagonal array of ones with size N × ... × N of order `ndims`.
+"""
+identity_tensor(N, ndims) = SuperDiagonal(ones(Int, N), ndims)
+identity_tensor(T, N, ndims) = SuperDiagonal(ones(T, N), ndims)
+
 #######################################################
 
 const DiagonalTuple{N, T} = NTuple{N, Diagonal{T}} # Tuple type where you have a tuple of Diagonal matrices, possibly of varying sizes
