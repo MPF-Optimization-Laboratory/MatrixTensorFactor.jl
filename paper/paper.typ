@@ -288,6 +288,9 @@
   inset: 6pt,
   stroke: none
 )
+#import "@preview/ctheorems:1.1.0": *
+#show: thmrules
+#let definition = thmbox("definition", "Definition", base_level: 1)
 
 #show: doc => article(
   title: [BlockTensorDecompositions.jl: A Unified Constrained Tensor Decomposition Julia Package],
@@ -357,15 +360,15 @@ This section reviews the notation used throughout the paper and commonly used te
 
 === Sets
 <sets>
-The set of nonnegative numbers is denoted as $bb(R)_(+) = bb(R)_(gt.eq 0) = {x in bb(R) mid(bar.v) x gt.eq 0}$.
+The set of real number is denoted as $bb(R)$ and its restrictions to nonnegative numbers is denoted as $bb(R)_(+) = bb(R)_(gt.eq 0) = {x in bb(R) mid(bar.v) x gt.eq 0}$.
 
 We use $[N] = { 1 , 2 , dots.h , N } = { n }_(n = 1)^N$ to denote integers from $1$ to $N$.
 
 Usually, lower case symbols will be used for the running index, and the capitalized letter will be the maximum letter it runs to. This leads to the convenient shorthand $i in [I]$, $j in [J]$, etc.
 
-We use a capital delta $Delta$ to denote sets of vectors or higher order tensors where the slices or fibres along a specified dimension sum to $1$ i.e.~generalized simplexes.
+We use a capital delta $Delta$ to denote sets of vectors or higher order tensors where the slices or fibres along a specified dimension sum to $1$, i.e.~generalized simplexes.
 
-Usually, we use script letters ($cal(A) , cal(B) , cal(C) , e t c .$) for other sets.
+Usually, we use script letters ($cal(A) , cal(B) , cal(C) ,$ etc.) for other sets.
 
 === Vectors, Matrices, and Tensors
 <vectors-matrices-and-tensors>
@@ -408,26 +411,276 @@ supplement: "Figure",
 
 Since we commonly use $I$ as the size of a tensor’s dimension, we use $upright(i d)_I$ to denote the identity tensor of size $I$ (of the appropriate order). When the order is $2$, $upright(i d)_I$ is an $I times I$ matrix with ones along the main diagonal, and zeros elsewhere. For higher orders $N$, this is an $underbrace(I times dots.h.c times I, N upright("times"))$ tensor where $upright(i d)_I [i_1 , dots.h , i_N] = 1$ when $i_1 = dots.h = i_N in [I]$, and is zero otherwise.
 
-BlockTensorDecomposition.jl defines `identity_tensor` \#\#\# Operations
+BlockTensorDecomposition.jl defines `identity_tensor(I, ndims)` to construct $upright(i d)_I$.
 
+=== Operations
+<operations>
 The Frobenius inner product between two tensors $A , B in bb(R)^(I_1 times dots.h times I_N)$ is denoted
 
 $ ⟨A , B⟩ = A dot.op B = sum_(i_1 = 1)^(I_1) dots.h sum_(i_N = 1)^(I_N) A [i_1 , dots.h , i_N] B [i_1 , dots.h , i_N] . $
 
 Julia’s standard library package LinearAlgebra implements the Frobenius inner product with `dot(A, B)` or `A ⋅ B`.
 
+The $n$-slice dot product $dot.op_n$ between two tensors $A in bb(R)^(I_1 , dots.h , I_(n - 1) , J , I_(n + 1) , dots.h , I_N)$ and $B in bb(R)^(I_1 , dots.h , I_(n - 1) , K , I_(n + 1) , dots.h , I_N)$ returns a matrix $(A dot.op_n B) in bb(R)^(J times K)$ with entries
+
+$ (A dot.op_n B) [j , k] = sum_(i_1 dots.h i_(n - 1) i_(n + 1) dots.h i_N) A [i_1 , dots.h , i_(n - 1) , j , i_(n + 1) , dots.h , i_N] B [i_1 , dots.h , i_(n - 1) , k , i_(n + 1) , dots.h , i_N] . $
+
+This product can also be thought of as taking the dot product between all pairs of $n$th order slices of $A$ and $B$: $(A dot.op_n B) [j , k] = A_j dot.op B_k$.
+
+BlockTensorDecomposition.jl defines this operation with `slicewise_dot(A, B, n)`. In the special case where $A = B$, a more efficient method that only computes entries where $i lt.eq j$ is defined since $A dot.op_n A$ is a symmetric matrix.
+
+The $n$-mode product $times_n$ between a tensor $A in bb(R)^(I_1 times dots.h times I_N)$ and matrix $B in bb(R)^(I_n times J)$, returns a tensor $(A times_n B) in bb(R)^(I_1 times dots.h times I_(n - 1) times J times I_(n + 1) times dots.h times I_N)$ with entries
+
+$ (A times_n B) [i_1 , dots.h , i_(n - 1) , j , i_(n + 1) , dots.h , i_N] = sum_(i_n = 1)^(I_n) A [i_1 , dots.h , i_(n - 1) , i_n , i_(n + 1) , dots.h , i_N] B [i_n , j] . $
+
+BlockTensorDecomposition.jl defines this operation with `nmode_product(A, B, n)`.
+
+```julia
+function nmode_product(A::AbstractArray, B::AbstractMatrix, n::Integer)
+    # convert the problem to the mode-1 product
+    Aperm = swapdims(A, n)
+    Cperm = Aperm ×₁ B
+    return swapdims(Cperm, n) # swap back
+end
+
+function ×₁(A::AbstractArray, B::AbstractMatrix)
+    # Turn the 1-mode product into matrix-matrix multiplication
+    sizeA = size(A)
+    Amat = reshape(A, sizeA[1], :)
+
+    # Initialize the output tensor
+    C = zeros(size(B)[1], sizeA[2:end]...)
+    Cmat = reshape(C, size(B)[1], prod(sizeA[2:end]))
+
+    # Perform matrix-matrix multiplication Cmat = B*Amat
+    mul!(Cmat, B, Amat)
+
+    return C # Output entries of Cmat in tensor form
+end
+
+function swapdims(A::AbstractArray, a::Integer, b::Integer=1)
+    # Construct a permutation where a and b are swapped
+    # e.g. [4, 2, 3, 1, 5, 6] when a=4 and b=1
+    dims = collect(1:ndims(A))
+    dims[a] = b; dims[b] = a
+    return permutedims(A, dims)
+end
+```
+
+The Frobenius norm of a tensor $A$ is the square root of its dot product with itself
+
+$ norm(A)_F = sqrt(⟨A , A⟩) . $
+
+For vectors $v$, this is equivalent to the (Euclidean) 2-norm
+
+$ norm(v)_F = norm(v)_2 = sqrt(⟨v , v⟩) . $
+
+For matrices $M$, the (Operator) 2-norm is defined as
+
+$ norm(M)_2 = arg thin max_(norm(v)_2 = 1) norm(M v)_2 = sigma_1 (M) $
+
+where $sigma_1 (M)$ is the largest singular value of $M$.
+
+For tensors $T$, the (Operator) 2-norm needs to be defined in terms of how we treat them as function on other tensors. There is a canonical way to do this for vectors $x arrow.r v^tack.b x$ and matrices $x arrow.r M x$, but not tensors. This is relevant to @sec-lipschitz-computation where the Lipschitz step-size is computed in terms of the Operator norm of the Hessian of our objective function.
+
 == Common Decompositions
-<common-decompositions>
+<sec-common-decompositions>
 - Extensions of PCA/ICA/NMF to higher dimensions
 - talk about the most popular Tucker, Tucker-n, CP
 - other decompositions
   - high order SVD (see Kolda and Bader)
   - HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
 
+A tensor decomposition is a factorization of a tensor into multiple (usually smaller) tensors, that can be recombined into the original tensor. Computationally, we can think of a generic decomposition as storing factors $(A , B , C , . . .)$ and operations $(times_a , times_b , . . .)$ for combining them. This is what we do in BlockTensorDecomposition.jl.
+
+```julia
+struct GenericDecomposition{T, N} <: AbstractArray{T, N}
+    factors::Tuple{Vararg{AbstractArray{T}}} # e.g. (A, B, C)
+    contractions::Tuple{Vararg{Function}} # e.g. (×₁, ×₂)
+end
+# Y = A ×₁ B ×₂ C
+array(G::GenericDecomposition) = multifoldl(contractions(G), factors(G))
+```
+
+The function `multifoldl` applies the given operations between each factor, from left to right.
+
+```julia
+function multifoldl(ops, args)
+    @assert (length(ops) + 1) == length(args)
+    x = args[begin]
+    for (op, arg) in zip(ops, args[begin+1:end])
+        x = op(x, arg)
+    end
+    return x
+end
+```
+
+Different types of decompositions define different operations, and different "ranks" of the same decomposition specific the sizes of the factors used.
+
+A commonly used family of decompositions can be derived from the Tucker decomposition.
+
+#definition()[
+A rank-$(R_1 , dots.h , R_N)$ Tucker decomposition of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ produces $N$ matrices $A_n in bb(R)^(I_n times R_n)$, $n in [N]$, and core tensor $B in bb(R)^(R_1 times dots.h times R_N)$ such that
+
+#math.equation(block: true, numbering: "(1)", [ $ Y [i_1 , dots.h , i_N] = sum_(r_1 = 1)^(R_1) dots.h sum_(r_N = 1)^(R_N) A_1 [i_1 , r_1] dots.h.c A_r [i_N , r_N] B [r_1 , dots.h , r_N] $ ])<eq-tucker>
+
+entry-wise. More compactly, this decomposition can be written using the $n$-mode product, or with double brackets
+
+$ Y = B times_1 A_1 times_2 dots.h times_N A_N = B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $
+
+] <def-tucker-decomposition>
+Sometimes we write $A_0 = B$ to ease notation, and suggest the "zeroth" factor of the tucker decomposition is the core tensor $B$. In the special case when $N = 3$, we can visualize Tucker decomposition as multiplying the core tensor by matrices on all three sides as shown in @fig-tucker.
+
+#figure([
+#box(image("figure/tucker_decomposition_order_3.png"))
+], caption: figure.caption(
+position: bottom, 
+[
+Tucker factorization of a $3$rd order tensor $Y$.
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-tucker>
+
+
+Setting all the matrices of a Tucker decomposition to the identity matrix but the first gives the Tucker-$1$ decomposition.
+
+#definition()[
+A rank-$R$ Tucker-$1$ decomposition of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ produces a matrix $A in bb(R)^(I_1 times R)$, and core tensor $B in bb(R)^(R times I_2 times dots.h times I_N)$ such that
+
+#math.equation(block: true, numbering: "(1)", [ $ Y [i_1 , dots.h , i_N] = sum_(r = 1)^R A [i_1 , r] B [r , i_2 , dots.h , i_N] $ ])<eq-tucker-1>
+
+entry-wise or more compactly,
+
+$ Y = A B = B times_1 A = lr(bracket.l.double B \; A bracket.r.double) . $
+
+] <def-tucker-1-decomposition>
+Note we extend the usual definition of matrix-matrix multiplication
+
+$ (A B) [i , j] = sum_(r = 1)^R A [i , r] B [r , j] $
+
+to tensors $B$ in the compact notation for Tucker-1 decomposition $Y = A B$.
+
+More generally, any number of matrices can be set to the identity matrix giving the Tucker-$n$ decomposition.
+
+#definition()[
+A rank-$(R_1 , dots.h , R_n)$ Tucker-$n$ decomposition of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ produces $n$ matrices $A_1 , dots.h , A_n$, and core tensor $B in bb(R)^(R_1 times dots.h times R_n times I_(n + 1) times dots.h times I_N)$ such that
+
+#math.equation(block: true, numbering: "(1)", [ $ Y [i_1 , dots.h , i_N] = sum_(r_1 = 1)^(R_1) dots.h sum_(r_N = 1)^(R_n) A_1 [i_1 , r_1] dots.h.c A_n [i_N , r_n] B [r_1 , dots.h , r_n , i_(n + 1) , dots.h , i_N] $ ])<eq-tucker-n>
+
+entry-wise, or compactly written in the following three ways, $ Y & = B times_1 A_1 times_2 dots.h times_n A_n times_(n + 1) upright(i d)_(I_(n + 1)) times_(n + 2) dots.h times_N upright(i d)_(I_N)\
+Y & = B times_1 A_1 times_2 dots.h times_n A_n\
+Y & = lr(bracket.l.double B \; A_1 , dots.h , A_n bracket.r.double) . $
+
+] <def-tucker-n-decomposition>
+Lastly, if we set the core tensor $B$ to the identity tensor $upright(i d)_R$, we obtain the #strong[can];onical #strong[decomp];osition/#strong[para];llel #strong[fac];tors model (CANDECOMP/PARAFAC or CP for short).
+
+#definition()[
+A rank-$R$ CP decomposition of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ produces $N$ matrices $A_n in bb(R)^(I_n times R)$, such that
+
+#math.equation(block: true, numbering: "(1)", [ $ Y [i_1 , dots.h , i_N] = sum_(r = 1)^R A_1 [i_1 , r] dots.h.c A_r [i_N , r] $ ])<eq-cp>
+
+entry-wise. More compactly, this decomposition can be written using the $n$-mode product, or with double brackets
+
+$ Y = upright(i d)_R times_1 A_1 times_2 dots.h times_N A_N = upright(i d)_R times.big_n A_n = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double) . $
+
+] <def-cp-decomposition>
+Note CP decomposition is sometimes referred to as Kruskal decomposition, and requires the core only be diagonal (and not necessarily identity) and the factors $A_n$ have normalized columns $norm(A_n [: , r])_2 = 1$.
+
+Other factorization models are used that combine aspects of CP and Tucker decomposition @kolda_TensorDecompositionsApplications_2009, are specialized for order $3$ tensors @qi_TripleDecompositionTensor_2020@wu_manifold_2022, or provide alternate decomposition models entirely like tensor-trains @oseledets_tensor-train_2011. But the (full) Tucker, and its special cases Tucker-$n$, and CP decomposition are most commonly used extensions of the low-rank matrix factorization to tensors. These factorizations are summarized in @tbl-tensor-factorizations.
+
+#figure([
+#table(
+  columns: (15%, 25%, 35%, 25%),
+  align: (auto,auto,auto,auto,),
+  table.header([Name], [Bracket Notation], [$n$-mode Product], [Entry-wise],),
+  table.hline(),
+  [Tucker], [$lr(bracket.l.double A_0 \; A_1 , dots.h , A_N bracket.r.double)$], [$A_0 times_1 A_1 times_2 dots.h times_N A_N$], [@eq-tucker],
+  [Tucker-$1$], [$lr(bracket.l.double A_0 \; A_1 bracket.r.double)$], [$A_0 times_1 A_1$], [@eq-tucker-1],
+  [Tucker-$n$], [$lr(bracket.l.double A_0 \; A_1 , dots.h , A_n bracket.r.double)$], [$A_0 times_1 A_1 times_2 dots.h times_n A_n$], [@eq-tucker-n],
+  [CP], [$lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)$], [$upright(i d)_R times_1 A_1 times_2 dots.h times_N A_N$], [@eq-cp],
+)
+], caption: figure.caption(
+position: top, 
+[
+Summary of common tensor factorizations. Here, $N$ is the order of the factorized tensor.
+]), 
+kind: "quarto-float-tbl", 
+supplement: "Table", 
+)
+<tbl-tensor-factorizations>
+
+
+TODO add discussion on other decompositions - high order SVD (see Kolda and Bader) - HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
+
+Tensor decompositions are not nessisarily unique. It should be clear that scaling one factor by $x eq.not 0$ and dividing another by $x$ yields the same original tensor. Furthermore, fibres and slices can be permuted without affecting the the original tensor. Up to these manipulations, for a fixed rank, there exist criteria that ensures their decompositions are unique @kolda_TensorDecompositionsApplications_2009@kruskal_three-way_1977@bhaskara_uniqueness_2014.
+
+=== Representing Tucker Decompositions
+<representing-tucker-decompositions>
+There are implemented in BlockTensorDecomposition.jl and can be called, for a third order tensor, with `Tucker((B, A₁, A₂, A₃))`, `Tucker1((B, A₁))`, and `CPDecomposition((A₁, A₂, A₃))`. These Julia `structs` store the tensor in its factored form. If the recombined tensor or particular entries are requested, Julia dispatches on the type of decomposition and calls a particular method of `array` or `getindex`. The implementations for efficient array construction and index access are provided below.
+
+```julia
+array(T::Tucker) = multifoldl(tucker_contractions(ndims(T)), factors(T))
+tucker_contractions(N) = Tuple((G, A) -> nmode_product(G, A, n) for n in 1:N)
+```
+
+TODO add getindex method for Tucker type
+
+```julia
+function array(T::Tucker1)
+    B, A = factors(T)
+    return B ×₁ A
+end
+
+function getindex(T::Tucker1, I::Vararg{Int})
+    B, A = factors(T)
+    i = I[1]
+    J = I[begin+1:end] # J = (I₂, I₃, ..., I_N)
+    return (@view A[i, :]) ⋅ view(B, :, J...)
+end
+```
+
+```julia
+array(CPD::CPDecomposition) =
+  mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
+
+vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
+
+getindex(CPD::CPDecomposition, I::Vararg{Int}) =
+  sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
+```
+
 == Tensor rank
 <tensor-rank>
 - tensor rank
 - constrained rank (nonnegative etc.)
+
+The rank of a matrix $Y in bb(R)^(I times J)$ can be defined as the smallest $R in bb(Z)_(+)$ such that there exists an exact factorization $Y = A B$ for some $A in bb(R)^(I times R)$ and $B in bb(R)^(R times J)$.
+
+Although this can be extended to higher order tensors, we must specify under which factorization model we are using. For example, the #emph[CP-rank] $R$ of a tensor $Y$ is the smallest such $R$ that omits an exact CP decomposition of $Y$.
+
+#definition()[
+The CP rank of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ is the smallest $R$ such that there exist factors $A_n in bb(R)^(I_n times R)$ and $Y = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)$, $ upright("rank")_(upright("CP")) (Y) = min {R mid(bar.v) exists A_n in bb(R)^(I_n times R) , thin n in [N] quad upright("s.t.") quad Y = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)} $
+
+] <def-cp-rank>
+In a similar way, we can define the #emph[Tucker-1-rank] $R$.
+
+#definition()[
+The Tucker-1 rank of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ is the smallest $R$ such that there exist factors $A in bb(R)^(I_1 times R)$ and $B in bb(R)^(R times I_2 times dots.h times I_N)$ where $Y = A B$
+
+$ upright("rank")_(upright("Tucker-1")) (Y) = min {R mid(bar.v) exists A_n in bb(R)^(I_n times R) , B in bb(R)^(R times I_2 times dots.h times I_N) thin quad upright("s.t.") quad Y = A B} $
+
+] <def-tucker-1-rank>
+For the Tucker and Tucker-$n$ decompositions, we instead call a particular factorization #strong[a] rank-$(R_1 , dots.h , R_N)$ Tucker factorization or #strong[a] rank-$(R_1 , dots.h , R_n)$ Tucker-$n$ factorization, rather than #strong[the] CP- or Tucker-$1$-rank of a tensor or #strong[the] rank of a matrix.
+
+One reason CP and Tucker-$1$ only need a single rank $R$ can be explained by considering the case when the order of the tensor $N = 2$ (matrices). The two factorizations become equivalent and are equal to low-rank $R$ matrix factorization $Y = A B$. In fact, Tucker-$1$ is always equivalent to a low-rank matrix factorization, if you consider a flattening of the tensor to arrange the entries as a matrix.
+
+The idea of tensor rank can be generalized further to constrained rank. These are the smallest rank $R$ such that the factors in the decomposition obey the given set of constraints.
+
+For example, the nonnegative Tucker-1 rank is defined as $ upright("rank")_(upright("Tucker-1"))^(+) (Y) = min {R mid(bar.v) exists A_n in bb(R)_(+)^(I_n times R) , B in bb(R)_(+)^(R times I_2 times dots.h times I_N) thin quad upright("s.t.") quad Y = A B} . $
+
+More restrictive constraints increase the rank of the tensor since there is less freedom in selecting the factors.
 
 = Computing Decompositions
 <computing-decompositions>
@@ -442,6 +695,13 @@ Julia’s standard library package LinearAlgebra implements the Frobenius inner 
 - Use Block Coordinate Descent / Alternating Proximal Descent
   - do #emph[not] use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
 
+=== Computing Gradients
+<computing-gradients>
+- Use Auto diff generally
+- But hand-crafted gradients and Lipschitz calculations #emph[can] be faster (e.g.~symmetrized slicewise dot product)
+
+=== Computing Lipschitz Step-sizes
+<sec-lipschitz-computation>
 = Techniques for speeding up convergences
 <techniques-for-speeding-up-convergences>
 - As stated, algorithm works

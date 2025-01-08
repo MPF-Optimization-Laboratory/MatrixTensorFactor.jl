@@ -84,15 +84,15 @@ This section reviews the notation used throughout the paper and commonly used te
 
 ### Sets
 
-The set of nonnegative numbers is denoted as $\mathbb{R}_+=\mathbb{R}_{\geq 0}=\left\{x\in \mathbb{R} \middle| x\geq 0\right\}$.
+The set of real number is denoted as $\mathbb{R}$ and its restrictions to nonnegative numbers is denoted as $\mathbb{R}_+=\mathbb{R}_{\geq 0}=\left\{x\in \mathbb{R} \middle| x\geq 0\right\}$.
 
 We use $[N]=\{1, 2, \dots, N\}=\{n\}_{n=1}^N$ to denote integers from $1$ to $N$.
 
 Usually, lower case symbols will be used for the running index, and the capitalized letter will be the maximum letter it runs to. This leads to the convenient shorthand $i\in[I]$, $j\in[J]$, etc.
 
-We use a capital delta $\Delta$ to denote sets of vectors or higher order tensors where the slices or fibres along a specified dimension sum to $1$ i.e. generalized simplexes.
+We use a capital delta $\Delta$ to denote sets of vectors or higher order tensors where the slices or fibres along a specified dimension sum to $1$, i.e. generalized simplexes.
 
-Usually, we use script letters ($\mathcal{A}, \mathcal{B}, \mathcal{C}, etc.$) for other sets.
+Usually, we use script letters ($\mathcal{A}, \mathcal{B}, \mathcal{C},$ etc.) for other sets.
 
 ### Vectors, Matrices, and Tensors
 
@@ -113,7 +113,8 @@ For matrices, the 1-fibres are the same as the 2-slices (and vice versa), but fo
 
 Since we commonly use $I$ as the size of a tensor's dimension, we use $\mathrm{id}_I$ to denote the identity tensor of size $I$ (of the appropriate order). When the order is $2$, $\mathrm{id}_I$ is an $I\times I$ matrix with ones along the main diagonal, and zeros elsewhere. For higher orders $N$, this is an $\underbrace{I\times \cdots \times I}_{N \text{times}}$ tensor where $\mathrm{id}_I[i_1,\dots,i_N]=1$ when $i_1=\dots=i_N\in[I]$, and is zero otherwise.
 
-BlockTensorDecomposition.jl defines `identity_tensor`
+BlockTensorDecomposition.jl defines `identity_tensor(I, ndims)` to construct $\mathrm{id}_I$.
+
 ### Operations
 
 The Frobenius inner product between two tensors $A,B\in\mathbb{R}^{I_1\times\dots\times I_N}$ is denoted
@@ -124,111 +125,288 @@ $$
 
 Julia's standard library package LinearAlgebra implements the Frobenius inner product with `dot(A, B)` or `A ⋅ B`.
 
+The $n$-slice dot product $\cdot_n$ between two tensors $A\in\mathbb{R}^{I_{1},\dots, I_{n-1},J,I_{n+1},\dots, I_{N}}$ and $B\in\mathbb{R}^{I_{1},\dots, I_{n-1},K,I_{n+1},\dots, I_{N}}$ returns a matrix $(A \cdot_n B)\in\mathbb{R}^{J\times K}$ with entries
 
+$$
+(A \cdot_n B)[j, k] = {\sum_{i_{1}\dots i_{n-1}i_{n+1}\dots i_{N}}} A[i_{1},\dots, i_{n-1},j,i_{n+1},\dots, i_{N}]B[i_{1},\dots, i_{n-1},k,i_{n+1},\dots, i_{N}].
+$$
 
-## Common Decompositions
+This product can also be thought of as taking the dot product between all pairs of $n$th order slices of $A$ and $B$: $(A \cdot_n B)[j, k] = A_j \cdot B_k$.
+
+BlockTensorDecomposition.jl defines this operation with `slicewise_dot(A, B, n)`. In the special case where $A=B$, a more efficient method that only computes entries where $i \leq j$ is defined since $A \cdot_n A$ is a symmetric matrix.
+
+The $n$-mode product $\times_n$ between a tensor $A\in\mathbb{R}^{I_1 \times \dots \times I_N}$ and matrix $B\in\mathbb{R}^{I_n\times J}$, returns a tensor $(A \times_n B)\in\mathbb{R}^{I_1 \times \dots \times I_{n-1} \times J \times I_{n+1} \times \dots \times I_N}$ with entries
+
+$$
+(A \times_n B)[i_1, \dots, i_{n-1},j,i_{n+1},\dots,i_N] = \sum_{i_{n}=1}^{I_n} A[i_1, \dots, i_{n-1},i_n,i_{n+1},\dots,i_N]B[i_n,j].
+$$
+
+BlockTensorDecomposition.jl defines this operation with `nmode_product(A, B, n)`.
+
+```julia
+function nmode_product(A::AbstractArray, B::AbstractMatrix, n::Integer)
+    # convert the problem to the mode-1 product
+    Aperm = swapdims(A, n)
+    Cperm = Aperm ×₁ B
+    return swapdims(Cperm, n) # swap back
+end
+
+function ×₁(A::AbstractArray, B::AbstractMatrix)
+    # Turn the 1-mode product into matrix-matrix multiplication
+    sizeA = size(A)
+    Amat = reshape(A, sizeA[1], :)
+
+    # Initialize the output tensor
+    C = zeros(size(B)[1], sizeA[2:end]...)
+    Cmat = reshape(C, size(B)[1], prod(sizeA[2:end]))
+
+    # Perform matrix-matrix multiplication Cmat = B*Amat
+    mul!(Cmat, B, Amat)
+
+    return C # Output entries of Cmat in tensor form
+end
+
+function swapdims(A::AbstractArray, a::Integer, b::Integer=1)
+    # Construct a permutation where a and b are swapped
+    # e.g. [4, 2, 3, 1, 5, 6] when a=4 and b=1
+    dims = collect(1:ndims(A))
+    dims[a] = b; dims[b] = a
+    return permutedims(A, dims)
+end
+```
+
+The Frobenius norm of a tensor $A$ is the square root of its dot product with itself
+
+$$
+\left\lVert A \right\rVert_F = \sqrt{\left\langle A, A\right\rangle}.
+$$
+
+For vectors $v$, this is equivalent to the (Euclidean) 2-norm
+
+$$
+\left\lVert v \right\rVert_F = \left\lVert v \right\rVert_2 = \sqrt{\left\langle v, v\right\rangle}.
+$$
+
+For matrices $M$, the (Operator) 2-norm is defined as
+
+$$
+\left\lVert M \right\rVert_2 = \arg\,\max_{\left\lVert v \right\rVert_2 = 1} \left\lVert Mv \right\rVert_2 = \sigma_1(M)
+$$
+
+where $\sigma_1(M)$ is the largest singular value of $M$.
+
+For tensors $T$, the (Operator) 2-norm needs to be defined in terms of how we treat them as function on other tensors. There is a canonical way to do this for vectors $x \to v^{\top}x$ and matrices $x \to Mx$, but not tensors. This is relevant to @sec-lipschitz-computation where the Lipschitz step-size is computed in terms of the Operator norm of the Hessian of our objective function.
+
+## Common Decompositions {#sec-common-decompositions}
 - Extensions of PCA/ICA/NMF to higher dimensions
 - talk about the most popular Tucker, Tucker-n, CP
 - other decompositions
   - high order SVD (see Kolda and Bader)
   - HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
 
-<!-- From my thesis proposal: -->
+A tensor decomposition is a factorization of a tensor into multiple (usually smaller) tensors, that can be recombined into the original tensor. Computationally, we can think of a generic decomposition as storing factors $(A,B,C,...)$ and operations $(\times_a,\times_b,...)$ for combining them. This is what we do in BlockTensorDecomposition.jl.
 
-<!-- This section gives a brief tour of the most common tensor factorizations, heavily relying on the framework and notation given by Kolda and Bader [@kolda_TensorDecompositionsApplications_2009]. They are, however, presented in my own interpretation as matrix factorization generalizations and as different instances of the Tucker factorization.
+```julia
+struct GenericDecomposition{T, N} <: AbstractArray{T, N}
+    factors::Tuple{Vararg{AbstractArray{T}}} # e.g. (A, B, C)
+    contractions::Tuple{Vararg{Function}} # e.g. (×₁, ×₂)
+end
+# Y = A ×₁ B ×₂ C
+array(G::GenericDecomposition) = multifoldl(contractions(G), factors(G))
+```
 
-One way we can extend matrix factorization to multidimensional signals is with a *Tucker-1* factorization. Here, each mixture is an $N$th order tensor $Y_i\in\mathbb{R}^{J_1\times \dots\times J_N}$ stored in the $1$-slices of an order-$(N+1)$ tensor $Y\in\mathbb{R}^{I\times J_1\times \dots\times J_N}$, $Y[i, :, \dots, :]=Y_i$, and similarly for $B$. Slice-wise, we have the equation
+The function `multifoldl` applies the given operations between each factor, from left to right.
+
+```julia
+function multifoldl(ops, args)
+    @assert (length(ops) + 1) == length(args)
+    x = args[begin]
+    for (op, arg) in zip(ops, args[begin+1:end])
+        x = op(x, arg)
+    end
+    return x
+end
+```
+
+Different types of decompositions define different operations, and different "ranks" of the same decomposition specific the sizes of the factors used.
+
+A commonly used family of decompositions can be derived from the Tucker decomposition.
+
+::: {#def-tucker-decomposition}
+A rank-$(R_1,\dots,R_N)$ Tucker decomposition of a tensor $Y\in\mathbb{R}^{I_1\times\dots\times I_N}$ produces $N$ matrices $A_n\in\mathbb{R}^{I_n\times R_n}$, $n\in[N]$, and core tensor $B\in\mathbb{R}^{R_1\times\dots\times R_N}$ such that
 
 $$
-Y_i = \sum_{r=1}^R A[i,r] B_r,
-$$ {#eq-tucker-1-slices}
-
-which is entry-wise
-
-$$
-Y[i, j_1, \dots, j_N] = \sum_{r=1}^R A[i,r] B[r,j_1, \dots, j_N].
-$$ {#eq-tucker-1}
-
-![Example of a rank $R=3$ Tucker-1 factorization coloured according to @eq-tucker-1-slices. Here we have $Y\in\mathbb{R}^{5\times J \times K}, A\in\mathbb{R}^{5\times 3}$, and $B\in\mathbb{R}^{3\times J \times K}$. The first horizontal slice of $Y$, $Y_1$, is equal to $A[1,1]B_1+A[1,2]B_2+A[1,3]B_3$.](figure/tucker_1_example.png){#fig-tucker-1-example}
-
-Seeing @eq-tucker-1-slices alongside @fig-tucker-1-example makes it clear that the decomposition is performing a compression along the first axis of $Y$. This makes sense in the model where the mixtures are just linear combinations of sources with the same size and dimensions.
-
-
-In the case where the sources can be further factored along other axes, specifically the first $n$ dimensions, we can use the more general *Tucker-$n$* factorization of an order $N$ tensor $Y$,
-
-$$
-\begin{split}
-Y[i_1,\dots,i_n, & j_1, \dots, j_{N-n+1}] = \\ &\sum_{r_1=1}^{R_1} \dots \sum_{r_n=1}^{R_n} A_1[i_1,r_1]\cdots A_r[i_n,r_n] B[r_1,\dots,r_n, j_1, \dots, j_{N-n+1}].
-\end{split}
-$$ {#eq-tucker-n}
-
-In the case where $n=N$ is the order of the tensor $Y$, we omit the $n$ and call this a *Tucker* factorization. So a Tucker factorization of an order $N$ tensor $Y$ is
-
-$$
-Y[i_1,\dots,i_N] = \sum_{r_1=1}^{R_1} \dots \sum_{r_n=1}^{R_n} A_1[i_1,r_1]\cdots A_r[i_n,r_N] B[r_1,\dots,r_N].
+Y[i_1,\dots,i_N] = \sum_{r_1=1}^{R_1} \dots \sum_{r_N=1}^{R_N} A_1[i_1,r_1]\cdots A_r[i_N,r_N] B[r_1,\dots,r_N]
 $$ {#eq-tucker}
 
-All the Tucker decompositions can be written using the $n$-mode product $\times_n$ between a tensor $A$ and matrix $B$, defined as
+entry-wise. More compactly, this decomposition can be written using the $n$-mode product, or with double brackets
 
 $$
-(A \times_n B)[i_1, \dots, i_{n-1},j,i_{n+1},\dots,N] = \sum_{i_{n}=1}^{I_n} A[i_1, \dots, i_{n-1},i_n,i-{n+1},\dots,N]B[i_n,j].
+Y = B\times_1 A_1 \times_2 \dots\times_N A_N = B \bigtimes_{n} A_n = \llbracket B; A_1, \dots, A_N \rrbracket.
 $$
 
-They can also be written with an $n$ product shorthand, or with bracket notation. For example, the full tucker decomposition shown in @eq-tucker can be written as
+:::
 
-$$
-\begin{align*}
-Y &= B\times_1 A_1 \times_2 \dots\times_N A_N = B \bigtimes_n A_n = \llbracket B; A_1, \dots, A_N \rrbracket \\
-\text{or}\quad Y &= A_0\times_1 \dots\times_N A_N = A_0 \bigtimes_n A_n = \llbracket A_0; A_1, \dots, A_N \rrbracket.
-\end{align*}
-$$
-
-To ease notation further, we sometimes consider the *core* tensor $B$ to be the zeroth factor $A_0=B$ so we can say $\{A_n\}_{n=0}^N$ are the factors of $Y$. Since it can be hard to visualize the product, consider the case of a Tucker factorization of a third order tensor $Y$:
-
-$$
-Y[i,j,k] = \sum_{r=1}^R\sum_{s=1}^S\sum_{t=1}^T A_1[i,r] A_2[j,s] A_3[k,t] B[r,s,t].
-$$
-
-We can picture this as multiplying the core factor $B$ with matrix factors $A_1, A_2, A_3$ on all sizes to construct $Y$ as shown in @fig-tucker.
+Sometimes we write $A_0=B$ to ease notation, and suggest the "zeroth" factor of the tucker decomposition is the core tensor $B$. In the special case when $N=3$, we can visualize Tucker decomposition as multiplying the core tensor by matrices on all three sides as shown in @fig-tucker.
 
 ![Tucker factorization of a $3$rd order tensor $Y$.](figure/tucker_decomposition_order_3.png){#fig-tucker}
 
-The Tucker-$n$ factorization of an order $N$ tensor can be thought of as a special case of the (full) Tucker factorization, where the matrix factors $A_{n+1}, \dots, A_{N}$ are identity matrices.
+Setting all the matrices of a Tucker decomposition to the identity matrix but the first gives the Tucker-$1$ decomposition.
 
-In the case where the core tensor $B\in\mathbb{R}^{R_1\times \dots\times R_N}$ of the Tucker factorization is cubic ($R_1=\dots=R_N$) and diagonal ($B[r_1,\dots,r_N]=\lambda_r$ if $r_1=\dots=r_N=r$ and $0$ otherwise), we have the **can**onical **decomp**osition/**para**llel **fac**tors model (CANDECOMP/PARAFAC or CP for short):
-
-$$
-Y[i_1,\dots,i_N] = \sum_{r=1}^{R} \lambda_r A_1[i_1,r]\cdots A_N[i_N,r].
-$$
-
-This can be written as
+::: {#def-tucker-1-decomposition}
+A rank-$R$ Tucker-$1$ decomposition of a tensor $Y\in\mathbb{R}^{I_1\times\dots\times I_N}$ produces a matrix $A\in\mathbb{R}^{I_1\times R}$, and core tensor $B\in\mathbb{R}^{R\times I_2\times\dots\times I_N}$ such that
 
 $$
-Y = \llbracket \lambda; A_1, \dots, A_N\rrbracket.
+Y[i_1,\dots,i_N] = \sum_{r=1}^{R} A[i_1,r] B[r, i_2,\dots,i_N]
+$$ {#eq-tucker-1}
+
+entry-wise or more compactly,
+
+$$
+Y = AB = B\times_1 A = \llbracket B; A \rrbracket.
 $$
 
-Sometimes the factor $\lambda_r$ is scaled so that the columns $A[:,r]$ are normalized $\lVert A[:,r]\rVert_2=1$ for each $r\in[R]$, or it is absorbed into the matrix factors and omitted from the decomposition. For the remainder of this text, I'll use CP decomposition to mean the latter case where $\lambda_r=1$ for all $r\in[R]$, as showing in @eq-cp:
+:::
+
+Note we extend the usual definition of matrix-matrix multiplication
 
 $$
-Y[i_1,\dots,i_N] = \sum_{r=1}^{R} A_1[i_1,r]\cdots A_N[i_N,r].
+(AB)[i,j] = \sum_{r=1}^R A[i,r] B[r, j]
+$$
+
+to tensors $B$ in the compact notation for Tucker-1 decomposition $Y=AB$.
+
+More generally, any number of matrices can be set to the identity matrix giving the Tucker-$n$ decomposition.
+
+::: {#def-tucker-n-decomposition}
+A rank-$(R_1,\dots,R_n)$ Tucker-$n$ decomposition of a tensor $Y\in\mathbb{R}^{I_1\times\dots\times I_N}$ produces $n$ matrices $A_1,\dots,A_n$, and core tensor $B\in\mathbb{R}^{R_1\times\dots\times R_n \times I_{n+1}\times\dots\times I_N}$ such that
+
+$$
+Y[i_1,\dots,i_N] = \sum_{r_1=1}^{R_1} \dots \sum_{r_N=1}^{R_n} A_1[i_1,r_1]\cdots A_n[i_N,r_n] B[r_1,\dots,r_n,i_{n+1},\dots,i_{N}]
+$$ {#eq-tucker-n}
+
+entry-wise, or compactly written in the following three ways,
+$$
+\begin{align}
+Y &= B\times_1 A_1 \times_2 \dots\times_n A_n \times_{n+1} \mathrm{id}_{I_{n+1}} \times_{n+2} \dots \times_{N} \mathrm{id}_{I_{N}}\\
+Y &= B\times_1 A_1 \times_2 \dots\times_n A_n\\
+Y &= \llbracket B; A_1, \dots, A_n \rrbracket.
+\end{align}
+$$
+
+:::
+
+Lastly, if we set the core tensor $B$ to the identity tensor $\mathrm{id}_{R}$, we obtain the **can**onical **decomp**osition/**para**llel **fac**tors model (CANDECOMP/PARAFAC or CP for short).
+
+::: {#def-cp-decomposition}
+A rank-$R$ CP decomposition of a tensor $Y\in\mathbb{R}^{I_1\times\dots\times I_N}$ produces $N$ matrices $A_n\in\mathbb{R}^{I_n\times R}$, such that
+
+$$
+Y[i_1,\dots,i_N] = \sum_{r=1}^{R} A_1[i_1,r]\cdots A_r[i_N,r]
 $$ {#eq-cp}
 
-Other factorization models are used that combine aspects of CP and Tucker decomposition [@kolda_TensorDecompositionsApplications_2009], are specialized for order $3$ tensors [@qi_TripleDecompositionTensor_2020; @wu_manifold_2022], or provide alternate decomposition models entirely like tensor-trains [@oseledets_tensor-train_2011]. But the (full) Tucker, and its special cases Tucker-$n$, and CP decomposition are most commonly used extensions of the low-rank matrix factorization. These factorizations are summarized in @tbl-tensor-factorizations.
+entry-wise. More compactly, this decomposition can be written using the $n$-mode product, or with double brackets
+
+$$
+Y = \mathrm{id}_{R} \times_1 A_1 \times_2 \dots\times_N A_N = \mathrm{id}_{R} \bigtimes_{n} A_n = \llbracket A_1, \dots, A_N \rrbracket.
+$$
+
+:::
+
+Note CP decomposition is sometimes referred to as Kruskal decomposition, and requires the core only be diagonal (and not necessarily identity) and the factors $A_n$ have normalized columns $\left\lVert A_n[:,r]\right\rVert_2 =1$.
+
+
+Other factorization models are used that combine aspects of CP and Tucker decomposition [@kolda_TensorDecompositionsApplications_2009], are specialized for order $3$ tensors [@qi_TripleDecompositionTensor_2020; @wu_manifold_2022], or provide alternate decomposition models entirely like tensor-trains [@oseledets_tensor-train_2011]. But the (full) Tucker, and its special cases Tucker-$n$, and CP decomposition are most commonly used extensions of the low-rank matrix factorization to tensors. These factorizations are summarized in @tbl-tensor-factorizations.
 
 | Name       | Bracket Notation                             | $n$-mode Product                                         | Entry-wise   |
 |------------|----------------------------------------------|----------------------------------------------------------|--------------|
+| Tucker     | $\llbracket A_0; A_1, \dots, A_N \rrbracket$ | $A_0\times_1 A_1 \times_2 \dots\times_N A_N$             | @eq-tucker   |
 | Tucker-$1$ | $\llbracket A_0; A_1 \rrbracket$             | $A_0\times_1 A_1$                                        | @eq-tucker-1 |
 | Tucker-$n$ | $\llbracket A_0; A_1, \dots, A_n \rrbracket$ | $A_0\times_1 A_1 \times_2 \dots\times_n A_n$             | @eq-tucker-n |
-| Tucker     | $\llbracket A_0; A_1, \dots, A_N \rrbracket$ | $A_0\times_1 A_1 \times_2 \dots\times_N A_N$             | @eq-tucker   |
 | CP         | $\llbracket A_1, \dots, A_N \rrbracket$      | $\mathrm{id}_{R}\times_1 A_1 \times_2 \dots\times_N A_N$ | @eq-cp       |
 
 : Summary of common tensor factorizations. Here, $N$ is the order of the factorized tensor. {#tbl-tensor-factorizations tbl-colwidths="[15,25,35,25]"}
- -->
 
+TODO add discussion on other decompositions
+- high order SVD (see Kolda and Bader)
+- HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
+
+Tensor decompositions are not nessisarily unique. It should be clear that scaling one factor by $x\neq 0$ and dividing another by $x$ yields the same original tensor. Furthermore, fibres and slices can be permuted without affecting the the original tensor. Up to these manipulations, for a fixed rank, there exist criteria that ensures their decompositions are unique [@kolda_TensorDecompositionsApplications_2009;@kruskal_three-way_1977;@bhaskara_uniqueness_2014].
+
+### Representing Tucker Decompositions
+
+There are implemented in BlockTensorDecomposition.jl and can be called, for a third order tensor, with `Tucker((B, A₁, A₂, A₃))`, `Tucker1((B, A₁))`, and `CPDecomposition((A₁, A₂, A₃))`. These Julia `structs` store the tensor in its factored form. If the recombined tensor or particular entries are requested, Julia dispatches on the type of decomposition and calls a particular method of `array` or `getindex`. The implementations for efficient array construction and index access are provided below.
+
+```julia
+array(T::Tucker) = multifoldl(tucker_contractions(ndims(T)), factors(T))
+tucker_contractions(N) = Tuple((G, A) -> nmode_product(G, A, n) for n in 1:N)
+```
+
+TODO add getindex method for Tucker type
+
+```julia
+function array(T::Tucker1)
+    B, A = factors(T)
+    return B ×₁ A
+end
+
+function getindex(T::Tucker1, I::Vararg{Int})
+    B, A = factors(T)
+    i = I[1]
+    J = I[begin+1:end] # J = (I₂, I₃, ..., I_N)
+    return (@view A[i, :]) ⋅ view(B, :, J...)
+end
+```
+
+```julia
+array(CPD::CPDecomposition) =
+  mapreduce(vector_outer, +, zip((eachcol.(factors(CPD)))...))
+
+vector_outer(v) = reshape(kron(reverse(v)...),length.(v))
+
+getindex(CPD::CPDecomposition, I::Vararg{Int}) =
+  sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
+```
 
 ## Tensor rank
 - tensor rank
 - constrained rank (nonnegative etc.)
+
+The rank of a matrix $Y\in\mathbb{R}^{I\times J}$ can be defined as the smallest $R\in\mathbb{Z}_+$ such that there exists an exact factorization $Y=AB$ for some $A\in\mathbb{R}^{I\times R}$ and $B\in\mathbb{R}^{R\times J}$.
+
+Although this can be extended to higher order tensors, we must specify under which factorization model we are using. For example, the *CP-rank* $R$ of a tensor $Y$ is the smallest such $R$ that omits an exact CP decomposition of $Y$.
+
+::: {#def-cp-rank}
+The CP rank of a tensor $Y\in\mathbb{R}^{I_1\times \dots \times I_N}$ is the smallest $R$ such that there exist factors $A_n\in\mathbb{R}^{I_n \times R}$ and $Y = \llbracket A_1, \dots, A_N\rrbracket$,
+$$
+\text{rank}_\text{CP} (Y) = \min \left\{R \middle| \exists A_n\in\mathbb{R}^{I_n \times R},\, n\in[N] \quad \text{s.t.}\quad Y = \llbracket A_1, \dots, A_N\rrbracket \right\}
+$$
+
+:::
+
+In a similar way, we can define the *Tucker-1-rank* $R$.
+
+::: {#def-tucker-1-rank}
+The Tucker-1 rank of a tensor $Y\in\mathbb{R}^{I_1\times \dots \times I_N}$ is the smallest $R$ such that there exist factors $A\in\mathbb{R}^{I_1 \times R}$ and $B\in\mathbb{R}^{R \times I_2 \times \dots \times I_N}$ where $Y = AB$
+
+$$
+\text{rank}_\text{Tucker-1} (Y) = \min \left\{R \middle| \exists A_n\in\mathbb{R}^{I_n \times R},B\in\mathbb{R}^{R \times I_2 \times \dots \times I_N}\, \quad \text{s.t.}\quad Y = AB\right\}
+$$
+
+:::
+
+For the Tucker and Tucker-$n$ decompositions, we instead call a particular factorization **a** rank-$(R_1,\dots,R_N)$ Tucker factorization or **a** rank-$(R_1,\dots,R_n)$ Tucker-$n$ factorization, rather than **the** CP- or Tucker-$1$-rank of a tensor or **the** rank of a matrix.
+
+One reason CP and Tucker-$1$ only need a single rank $R$ can be explained by considering the case when the order of the tensor $N=2$ (matrices). The two factorizations become equivalent and are equal to low-rank $R$ matrix factorization $Y=AB$. In fact, Tucker-$1$ is always equivalent to a low-rank matrix factorization, if you consider a flattening of the tensor to arrange the entries as a matrix.
+
+The idea of tensor rank can be generalized further to constrained rank. These are the smallest rank $R$ such that the factors in the decomposition obey the given set of constraints.
+
+For example, the nonnegative Tucker-1 rank is defined as
+$$
+\text{rank}_{\text{Tucker-1}}^+ (Y) = \min \left\{R \middle| \exists A_n\in\mathbb{R}_+^{I_n \times R},B\in\mathbb{R}_+^{R \times I_2 \times \dots \times I_N}\, \quad \text{s.t.}\quad Y = AB\right\}.
+$$
+
+More restrictive constraints increase the rank of the tensor since there is less freedom in selecting the factors.
 
 # Computing Decompositions
 - Given a data tensor and a model, how do we fit the model?
@@ -239,6 +417,12 @@ Other factorization models are used that combine aspects of CP and Tucker decomp
 ## Base algorithm
 - Use Block Coordinate Descent / Alternating Proximal Descent
   - do *not* use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
+
+### Computing Gradients
+- Use Auto diff generally
+- But hand-crafted gradients and Lipschitz calculations *can* be faster (e.g. symmetrized slicewise dot product)
+
+### Computing Lipschitz Step-sizes {#sec-lipschitz-computation}
 
 # Techniques for speeding up convergences
 - As stated, algorithm works
