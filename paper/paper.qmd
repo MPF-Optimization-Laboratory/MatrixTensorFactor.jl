@@ -379,7 +379,7 @@ Although this can be extended to higher order tensors, we must specify under whi
 ::: {#def-cp-rank}
 The CP rank of a tensor $Y\in\mathbb{R}^{I_1\times \dots \times I_N}$ is the smallest $R$ such that there exist factors $A_n\in\mathbb{R}^{I_n \times R}$ and $Y = \llbracket A_1, \dots, A_N\rrbracket$,
 $$
-\text{rank}_\text{CP} (Y) = \min \left\{R \middle| \exists A_n\in\mathbb{R}^{I_n \times R},\, n\in[N] \quad \text{s.t.}\quad Y = \llbracket A_1, \dots, A_N\rrbracket \right\}
+\text{rank}_\text{CP} (Y) = \min \left\{R \middle| \exists A_n\in\mathbb{R}^{I_n \times R},\, n\in[N] \quad \text{s.t.}\quad Y = \llbracket A_1, \dots, A_N\rrbracket \right\}.
 $$
 
 :::
@@ -408,13 +408,17 @@ $$
 
 More restrictive constraints increase the rank of the tensor since there is less freedom in selecting the factors.
 
+Most tensor decomposition algorithms require the rank as input [CITE] since calculating the rank of the tensor can be NP-hard in general [@vavasis_complexity_2010]. For applications where the rank is not known a priori, a common strategy is to attempt a decomposition for a variety of ranks, and select the model with smallest rank that still achieves good fit between the factorization and the original tensor.
+
 # Computing Decompositions
 - Given a data tensor and a model, how do we fit the model?
+
+Many tensor decompositions algorithms exist in the literature. Usually, they cyclically (or in a random order) update factors until their reconstruction satisfies some convergence criterion. The base algorithm described in @sec-base-algorithm provides flexible framework for wide class of constrained tensor factorization problems. This framework was selected based on empirical observations where it outperforms other similar algorithms, and has also been observed in the literature  [@xu_BlockCoordinateDescent_2013].
 
 ## Optimization Problem
 - Least squares (can use KL, 1 norm, etc.)
 
-## Base algorithm
+## Base algorithm {#sec-base-algorithm}
 - Use Block Coordinate Descent / Alternating Proximal Descent
   - do *not* use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
 
@@ -437,14 +441,14 @@ More restrictive constraints increase the rank of the tensor since there is less
 - Use something similar to [@xu_BlockCoordinateDescent_2013]
 - This is compatible with sub-block descent with appropriately defined matrix operations
 
-## Partial Projection and Rescaling
+# Partial Projection and Rescaling
 - for bounded linear constraints
   - first project
   - then rescale to enforce linear constraints
 - faster to execute then a projection
 - often does not loose progress because of the rescaling (decomposition dependent)
 
-## Multi-scale
+# Multi-scale
 - use a coarse discretization along continuous dimensions
 - factorize
 - linearly interpolate decomposition to warm start larger decompositions

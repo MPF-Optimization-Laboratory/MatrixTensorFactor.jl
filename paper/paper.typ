@@ -661,7 +661,7 @@ The rank of a matrix $Y in bb(R)^(I times J)$ can be defined as the smallest $R 
 Although this can be extended to higher order tensors, we must specify under which factorization model we are using. For example, the #emph[CP-rank] $R$ of a tensor $Y$ is the smallest such $R$ that omits an exact CP decomposition of $Y$.
 
 #definition()[
-The CP rank of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ is the smallest $R$ such that there exist factors $A_n in bb(R)^(I_n times R)$ and $Y = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)$, $ upright("rank")_(upright("CP")) (Y) = min {R mid(bar.v) exists A_n in bb(R)^(I_n times R) , thin n in [N] quad upright("s.t.") quad Y = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)} $
+The CP rank of a tensor $Y in bb(R)^(I_1 times dots.h times I_N)$ is the smallest $R$ such that there exist factors $A_n in bb(R)^(I_n times R)$ and $Y = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)$, $ upright("rank")_(upright("CP")) (Y) = min {R mid(bar.v) exists A_n in bb(R)^(I_n times R) , thin n in [N] quad upright("s.t.") quad Y = lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)} . $
 
 ] <def-cp-rank>
 In a similar way, we can define the #emph[Tucker-1-rank] $R$.
@@ -682,16 +682,20 @@ For example, the nonnegative Tucker-1 rank is defined as $ upright("rank")_(upri
 
 More restrictive constraints increase the rank of the tensor since there is less freedom in selecting the factors.
 
+Most tensor decomposition algorithms require the rank as input \[CITE\] since calculating the rank of the tensor can be NP-hard in general @vavasis_complexity_2010. For applications where the rank is not known a priori, a common strategy is to attempt a decomposition for a variety of ranks, and select the model with smallest rank that still achieves good fit between the factorization and the original tensor.
+
 = Computing Decompositions
 <computing-decompositions>
 - Given a data tensor and a model, how do we fit the model?
+
+Many tensor decompositions algorithms exist in the literature. Usually, they cyclically (or in a random order) update factors until their reconstruction satisfies some convergence criterion. The base algorithm described in @sec-base-algorithm provides flexible framework for wide class of constrained tensor factorization problems. This framework was selected based on empirical observations where it outperforms other similar algorithms, and has also been observed in the literature @xu_BlockCoordinateDescent_2013.
 
 == Optimization Problem
 <optimization-problem>
 - Least squares (can use KL, 1 norm, etc.)
 
 == Base algorithm
-<base-algorithm>
+<sec-base-algorithm>
 - Use Block Coordinate Descent / Alternating Proximal Descent
   - do #emph[not] use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
 
@@ -718,7 +722,7 @@ More restrictive constraints increase the rank of the tensor since there is less
 - Use something similar to @xu_BlockCoordinateDescent_2013
 - This is compatible with sub-block descent with appropriately defined matrix operations
 
-== Partial Projection and Rescaling
+= Partial Projection and Rescaling
 <partial-projection-and-rescaling>
 - for bounded linear constraints
   - first project
@@ -726,7 +730,7 @@ More restrictive constraints increase the rank of the tensor since there is less
 - faster to execute then a projection
 - often does not loose progress because of the rescaling (decomposition dependent)
 
-== Multi-scale
+= Multi-scale
 <multi-scale>
 - use a coarse discretization along continuous dimensions
 - factorize
