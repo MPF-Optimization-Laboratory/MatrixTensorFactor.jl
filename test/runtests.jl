@@ -488,7 +488,10 @@ end
     A2 = matrix_factor(X, 1)
     B2 = core(X)
 
-    @test norm(X-Y1)/norm(Y1) <= 0.001 # less than 0.1% relative error
+    @test_broken norm(X-Y1)/norm(Y1) <= 0.001 # should be a bit worse even though tolerence=0.001
+        # since we auto-apply constraints at the last step
+
+    @test norm(X-Y1)/norm(Y1) <= 0.005 # should still be reasonably good
 
     A1, B1, rel_errors, norm_grad, dist_Ncone = nnmtf(Y1, R)
 
