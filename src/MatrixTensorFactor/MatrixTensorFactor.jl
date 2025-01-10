@@ -5,8 +5,8 @@ module MatrixTensorFactor
 
 using Random: randn
 
-include("../Core/Core.jl")
-using .Core
+# include("../Core/Core.jl")
+using ..Core # note the two dots .. since the module Core is not in the same folder as MatrixTensorFactor
 
 # include("../Core/utils.jl")
 # include("../Core/tensorproducts.jl")
