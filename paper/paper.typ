@@ -694,10 +694,71 @@ Many tensor decompositions algorithms exist in the literature. Usually, they cyc
 <optimization-problem>
 - Least squares (can use KL, 1 norm, etc.)
 
+Ideally, we would be given a data tensor $Y$ and decomposition model, and compute an exact factorization of $Y$ into its factors. Because there is often measurement, numerical, or modeling error, an exact factorization of $Y$ for a particular rank may not exist. To over come this, we instead try to fit the model to the data. Let $X$ be the reconstruction of factors $A_1 , dots.h , A_N$ according to some decomposition for a fixed rank. We assume we know the size of the factors $A_1 , dots.h , A_N$ and how they are combined to produce a tensor the same size of $Y$, i.e.~the map $g : (A_1 , dots.h , A_N) arrow.r.bar X$.
+
+There are many loss functions that can be used to determine how close the model $X$ is to the data $Y$. In principle, any distance or divergence $d (Y , X)$ could be used. We use the $L_2$ loss or least-squares distance between the tensors $norm(X - Y)_F^2$, but other losses are used for tensor decomposition in practice such as the KL divergence \[CITE\].
+
+The main optimization we must solve is now given.
+
+#definition()[
+The constrained least-squares tensor factorization problem is to solve
+
+#math.equation(block: true, numbering: "(1)", [ $ min_(A_1 , dots.h , A_N) norm(g (A_1 , dots.h , A_N) - Y)_F^2 quad upright("s.t.") quad (A_1 , dots.h , A_N) in cal(C)_1 times dots.h times cal(C)_N $ ])<eq-constrained-least-squares>
+
+for a given data tensor $Y$, constraints $cal(C)_1 , dots.h , cal(C)_N$, and decomposition model $g$ with fixed rank.
+
+] <def-constrained-least-squares>
 == Base algorithm
 <sec-base-algorithm>
 - Use Block Coordinate Descent / Alternating Proximal Descent
   - do #emph[not] use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
+
+Let $f (A_1 , dots.h , A_N) := norm(g (A_1 , dots.h , A_N) - Y)_F^2$ be the objective function we wish to minimize in @eq-constrained-least-squares. Following Xu and Yin @xu_BlockCoordinateDescent_2013, the general approach we take to minimize $f$ is to apply block coordinate descent using each factor as a different block. Let $A_n^t$ be the $t$th iteration of the $n$th factor, and let
+
+$ f_n^t (A_n) := norm(g (A_1^(t + 1) , dots.h , A_(n - 1)^(t + 1) , A_n , A_(n + 1)^t , dots.h , A_N^t) - Y)_F^2 $
+
+be the (partially updated) objective function at iteration $t$ for factor $n$.
+
+Given initial factors $A_1^0 , dots.h , A_N^0$, we cycle through the factors $n in [N]$ and perform the update
+
+$ A_n^(t + 1) arrow.l arg min_(A_n in cal(C)_n) ⟨nabla f_n^t (A_n^t) , A_n - A_n^t⟩ + L_n^t / 2 norm(A_n - A_n^t)_F^2 , $
+
+for $t = 1 , 2 , dots.h$ until some convergence criterion is satisfied (see @sec-convergence-criteria).
+
+This implicit update has the #emph[projected gradient descent] closed form solution for convex constraints $cal(C)_n$,
+
+#math.equation(block: true, numbering: "(1)", [ $ A_n^(t + 1) arrow.l P_(cal(C)_n) (A_n^t - 1 / L_n^t nabla f_n^t (A_n^t)) . $ ])<eq-proximal-explicit>
+
+We typically choose $L_n^t$ to be the Lipschitz constant of $nabla f_n^t$, since it is a sufficient condition to guarantee $f_n^t (A_n^(t + 1)) lt.eq f_n^t (A_n^t)$, but other step sizes can be used in theory @nesterov_NonlinearOptimization_2018[Sec. 1.2.3].
+
+?ASIDE? To write $nabla f_n^t$, we have assumed (block) differentiability of the decomposition model $g$. In practice, most decompositions are "block-linear" (freeze all factors but one and you have a linear function) and in rare cases are "block-affine". "block-affine" is enough to ensure $f_n^t$ is convex (i.e.~$f$ is "block-convex") so the updates @eq-proximal-explicit converge to a Nash equilibrium (block minimizer).
+
+=== High level code
+<high-level-code>
+To ensure the code stays flexible, the main algorithm of BlockTensorDecomposition.jl, `factorize` is defined at a very high level.
+
+```julia
+function factorize(Y; kwargs...)
+    decomposition, converged, update!, updateprevious!, updateparameters!, stats_data, getstats, kwargs = initialize(Y; kwargs...)
+
+    while !converged(stats_data; kwargs...)
+        update!(decomposition; parameters...)
+
+        updateparameters!(parameters, decomposition, previous)
+
+        push!(stats_data,
+            getstats(decomposition, Y, previous, parameters, stats_data))
+
+        updateprevious!(previous, parameters, decomposition)
+    end
+
+    postprocess!(decomposition, parameters, stats_data, Y; kwargs...)
+
+    return decomposition, stats_data, kwargs
+end
+```
+
+The magic of the code is in defining the functions at runtime for a particular decomposition requested, from a reasonable set of default keyword arguments. This is discussed further in @sec-flexibility.
 
 === Computing Gradients
 <computing-gradients>
@@ -706,21 +767,52 @@ Many tensor decompositions algorithms exist in the literature. Usually, they cyc
 
 === Computing Lipschitz Step-sizes
 <sec-lipschitz-computation>
-= Techniques for speeding up convergences
-<techniques-for-speeding-up-convergences>
+= Computational Techniques
+<computational-techniques>
+== For Improving Convergence Speed
+<for-improving-convergence-speed>
 - As stated, algorithm works
 - But can be slow, especially for constrained or large problems
 
-== Sub-block Descent
+=== Sub-block Descent
 <sub-block-descent>
 - Use smaller blocks, but descent in parallel (sub-blocks don’t wait for other sub-blocks)
 - Can perform this efficiently with a "matrix step-size"
 
-== Momentum
+=== Momentum
 <momentum>
 - This one is standard
 - Use something similar to @xu_BlockCoordinateDescent_2013
 - This is compatible with sub-block descent with appropriately defined matrix operations
+
+== For Flexibility
+<sec-flexibility>
+- there are a number of software engineering techniques used
+- these help flexibility for hot swapping and a language for making custom…
+  - convergence criterion (and having multiple stopping conditions)
+  - probing info during the iterations (stats collected at the end)
+  - having multiple constraints and ways to enforce them
+  - cyclically or partially randomly or fully randomly update factors
+- smart enough to apply these in a reasonable order
+
+=== Convergence Criteria and Stats
+<sec-convergence-criteria>
+- Can request info about any factor at each outer iteration
+- any subset of stats can be the convergence criteria
+
+=== `BlockUpdate` Language
+<blockupdate-language>
+- construct the updates as a list of updates
+- very functional programming
+- can apply them in sequence or in a random order (or partially random)
+
+=== Constraints
+<constraints>
+- one type of update (other than the typical GD update)
+- can combine them with composition
+  - which is different than projecting onto their intersection!
+- Constraint updates combine the constraint with how they are enforced
+  - need to go together since there are multiple ways to enforce them e.g.~simplex (see next section)
 
 = Partial Projection and Rescaling
 <partial-projection-and-rescaling>
