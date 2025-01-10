@@ -9,7 +9,7 @@ factorize(Y; kwargs...) =
 	_factorize(Y; (default_kwargs(Y; kwargs...))...)
 
 """
-Inner level function once keyword agruments are set
+Inner level function once keyword arguments are set
 """
 function _factorize(Y; kwargs...)
 	decomposition, kwargs = initialize_decomposition(Y; kwargs...)
