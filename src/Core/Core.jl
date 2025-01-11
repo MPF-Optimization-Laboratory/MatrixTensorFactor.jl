@@ -79,6 +79,11 @@ export factorize
 
 include("./MultiFactorize.jl")
 export MultiFactorize
-export MultiFactorizeSimplex
+export resize_decomp_linear
+export update_indices
+
+include("./SyntheticDataGenerator.jl")
+export generate_tensor_streams
+export normalize_fibers!
 
 end # module Core

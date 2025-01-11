@@ -65,12 +65,19 @@ export BlockedUpdate
 export updates
 export smart_insert!, smart_interlase!, group_by_factor
 
+#include("./SyntheticDataGenerator.jl")
+export generate_tensor_streams
+export normalize_fibers!
+
 #export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
 # High level / user-interface
 
 #include("./factorize.jl")
 export factorize
+export MultiFactorize
+export update_indices
+export resize_decomp_linear
 
 # Legacy code
 include("./MatrixTensorFactor/MatrixTensorFactor.jl")

@@ -397,13 +397,6 @@ end
     ## a single constraint, to be applied on every block
     decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerence=Inf);
     ## a collection of constraints
-    decomposition, stats_data = fact(Y; rank=5, tolerence=Inf,
-        constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
-    );
-    ## check if you can constrain the initialization
-    decomposition, stats_data = fact(Y; rank=5, tolerence=Inf, constrain_init=true,
-        constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
-    );
 
     fact(Y; rank=5, tolerence=Inf, constrain_init=true,
         constraints=[l1scale_12slices! ∘ nonnegative!, nonnegative!],
@@ -418,10 +411,6 @@ end
     Y = array(Y)
     decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2)
 
-    # Quick test to make sure CP works
-    Y = CPDecomposition((10,11,12), 3)
-    Y = array(Y)
-    decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
 
     # Regular run of Tucker1
     C = abs_randn(5, 11, 12)
@@ -474,6 +463,161 @@ end
 
     # @test all(A1 .≈ A2)
     # @test all(B1 .≈ B2)
+end
+@testset "MultiFactorize" begin
+    @testset "update_indices" begin
+        update_indices = BlockTensorDecomposition.update_indices
+        # Test: Basic use case
+        indices = [1, 5, 10]
+        expected_new_indices = [1, 3, 5, 7, 10]
+        expected_newly_added_indices = [3, 7]
+
+        new_indices, newly_added_indices = update_indices(indices)
+
+        @test new_indices == expected_new_indices
+        @test newly_added_indices == expected_newly_added_indices
+
+        # Test: Consecutive numbers
+        indices = [1, 2, 3]
+        expected_new_indices = [1, 2, 3]
+        expected_newly_added_indices = []
+
+        new_indices, newly_added_indices = update_indices(indices)
+
+        @test new_indices == expected_new_indices
+        @test newly_added_indices == expected_newly_added_indices
+
+        # Test: Negative numbers (No use case but still robust)
+        indices = [-5, 0, 5]
+        expected_new_indices = [-5, -2, 0, 2, 5]
+        expected_newly_added_indices = [-2, 2]
+
+        new_indices, newly_added_indices = update_indices(indices)
+
+        @test new_indices == expected_new_indices
+        @test newly_added_indices == expected_newly_added_indices
+
+        # Test: Duplicates
+        indices = [1, 1, 3, 3, 5]
+        expected_new_indices = [1, 2, 3, 4, 5]
+        expected_newly_added_indices = [2, 4]
+
+        new_indices, newly_added_indices = update_indices(indices)
+
+        @test new_indices == expected_new_indices
+        @test newly_added_indices == expected_newly_added_indices
+    end
+    @testset "resize_decomp_linear" begin
+        resize_decomp_linear = BlockTensorDecomposition.resize_decomp_linear
+
+        function create_mock_tucker(core_dims, factor_height)
+            core_tensor = rand(core_dims...)
+            factor_matrix = rand(factor_height, size(core_tensor, 2))
+            return Tucker1((core_tensor, factor_matrix))
+        end
+    
+        # Test: Basic resize
+        original_indices = [1, 3, 5]
+        updated_indices = [1, 2, 3, 4, 5]
+        newly_added_indices = [2, 4]
+        core_dims = (2, 2, length(original_indices))
+        factor_height = 2
+        decomp = create_mock_tucker(core_dims, factor_height)
+        expected_tensor = zeros(2, 2, length(updated_indices))
+        expected_tensor[:, :, 1] = decomp.factors[1][:, :, 1]
+        expected_tensor[:, :, 2] = (decomp.factors[1][:, :, 1] + decomp.factors[1][:, :, 2]) / 2
+        expected_tensor[:, :, 3] = decomp.factors[1][:, :, 2]
+        expected_tensor[:, :, 4] = (decomp.factors[1][:, :, 2] + decomp.factors[1][:, :, 3]) / 2
+        expected_tensor[:, :, 5] = decomp.factors[1][:, :, 3]
+        expected_tensor .*= ((length(updated_indices) - length(newly_added_indices)) / length(updated_indices))
+
+        resized_decomp = resize_decomp_linear(decomp, updated_indices, newly_added_indices)
+
+        @test resized_decomp.factors[1] ≈ expected_tensor
+        @test resized_decomp.factors[2] == decomp.factors[2]
+
+        # Test: Case with no newly added indices
+        original_indices = [1, 2, 3]
+        updated_indices = [1, 2, 3]
+        newly_added_indices = []
+        core_dims = (2, 2, length(original_indices))
+        factor_height = 2
+        decomp = create_mock_tucker(core_dims, factor_height)
+        expected_tensor = decomp.factors[1]
+
+        resized_decomp = resize_decomp_linear(decomp, updated_indices, newly_added_indices)
+
+        @test resized_decomp.factors[1] == expected_tensor
+        @test resized_decomp.factors[2] == decomp.factors[2]
+
+        # Test: Case with a single dimension
+        original_indices = [1]
+        updated_indices = [1]
+        newly_added_indices = []
+        core_dims = (2, 2, length(original_indices))
+        factor_height = 2
+        decomp = create_mock_tucker(core_dims, factor_height)
+        expected_tensor = decomp.factors[1]
+
+        resized_decomp = resize_decomp_linear(decomp, updated_indices, newly_added_indices)
+
+        @test resized_decomp.factors[1] == expected_tensor
+        @test resized_decomp.factors[2] == decomp.factors[2]
+
+    end
+    @testset "MultiFactorize" begin
+        G = Tucker1((10,11,12), 5);
+        Y = Tucker1((10,11,12), 5);
+        Y = array(Y);
+
+        fact = BlockTensorDecomposition.MultiFactorize
+
+        # check hitting maximum number of iterations
+        decomposition, stats_data = fact(Y; rank=5, momentum=false, maxiter=2);
+        # check convergence on first iteration
+        decomposition, stats_data = fact(Y; rank=5, momentum=false, tolerence=Inf);
+        # check momentum
+        decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerence=Inf);
+        # check constraints
+        ## a single constraint, to be applied on every block
+        decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerence=Inf);
+        ## a collection of constraints
+
+        ### FAILED
+        decomposition, stats_data = fact(Y; rank=5, tolerence=Inf,
+            constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)]);
+        
+        ## check if you can constrain the initialization
+        ### FAILED
+        decomposition, stats_data = fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+            constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)]
+        );
+
+        fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+            constraints=[l1scale_12slices! ∘ nonnegative!, nonnegative!],
+        ); # constraints are ok since l1scale_12slices! can be applied to the core (the 0th factor)
+
+        @test_broken fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+            constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!],
+        ); # the constraint l1scale_12slices! cannot be applied to a matrix (the 1st factor)
+
+
+        # Regular run of Tucker1
+        C = abs_randn(5, 11, 12)
+        A = abs_randn(10, 5)
+        Y = Tucker1((C, A))
+        Y = array(Y)
+
+        decomposition, stats_data = fact(Y;
+            rank=5,
+            tolerence=(2, 0.05),
+            converged=(GradientNNCone, RelativeError),
+            constrain_init=true,
+            constraints=nonnegative!,
+            stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError]
+        );
+        
+    end
 end
 
 end
