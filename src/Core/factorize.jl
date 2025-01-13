@@ -8,51 +8,6 @@ See [`default_kwargs`](@ref) for the default keywords.
 factorize(Y; kwargs...) =
 	_factorize(Y; (default_kwargs(Y; kwargs...))...)
 
-# """
-# Inner level function once keyword arguments are set
-# """
-# function _factorize(Y; kwargs...)
-# 	decomposition, kwargs = initialize_decomposition(Y; kwargs...)
-# 	previous, updateprevious! = initialize_previous(decomposition, Y; kwargs...)
-# 	parameters, updateparameters! = initialize_parameters(decomposition, Y, previous; kwargs...)
-
-# 	# one pass of the constraints is possibly applied so note decomposition could be mutated
-# 	# and more kwargs get added here, so need to return kwargs
-# 	update!, kwargs = make_update!(decomposition, Y; kwargs...)
-
-# 	stats_data, getstats = initialize_stats(decomposition, Y, previous, parameters; kwargs...)
-# 	#@show stats_data
-# 	converged = make_converged(; kwargs...)
-
-# 	kwargs = NamedTuple(kwargs) # freeze the kwargs from a Dictionary to a NamedTuple for type stability
-
-# 	while !converged(stats_data; kwargs...)
-# 		# Update the decomposition
-# 		# This is possibly one cycle of updates on each factor in the decomposition
-# 		update!(decomposition; parameters...)
-
-# 		# Update parameters used for the next update of the decomposition
-# 		# this could be the next stepsize or other info used by update!
-# 		updateparameters!(parameters, decomposition, previous)
-
-# 		# Save stats
-# 		push!(stats_data, getstats(decomposition, Y, previous, parameters, stats_data))
-
-# 		# Update the one or two previous iterates, used for momentum, spg stepsizes
-# 		# We do not save every iterate since that is too much memory
-# 		updateprevious!(previous, parameters, decomposition)
-# 	end
-
-# 	# Perform one final constrain if requested
-# 	if kwargs[:constrain_output]
-# 		kwargs = finalconstrain!(decomposition; kwargs...)
-# 		updateparameters!(parameters, decomposition, previous)
-# 		push!(stats_data, getstats(decomposition, Y, previous, parameters, stats_data))
-# 	end
-
-# 	return decomposition, stats_data, kwargs
-# end
-
 """
 Inner level function once keyword arguments are set
 """
