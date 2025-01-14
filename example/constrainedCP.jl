@@ -7,9 +7,9 @@ R = 5
 D = 2
 
 fact = BlockTensorDecomposition.factorize
-matricies = [abs_randn(N, R) for _ in 1:D]
-l1scale_cols!.(matricies)
-Ydecomp = CPDecomposition(Tuple(matricies))#abs_randn
+matrices = [abs_randn(N, R) for _ in 1:D]
+l1scale_cols!.(matrices)
+Ydecomp = CPDecomposition(Tuple(matrices))#abs_randn
 @assert all(check.(l1scale_cols!, factors(Ydecomp)))
 Y = array(Ydecomp)
 

@@ -303,11 +303,11 @@ end
         T = Tucker((10,11,12), (3,4,5))
         Y = randn(10,11,12)
         C = core(T)
-        matricies = matrix_factors(T)
+        matrices = matrix_factors(T)
 
         for n in 1:3
             An = factor(T, n)
-            CM = tuckerproduct(C, matricies; exclude=n)
+            CM = tuckerproduct(C, matrices; exclude=n)
 
             # two ways of calculating the block gradient of ||T - Y||_F^2 w.r.t. An
             grad1 = slicewise_dot(T - Y, CM; dims=n)

@@ -307,7 +307,7 @@ end=#
 # TODO add optimized indexing for full tucker decomposition
 
 """
-CP decomposition. Takes the form of an outerproduct of multiple matricies.
+CP decomposition. Takes the form of an outerproduct of multiple matrices.
 
 For example, a rank r CP decomposition of an order three tensor D would be, entry-wise,
 D[i, j, k] = sum_r A[i, r] * B[j, r] * C[k, r]).

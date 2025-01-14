@@ -60,7 +60,7 @@ Constracts all but the dimentions `dimsA` and `dimsB` of A and B by performing a
 
 Generalizes `@einsum C[s,r] := A[s,j,k]*B[r,j,k]` to arbitrary dimentions.
 
-For example, if A and B are both matricies, slicewise_dot(A, B) == A*B'
+For example, if A and B are both matrices, slicewise_dot(A, B) == A*B'
 """
 function slicewise_dot(A::AbstractArray, B::AbstractArray; dims=1, dimsA=dims, dimsB=dims)
     C = zeros(size(A, dimsA), size(B, dimsB)) # Array{promote_type(T, U), 2}(undef, size(A, 1), size(B, 1)) doesn't seem to be faster
@@ -104,7 +104,7 @@ tucker_contractions(N) = Tuple((G, A) -> nmp(G, A, n) for n in 1:N)
     tuckerproduct(G, A, B, ...)
 
 Multiplies the inputs by treating the first argument as the core and the rest of the
-arguments as matricies in a Tucker decomposition.
+arguments as matrices in a Tucker decomposition.
 
 Example
 -------
@@ -113,42 +113,42 @@ tuckerproduct(G, (A, B, C); exclude=2) == G ×₁ A ×₃ C
 tuckerproduct(G, (A, B, C); exclude=2, excludes_missing=false) == G ×₁ A ×₃ C
 tuckerproduct(G, (A, C); exclude=2, excludes_missing=true) == G ×₁ A ×₃ C
 """
-function tuckerproduct(core, matricies; exclude=nothing, excludes_missing=false)
+function tuckerproduct(core, matrices; exclude=nothing, excludes_missing=false)
     N = ndims(core)
     if isnothing(exclude)
-        N == length(matricies) ||
-            throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
-        return multifoldl(tucker_contractions(N), (core, matricies...))
+        N == length(matrices) ||
+            throw(ArgumentError("expected $N number of matrices, got $(length(matrices))"))
+        return multifoldl(tucker_contractions(N), (core, matrices...))
     elseif excludes_missing
-        N == length(matricies) + length(exclude) ||
-        throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
-        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, matricies...))
+        N == length(matrices) + length(exclude) ||
+        throw(ArgumentError("expected $N number of matrices, got $(length(matrices))"))
+        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, matrices...))
     else
-        N == length(matricies) ||
-            throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
-        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, getnotindex(matricies, exclude)...))
+        N == length(matrices) ||
+            throw(ArgumentError("expected $N number of matrices, got $(length(matrices))"))
+        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, getnotindex(matrices, exclude)...))
     end
 end
-tuckerproduct(core, matricies...; kwargs...) = tuckerproduct(core, matricies; kwargs...)
+tuckerproduct(core, matrices...; kwargs...) = tuckerproduct(core, matrices; kwargs...)
 
 """
     cpproduct((A, B, C, ...))
     cpproduct(A, B, C, ...)
 
-Multiplies the inputs by treating them as matricies in a CP decomposition.
+Multiplies the inputs by treating them as matrices in a CP decomposition.
 
 Example
 -------
 cpproduct(A, B, C) == @einsum T[i, j, k] := A[i, r] * B[j, r] * C[k, r]
 """
-cpproduct(matricies) = mapreduce(vector_outer, +, zip((eachcol.(matricies))...))
-cpproduct(matricies...) = cpproduct(matricies)
+cpproduct(matrices) = mapreduce(vector_outer, +, zip((eachcol.(matrices))...))
+cpproduct(matrices...) = cpproduct(matrices)
 
 """
     khatrirao(A::AbstractMatrix, B::AbstractMatrix)
     A ⊙ B
 
-Khatri-Rao product of two matricies. A ⊙ B can be typed with `\\odot`.
+Khatri-Rao product of two matrices. A ⊙ B can be typed with `\\odot`.
 """
 khatrirao(A::AbstractMatrix, B::AbstractMatrix) = hcat(kron.(eachcol(A), eachcol(B))...)
 const ⊙ = khatrirao
