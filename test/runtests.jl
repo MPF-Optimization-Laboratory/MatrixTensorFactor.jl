@@ -14,10 +14,17 @@ const VERBOSE = true
 @testset verbose=VERBOSE "BlockTensorDecomposition" begin
 
     @testset "Utils" begin
+
         @testset "interlace" begin
         @test interlace(1:10,10:15) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 8, 9, 10]
         @test interlace(1:5,10:20) == [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 15, 16, 17, 18, 19, 20]
         @test interlace(1:3, ("this", "that", "other")) == Any[1, "this", 2, "that", 3, "other"]
+        end
+
+        @testset "multifoldl" begin
+            @test multifoldl((+,*,-), (2,3,4,5)) == 15 # ((2 + 3) * 4) - 5
+            @test multifoldl([+,*,-], [2,3,4,5]) == 15
+            @test multifoldl((*,), [2,3]) == 6
         end
 
         @testset "norm2" begin

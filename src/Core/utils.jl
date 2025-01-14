@@ -272,12 +272,20 @@ geomean(v...) = geomean(v)
 """
     multifoldl(ops, args)
 
-Like foldl, but with a different folding operation between each argument.
+Like `foldl`, but with a different folding operation between each argument.
+
+Example
+=======
+julia> multifoldl((+,*,-), (2,3,4,5))
+15
+
+julia> ((2 + 3) * 4) - 5
+15
 """
 function multifoldl(ops, args)
     @assert (length(ops) + 1) == length(args)
-    x = args[begin]
-    for (op, arg) in zip(ops, args[begin+1:end]) # TODO want @view args[begin+1:end] when possible
+    x, xs... = args
+    for (op, arg) in zip(ops, xs)
         x = op(x, arg)
     end
     return x
