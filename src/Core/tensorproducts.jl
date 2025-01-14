@@ -15,7 +15,7 @@ function nmode_product(A::AbstractArray, B::AbstractMatrix, n::Integer)
     return swapdims(Cperm, n) # swap back
     #Cmat = B * mat(A, n)
     #sizeA = size(A)
-    #sizeC = (sizeA[begin:n-1]..., size(B)[2], sizeA[n+1:end]...)
+    #sizeC = (sizeA[begin:n-1]..., size(B, 2), sizeA[n+1:end]...)
     #return imat(Cmat, n, sizeC)
 end
 
@@ -41,11 +41,11 @@ function mtt(A::AbstractMatrix, B::AbstractArray)
     Bmat = reshape(B, sizeB[1], :)
 
     #Cmat = A * Bmat
-    #C = reshape(Cmat, size(A)[1], sizeB[2:end]...)
+    #C = reshape(Cmat, size(A, 1), sizeB[2:end]...)
 
     # Slightly faster implimentation
-    C = zeros(size(A)[1], sizeB[2:end]...)
-    Cmat = reshape(C, size(A)[1], prod(sizeB[2:end]))
+    C = zeros(size(A, 1), sizeB[2:end]...)
+    Cmat = reshape(C, size(A, 1), prod(sizeB[2:end]))
     mul!(Cmat, A, Bmat)
 
     return C
@@ -63,7 +63,7 @@ Generalizes `@einsum C[s,r] := A[s,j,k]*B[r,j,k]` to arbitrary dimentions.
 For example, if A and B are both matricies, slicewise_dot(A, B) == A*B'
 """
 function slicewise_dot(A::AbstractArray, B::AbstractArray; dims=1, dimsA=dims, dimsB=dims)
-    C = zeros(size(A)[dimsA], size(B)[dimsB]) # Array{promote_type(T, U), 2}(undef, size(A)[1], size(B)[1]) doesn't seem to be faster
+    C = zeros(size(A, dimsA), size(B, dimsB)) # Array{promote_type(T, U), 2}(undef, size(A, 1), size(B, 1)) doesn't seem to be faster
 
     if A === B && (dimsA == dimsB)# use the faster routine if they are the same array
         return _slicewise_self_dot!(C, A; dims=dimsA)

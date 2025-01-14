@@ -301,13 +301,13 @@ const linftyscale_12slices! = ScaledNormalization(linftynorm; whats_normalized=(
 
 const l1scale_average12slices! = ScaledNormalization(l1norm;
     whats_normalized=(x -> eachslice(x; dims=1)),
-    scale=(A -> size(A)[2])) # the length of the second dimention "J"
+    scale=(A -> size(A, 2))) # the length of the second dimention "J"
 const l2scale_average12slices! = ScaledNormalization(l2norm;
     whats_normalized=(x -> eachslice(x; dims=1)),
-    scale=(A -> size(A)[2])) # the length of the second dimention "J"
+    scale=(A -> size(A, 2))) # the length of the second dimention "J"
 const linftyscale_average12slices! = ScaledNormalization(linftynorm;
     whats_normalized=(x -> eachslice(x; dims=1)),
-    scale=(A -> size(A)[2])) # the length of the second dimention "J"
+    scale=(A -> size(A, 2))) # the length of the second dimention "J"
 
 # Convert between ScaledNormalization and ProjectedNormalization
 ScaledNormalization(P::ProjectedNormalization) = ScaledNormalization(P.norm; whats_normalized=P.whats_normalized)

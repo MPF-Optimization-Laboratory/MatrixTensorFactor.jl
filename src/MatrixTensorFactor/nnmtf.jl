@@ -157,7 +157,7 @@ Note there may NOT be a unique optimal solution
 
 # Arguments
 - `Y::AbstractArray{T,N}`: tensor to factorize
-- `R::Integer`: rank to factorize Y (size(A)[2] and size(B)[1])
+- `R::Integer`: rank to factorize Y (size(A, 2) and size(B, 1))
 
 # Keywords
 - `maxiter::Integer=100`: maxmimum number of iterations
@@ -172,7 +172,7 @@ Note there may NOT be a unique optimal solution
 - `stepsize::Symbol=:lipschitz`: used for the gradient decent step (must be in IMPLIMENTED_STEPSIZES)
 - `momentum::Bool=false`: use momentum updates
 - `delta::Real=0.9999`: safeguard for maximum amount of momentum (see eq (3.5) Xu & Yin 2013)
-- `R_max::Integer=size(Y)[1]`: maximum rank to try if R is not given
+- `R_max::Integer=size(Y, 1)`: maximum rank to try if R is not given
 - `projectionA::Symbol=projection`: projection to use on factor A (must be in IMPLIMENTED_PROJECTIONS)
 - `projectionB::Symbol=projection`: projection to use on factor B (must be in IMPLIMENTED_PROJECTIONS)
 - `metricA::Symbol=metric`: the metric to use for factor A (must be in IMPLIMENTED_METRICS)
@@ -234,7 +234,7 @@ function nnmtf(Y::AbstractArray, R::Union{Nothing, Integer}=nothing;
     criterion::Symbol=:ncone,
     stepsize::Symbol=:lipschitz,
     momentum::Bool=false,
-    R_max::Integer=size(Y)[1], # Number of observed mixtures
+    R_max::Integer=size(Y, 1), # Number of observed mixtures
     online_rank_estimation::Bool=false,
     kwargs...
 )
@@ -255,7 +255,7 @@ function nnmtf(Y::AbstractArray, R::Union{Nothing, Integer}=nothing;
     end
 
     if isnothing(R) #&& (online_rank_estimation == true)
-        # Run nnmtf with R from 1 to size(Y)[1]
+        # Run nnmtf with R from 1 to size(Y, 1)
         # Compare fit ||Y - AB||_F^2 across all R
         # Return the output at the maximum positive curavature of ||Y - AB||_F^2
         all_outputs = []

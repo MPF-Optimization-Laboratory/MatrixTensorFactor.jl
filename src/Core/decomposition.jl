@@ -195,8 +195,7 @@ end
 
 function _valid_tucker(factors)
     # Need one factor for each core dimention
-    core = factors[begin]
-    other_factors = factors[begin+1:end]
+    core, other_factors... = factors
     if ndims(core) != length(other_factors)
         @warn "Core is order $(ndims(factors[1])) but got $(length(factors)-1) other factor(s)"
         return false
@@ -204,7 +203,7 @@ function _valid_tucker(factors)
 
     # Need the core sizes to match the second dimention of each other factor
     core_size = size(core)
-    other_sizes = map(x -> size(x)[2], other_factors)
+    other_sizes = map(x -> size(x, 2), other_factors)
     if any(core_size .!= other_sizes)
         @warn "Size of core $(size(core)) is not compatible with the other factor's dimentions $other_sizes"
         return false
@@ -221,8 +220,8 @@ struct Tucker1{T, N} <: AbstractTucker{T, N}
         ndims(core) == N ||
             throw(ArgumentError("Core should have matching number of dims as the call to Tucker1{$T, $N}, got $(ndims(core))"))
 
-        core_dim1 = size(core)[1]
-        matrix_dim2 = size(factors[end])[2]
+        core_dim1 = size(core, 1)
+        matrix_dim2 = size(factors[end], 2)
         if core_dim1 != matrix_dim2
             @warn "First core dimention $core_dim1 does not match second matrix dimention $matrix_dim2"
             throw(ArgumentError("Not a valid Tucker1 decomposition"))
@@ -270,8 +269,8 @@ array(T::AbstractTucker) = multifoldl(contractions(T), factors(T))
 factors(T::AbstractTucker) = T.factors
 contractions(T::Tucker) = tucker_contractions(ndims(T))
 contractions(_::Tucker1) = ((×₁),)
-rankof(T::Tucker) = map(x -> size(x)[2], matrix_factors(T))
-rankof(T::Tucker1) = size(core(T))[begin]
+rankof(T::Tucker) = map(x -> size(x, 2), matrix_factors(T))
+rankof(T::Tucker1) = size(core(T), 1)
 
 # Essentialy zero index tucker factors so the core is the 0th factor, and the nth factor
 # is the matrix factor in the nth dimention
@@ -289,13 +288,12 @@ eachfactorindex(D::AbstractTucker) = 0:(nfactors(D)-1) # 0 based, where core is 
 
 # AbstractArray interface
 # Efficient size and indexing for CPDecomposition
-Base.size(T::Tucker) = map(x -> size(x)[1], matrix_factors(T))
-Base.size(T::Tucker1) = (size(matrix_factors(T)[begin])[1], size(core(T))[begin+1:end]...)
+Base.size(T::Tucker) = map(x -> size(x, 1), matrix_factors(T))
+Base.size(T::Tucker1) = (size(matrix_factors(T)[begin], 1), size(core(T))[begin+1:end]...)
 Base.getindex(T::Tucker1, i::Int) = array(T)[i]
 function Base.getindex(T::Tucker1, I::Vararg{Int})
     G, A = factors(T)
-    i = I[1]
-    J = I[begin+1:end]
+    i, J... = I # (i, J) = (I[1], I[begin+1:end])
     return (@view A[i, :]) ⋅ view(G, :, J...)
 end
 # Example: D[i, j, k] = sum_r sum_s sum_t G[r, s, t] * A[i, r] * B[j, s] * C[k, t])
@@ -320,7 +318,7 @@ struct CPDecomposition{T, N} <: AbstractTucker{T, N}
 	factors::NTuple{N, <:AbstractMatrix{T}} # ex. (A, B, C)
     frozen::NTuple{N, Bool}
     function CPDecomposition{T, N}(factors, frozen) where {T, N}
-        ranks = map(x -> size(x)[2], factors)
+        ranks = map(x -> size(x, 2), factors)
         allequal(ranks) ||
             throw(ArgumentError("Second dimention of factors should be equal. Got $ranks"))
 
@@ -351,11 +349,11 @@ matrix_factors(CPD::CPDecomposition) = factors(CPD)
 core(CPD::CPDecomposition{T, N}) where {T, N} = identity_tensor(T, rankof(CPD), N) #SuperDiagonal(ones(eltype(CPD), rankof(CPD)), ndims(CPD))
 
 # Efficient size and indexing for CPDecomposition
-Base.size(CPD::CPDecomposition) = map(x -> size(x)[1], factors(CPD))
+Base.size(CPD::CPDecomposition) = map(x -> size(x, 1), factors(CPD))
 # Example: CPD[i, j, k] = sum(A[i, :] .* B[j, :] .* C[k, :])
 Base.getindex(CPD::CPDecomposition, i::Int) = array(CPD)[i]
 Base.getindex(CPD::CPDecomposition, I::Vararg{Int}) = sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
 
 # Additional CPDecomposition interface
 """The single rank for a CP Decomposition"""
-rankof(CPD::CPDecomposition) = size(matrix_factors(CPD)[begin])[2]
+rankof(CPD::CPDecomposition) = size(matrix_factors(CPD)[begin], 2)
