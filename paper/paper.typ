@@ -288,6 +288,7 @@
   inset: 6pt,
   stroke: none
 )
+#import "@preview/fontawesome:0.1.0": *
 #import "@preview/ctheorems:1.1.0": *
 #show: thmrules
 #let definition = thmbox("definition", "Definition", base_level: 1)
@@ -376,6 +377,8 @@ Vectors are denoted with lowercase letters ($x$, $y$, etc.), and matrices and hi
 
 To avoid confusion between entries of a vector/matrix/tensor and indexing a list of objects, we use square brackets to denote the former, and subscripts to denote the later. For example, the entry in the $i$th row and $j$th column of a matrix $A in bb(R)$ is $A [i , j]$. This follows MATLAB/Julia notation where `A[i,j]` points to the entry $A [i , j]$. We contrast this with a list of $I$ objects being denoted as $a_1 , dots.h , a_I$, or more compactly, ${ a_i }$ when it is clear the index $i in [I]$.
 
+The transpose $A^tack.b in bb(R)^(J times I)$ of a matrix $A in bb(R)^(I times J)$ flips entries along the main diagonal: $A^tack.b [j , i] = A [i , j]$. In Julia, the transpose of a matrix is typed with a single apostrophe `A'`.
+
 The $n$-slices, $n$th mode slices, or mode $n$ slices of an $N$th order tensor $A$ are notated with the slice $A [: , med dots.h , med : , med i_n , med : , med dots.h , med :]$. For a $3$rd order tensor $A$, the $1$st, $2$nd, and $3$rd mode slices $A [i , : , :]$, $A [: , j , :]$, and $A [: , : , k]$ have special names and are called the horizontal, lateral, and frontal slices and are displayed in @fig-tensor-slices. In Julia, the 1-, 2-, and 3-slices of a third order array `A` would be `eachslice(A, dims=1)`, `eachslice(A, dims=2)`, and `eachslice(A, dims=3)`.
 
 #figure([
@@ -421,11 +424,41 @@ $ ⟨A , B⟩ = A dot.op B = sum_(i_1 = 1)^(I_1) dots.h sum_(i_N = 1)^(I_N) A [i
 
 Julia’s standard library package LinearAlgebra implements the Frobenius inner product with `dot(A, B)` or `A ⋅ B`.
 
-The $n$-slice dot product $dot.op_n$ between two tensors $A in bb(R)^(I_1 , dots.h , I_(n - 1) , J , I_(n + 1) , dots.h , I_N)$ and $B in bb(R)^(I_1 , dots.h , I_(n - 1) , K , I_(n + 1) , dots.h , I_N)$ returns a matrix $(A dot.op_n B) in bb(R)^(J times K)$ with entries
+The $n$-slice dot product $dot.op_n$ between two tensors $A in bb(R)^(K_1 , dots.h , K_(n - 1) , I , K_(n + 1) , dots.h , K_N)$ and $B in bb(R)^(K_1 , dots.h , K_(n - 1) , J , K_(n + 1) , dots.h , K_N)$ returns a matrix $(A dot.op_n B) in bb(R)^(I times J)$ with entries
 
-$ (A dot.op_n B) [j , k] = sum_(i_1 dots.h i_(n - 1) i_(n + 1) dots.h i_N) A [i_1 , dots.h , i_(n - 1) , j , i_(n + 1) , dots.h , i_N] B [i_1 , dots.h , i_(n - 1) , k , i_(n + 1) , dots.h , i_N] . $
+$ (A dot.op_n B) [i , j] = sum_(k_1 dots.h k_(n - 1) k_(n + 1) dots.h k_N) A [k_1 , dots.h , k_(n - 1) , i , k_(n + 1) , dots.h , k_N] B [k_1 , dots.h , k_(n - 1) , j , k_(n + 1) , dots.h , k_N] . $
 
-This product can also be thought of as taking the dot product between all pairs of $n$th order slices of $A$ and $B$: $(A dot.op_n B) [j , k] = A_j dot.op B_k$.
+This product can also be thought of as taking the dot product $(A dot.op_n B) [i , j] = A_i dot.op B_j$ between all pairs of $n$th order slices of $A$ and $B$, which exactly how BlockTensorDecomposition.jl defines the operation.
+
+```julia
+function slicewise_dot(A::AbstractArray, B::AbstractArray; dims=1)
+    C = zeros(size(A, dims), size(B, dims))
+    if A === B # use faster routine if they are the same
+        return _slicewise_self_dot!(C, A; dims)
+    end
+
+    for (i, A_slice) in enumerate(eachslice(A; dims))
+        for (j, B_slice) in enumerate(eachslice(B; dims))
+            C[i, j] = A_slice ⋅ B_slice
+        end
+    end
+    return C
+end
+
+function _slicewise_self_dot!(C, A; dims=1)
+    enumerated_A_slices = enumerate(eachslice(A; dims))
+    for (i, Ai_slice) in enumerated_A_slices
+        for (j, Aj_slice) in enumerated_A_slices
+            if i > j
+                continue
+            else # only compute the upper triangle entries of C
+                C[i, j] = Ai_slice ⋅ Aj_slice
+            end
+        end
+    end
+    return Symmetric(C) # indexing C[2,1] points to the entry in C[1,2]
+end
+```
 
 BlockTensorDecomposition.jl defines this operation with `slicewise_dot(A, B, n)`. In the special case where $A = B$, a more efficient method that only computes entries where $i lt.eq j$ is defined since $A dot.op_n A$ is a symmetric matrix.
 
@@ -449,8 +482,8 @@ function ×₁(A::AbstractArray, B::AbstractMatrix)
     Amat = reshape(A, sizeA[1], :)
 
     # Initialize the output tensor
-    C = zeros(size(B)[1], sizeA[2:end]...)
-    Cmat = reshape(C, size(B)[1], prod(sizeA[2:end]))
+    C = zeros(size(B, 1), sizeA[2:end]...)
+    Cmat = reshape(C, size(B, 1), prod(sizeA[2:end]))
 
     # Perform matrix-matrix multiplication Cmat = B*Amat
     mul!(Cmat, B, Amat)
@@ -467,6 +500,38 @@ function swapdims(A::AbstractArray, a::Integer, b::Integer=1)
 end
 ```
 
+#block[
+#callout(
+body: 
+[
+If we were only working with a fixed order of tensors, we could have defined `×₁` entry-wise with `Tullio.jl`. The function definition `tullio×₁` below gives an example for order three tensors.
+
+```julia
+function tullio×₁(A::AbstractArray{_,3}, B::AbstractMatrix)
+  @tullio C[i, j, k] := A[r, j, k] * B[i, r]
+  return C
+end
+```
+
+But we would need a new definition for each ordered tensor, or use Julia’s meta programming to write a method for each order at runtime.
+
+]
+, 
+title: 
+[
+Note
+]
+, 
+background_color: 
+rgb("#dae6fb")
+, 
+icon_color: 
+rgb("#0758E5")
+, 
+icon: 
+"❕"
+)
+]
 The Frobenius norm of a tensor $A$ is the square root of its dot product with itself
 
 $ norm(A)_F = sqrt(⟨A , A⟩) . $
@@ -491,10 +556,16 @@ For tensors $T$, the (Operator) 2-norm needs to be defined in terms of how we tr
   - high order SVD (see Kolda and Bader)
   - HOSVD (see Kolda, Shifted power method for computing tensor eigenpairs)
 
-A tensor decomposition is a factorization of a tensor into multiple (usually smaller) tensors, that can be recombined into the original tensor. Computationally, we can think of a generic decomposition as storing factors $(A , B , C , . . .)$ and operations $(times_a , times_b , . . .)$ for combining them. This is what we do in BlockTensorDecomposition.jl.
+A tensor decomposition is a factorization of a tensor into multiple (usually smaller) tensors, that can be recombined into the original tensor. To make a common interface for decompositions, we make an abstract subtype of Julia’s `AbstractArray`, and subtype `AbstractDecomposition` for our concrete tensor decompositions.
 
 ```julia
-struct GenericDecomposition{T, N} <: AbstractArray{T, N}
+abstract type AbstractDecomposition{T, N} <: AbstractArray{T, N} end
+```
+
+Computationally, we can think of a generic decomposition as storing factors $(A , B , C , . . .)$ and operations $(times_a , times_b , . . .)$ for combining them. This is what we do in BlockTensorDecomposition.jl.
+
+```julia
+struct GenericDecomposition{T, N} <: AbstractDecomposition{T, N}
     factors::Tuple{Vararg{AbstractArray{T}}} # e.g. (A, B, C)
     contractions::Tuple{Vararg{Function}} # e.g. (×₁, ×₂)
 end
@@ -507,8 +578,8 @@ The function `multifoldl` applies the given operations between each factor, from
 ```julia
 function multifoldl(ops, args)
     @assert (length(ops) + 1) == length(args)
-    x = args[begin]
-    for (op, arg) in zip(ops, args[begin+1:end])
+    x, xs... = args
+    for (op, arg) in zip(ops, xs)
         x = op(x, arg)
     end
     return x
@@ -618,7 +689,7 @@ Tensor decompositions are not nessisarily unique. It should be clear that scalin
 
 === Representing Tucker Decompositions
 <representing-tucker-decompositions>
-There are implemented in BlockTensorDecomposition.jl and can be called, for a third order tensor, with `Tucker((B, A₁, A₂, A₃))`, `Tucker1((B, A₁))`, and `CPDecomposition((A₁, A₂, A₃))`. These Julia `structs` store the tensor in its factored form. If the recombined tensor or particular entries are requested, Julia dispatches on the type of decomposition and calls a particular method of `array` or `getindex`. The implementations for efficient array construction and index access are provided below.
+There are implemented in BlockTensorDecomposition.jl and can be called, for a third order tensor, with `Tucker((B, A₁, A₂, A₃))`, `Tucker1((B, A₁))`, and `CPDecomposition((A₁, A₂, A₃))`. These Julia `structs` store the tensor in its factored form. We could define the contractions for these types and use the common interface provided by `array`, but it turns out we can reconstruct the whole tensor more efficiently. If the recombined tensor or particular entries are requested, Julia dispatches on the type of decomposition and calls a particular method of `array` or `getindex`. The implementations for efficient array construction and index access are provided below.
 
 ```julia
 array(T::Tucker) = multifoldl(tucker_contractions(ndims(T)), factors(T))
@@ -635,8 +706,7 @@ end
 
 function getindex(T::Tucker1, I::Vararg{Int})
     B, A = factors(T)
-    i = I[1]
-    J = I[begin+1:end] # J = (I₂, I₃, ..., I_N)
+    i, J... = I # (i, J) = (I[1], I[begin+1:end])
     return (@view A[i, :]) ⋅ view(B, :, J...)
 end
 ```
@@ -703,19 +773,21 @@ The main optimization we must solve is now given.
 #definition()[
 The constrained least-squares tensor factorization problem is to solve
 
-#math.equation(block: true, numbering: "(1)", [ $ min_(A_1 , dots.h , A_N) norm(g (A_1 , dots.h , A_N) - Y)_F^2 quad upright("s.t.") quad (A_1 , dots.h , A_N) in cal(C)_1 times dots.h times cal(C)_N $ ])<eq-constrained-least-squares>
+#math.equation(block: true, numbering: "(1)", [ $ min_(A_1 , dots.h , A_N) 1 / 2 norm(g (A_1 , dots.h , A_N) - Y)_F^2 quad upright("s.t.") quad (A_1 , dots.h , A_N) in cal(C)_1 times dots.h times cal(C)_N $ ])<eq-constrained-least-squares>
 
 for a given data tensor $Y$, constraints $cal(C)_1 , dots.h , cal(C)_N$, and decomposition model $g$ with fixed rank.
 
 ] <def-constrained-least-squares>
+Note the problem would have the same solutions as simply using the objective $norm(g (A_1 , dots.h , A_N) - Y)$ without squaring and dividing by $2$. We define the objective in @eq-constrained-least-squares to make computing the function value and gradients faster.
+
 == Base algorithm
 <sec-base-algorithm>
 - Use Block Coordinate Descent / Alternating Proximal Descent
   - do #emph[not] use alternating least squares (slower for unconstrained problems, no closed form update for general constrained problems)
 
-Let $f (A_1 , dots.h , A_N) := norm(g (A_1 , dots.h , A_N) - Y)_F^2$ be the objective function we wish to minimize in @eq-constrained-least-squares. Following Xu and Yin @xu_BlockCoordinateDescent_2013, the general approach we take to minimize $f$ is to apply block coordinate descent using each factor as a different block. Let $A_n^t$ be the $t$th iteration of the $n$th factor, and let
+Let $f (A_1 , dots.h , A_N) := 1 / 2 norm(g (A_1 , dots.h , A_N) - Y)_F^2$ be the objective function we wish to minimize in @eq-constrained-least-squares. Following Xu and Yin @xu_BlockCoordinateDescent_2013, the general approach we take to minimize $f$ is to apply block coordinate descent using each factor as a different block. Let $A_n^t$ be the $t$th iteration of the $n$th factor, and let
 
-$ f_n^t (A_n) := norm(g (A_1^(t + 1) , dots.h , A_(n - 1)^(t + 1) , A_n , A_(n + 1)^t , dots.h , A_N^t) - Y)_F^2 $
+$ f_n^t (A_n) := 1 / 2 norm(g (A_1^(t + 1) , dots.h , A_(n - 1)^(t + 1) , A_n , A_(n + 1)^t , dots.h , A_N^t) - Y)_F^2 $
 
 be the (partially updated) objective function at iteration $t$ for factor $n$.
 
@@ -735,24 +807,34 @@ We typically choose $L_n^t$ to be the Lipschitz constant of $nabla f_n^t$, since
 
 === High level code
 <high-level-code>
-To ensure the code stays flexible, the main algorithm of BlockTensorDecomposition.jl, `factorize` is defined at a very high level.
+To ensure the code stays flexible, the main algorithm of BlockTensorDecomposition.jl, `factorize`, is defined at a very high level.
 
 ```julia
-function factorize(Y; kwargs...)
-    decomposition, converged, update!, updateprevious!, updateparameters!, stats_data, getstats, kwargs = initialize(Y; kwargs...)
+factorize(Y; kwargs...) =
+    _factorize(Y; (default_kwargs(Y; kwargs...))...)
+
+"""
+Inner level function once keyword arguments are set
+"""
+function _factorize(Y; kwargs...)
+    decomposition, previous, updateprevious!, parameters, updateparameters!,
+    update!, stats_data, getstats, converged, kwargs = initialize(Y, kwargs)
 
     while !converged(stats_data; kwargs...)
+        # Usually one cycle of updates through each factor in the decomposition
         update!(decomposition; parameters...)
 
+        # This could be the next stepsize or other info used by update!
         updateparameters!(parameters, decomposition, previous)
 
         push!(stats_data,
             getstats(decomposition, Y, previous, parameters, stats_data))
 
+        # Update one or two previous iterates. For example, used for momentum
         updateprevious!(previous, parameters, decomposition)
     end
 
-    postprocess!(decomposition, parameters, stats_data, Y; kwargs...)
+    kwargs = postprocess!(decomposition, Y, previous, parameters, stats_data, updateparameters!, getstats, kwargs)
 
     return decomposition, stats_data, kwargs
 end
@@ -765,8 +847,127 @@ The magic of the code is in defining the functions at runtime for a particular d
 - Use Auto diff generally
 - But hand-crafted gradients and Lipschitz calculations #emph[can] be faster (e.g.~symmetrized slicewise dot product)
 
+Generally, we can use automatic differentiation on $f$ to compute gradients. Some care needs to be taken otherwise the forward or backwards pass will have to be recompiled every iteration since the factors are updated every iteration.
+
+But for Tucker decompositions, we can compute gradients faster than what an automatic differentiation scheme would give, by taking advantage of symmetry and other computational shortcuts.
+
+Starting with the Tucker-1 decomposition (@def-tucker-1-decomposition), we would like to compute $nabla_B f (B , A)$ and $nabla_A f (B , A)$ for $f (B , A) = 1 / 2 norm(A B - Y)_F^2$ for a given input $Y$. We have the gradient
+
+#math.equation(block: true, numbering: "(1)", [ $ nabla_B f (B , A) = A^tack.b (A B - Y) = (B times_1 A - Y) times_1 A^tack.b $ ])<eq-tucker-1-gradient-1>
+
+by chain rule, but it is more efficient to calculate the gradient as
+
+#math.equation(block: true, numbering: "(1)", [ $ nabla_B f (B , A) = (A^tack.b A) B - A^tack.b Y = B times_1 (A^tack.b A) - Y times_1 A^tack.b . $ ])<eq-tucker-1-gradient-2>
+
+#footnote[Seeing @eq-tucker-1-gradient-1 and @eq-tucker-1-gradient-2 written using the $1$-mode product shows how it is "backwards" to normal matrix-matrix multiplication.];For $A in bb(R)^(I times R)$, $B in bb(R)^(R times J times K)$, and $Y in bb(R)^(I times J times K)$, @eq-tucker-1-gradient-1 requires
+
+$ underbrace(2 I J K R, A B - Y) + underbrace(I J K (2 I - 1), A^tack.b (A B - Y)) tilde.op 2 I J K R + 2 I^2 J K $ floating point operations (FLOPS) whereas @eq-tucker-1-gradient-2 only uses
+
+$ underbrace(frac(R (R + 1), 2) (2 I - 1), A^tack.b A) + underbrace(R J K (2 I - 1), A^tack.b Y) + underbrace(2 R^2 J K, (A^tack.b A) B - (A^tack.b Y)) tilde.op 2 I J K R + 2 R^2 J K + I R^2 $
+
+FLOPS#footnote[Note we have the smaller factor $R (R + 1) \/ 2$ and not the expected $R^2$ number of entries needed to compute $A^tack.b A$. The product is a symmetric matrix so only the upper or lower triangle of entries needs to be computed.]. So for small ranks $R lt.double I$, @eq-tucker-1-gradient-2 is cheaper.
+
+A similar story can be said about $nabla_A f (B , A)$ which is most efficiently computed as
+
+$ nabla_A f (B , A) = A (B dot.op_1 B) - Y dot.op_1 B . $
+
+The associated implementation with BlockTensorDecomposition.jl is shown below. We define a `make_gradient` which takes the decomposition, factor index `n`, and data tensor `Y`, and creates a function that computes the gradient for the same type of decomposition. This lets us manipulate the function that computes the gradient, rather than just the computed gradient.
+
+```julia
+function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function gradient0(T::Tucker1; kwargs...)
+            (B, A) = factors(T)
+            AA = A'A
+            YA = Y×₁A'
+            grad = B×₁AA - YA
+            return grad
+        end
+        return gradient0
+    elseif n==1 # the matrix is the first factor
+        function gradient1(T::Tucker1; kwargs...)
+            (B, A) = factors(T)
+            BB = slicewise_dot(B, B)
+            YB = slicewise_dot(Y, B)
+            grad = A*BB - YB
+            return grad
+        end
+        return gradient1
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+end
+```
+
+Similarly, we also have special methods for the Tucker and CP Decomposition.
+
+The gradient with respect to the core for a full Tucker factorization is
+
+$ nabla_B f (B , A_1 , dots.h , A_N) = B times.big_n A_n^tack.b A_n - Y times.big_n A_n^tack.b , $
+
+and the gradient with respect to the matrix factor $A_m$ is
+
+$ nabla_(A_m) f (B , A_1 , dots.h , A_N) = A_m (B times.big_(n eq.not m) A_n) dot.op_m (B times.big_(n eq.not m) A_n) - Y dot.op_m (B times.big_(n eq.not m) A_n) . $
+
+```julia
+function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n==0 # the core is the zeroth factor
+        function gradient_core(T::AbstractTucker; kwargs...)
+            C = core(T)
+            matrices = matrix_factors(T)
+            gram_matrices = map(A -> A'A, matrices) # gram matrices AA = A'A, BB = B'B...
+            YAB = tuckerproduct(Y, adjoint.(matrices)) # Y ×₁ A' ×₂ B' ...
+            grad = tuckerproduct(C, gram_matrices) - YAB
+            return grad
+        end
+        return gradient_core
+
+    elseif n in 1:N # the matrix factors start at m=1
+        function gradient_matrix(T::AbstractTucker; kwargs...)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
+            An = factor(T, n)
+            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+            return grad
+        end
+        return gradient_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+```
+
+```julia
+function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n in 1:N # the matrix factors start at m=1
+        function gradient_matrix(T::AbstractTucker; kwargs...)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
+            An = factor(T, n)
+            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+            return grad
+        end
+        return gradient_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+```
+
+The function `tuckerproduct(B, (A₁, ..., Aₙ))` computes $ B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) , $
+
+and can optionally "exclude" one of the matrix factors `tuckerproduct(B, (A₁, ..., Aₙ); exclude=m)` to compute
+
+$ B times.big_(n eq.not m) A_n = lr(bracket.l.double B \; A_1 , dots.h , A_(n - 1) , upright("id")_(I_n) , A_(n + 1) , dots.h , A_N bracket.r.double) $ where $B in bb(R)^(I_1 times dots.h times I_N)$.
+
 === Computing Lipschitz Step-sizes
 <sec-lipschitz-computation>
+Similar to automatic differentiation, there exist "automatic Lipschitz" calculations to upper bound the Lipschitz constant of a function @virmaux_lipschitz_2018.
+
 = Computational Techniques
 <computational-techniques>
 == For Improving Convergence Speed
