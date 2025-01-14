@@ -307,7 +307,7 @@ end
 
         for n in 1:3
             An = factor(T, n)
-            CM = tuckerproduct(C, getnotindex(matricies, n); exclude=n)
+            CM = tuckerproduct(C, matricies; exclude=n)
 
             # two ways of calculating the block gradient of ||T - Y||_F^2 w.r.t. An
             grad1 = slicewise_dot(T - Y, CM; dims=n)

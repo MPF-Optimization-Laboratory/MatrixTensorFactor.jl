@@ -83,7 +83,7 @@ function make_lipschitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, 
     elseif n in 1:N # the matrix is the zeroth factor
         function lipschitz_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipschitz_matrix
@@ -98,7 +98,7 @@ function make_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; object
     if n in 1:N # the matrix is the zeroth factor
         function lipschitz_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n) # TODO optimize this to avoid making the super diagonal core
             return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipschitz_matrix
@@ -133,7 +133,7 @@ function make_block_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; 
     if n in 1:N # the matrix is the zeroth factor
         function lipschitz_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n) # TODO optimize this to avoid making the super diagonal core
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n) # TODO optimize this to avoid making the super diagonal core
             return Diagonal_col_norm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipschitz_matrix
@@ -154,7 +154,7 @@ function make_block_lipschitz(T::Tucker, n::Integer, Y::AbstractArray; objective
     elseif n in 1:N # the matrix is the zeroth factor
         function lipschitz_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
             return Diagonal_col_norm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
         end
         return lipschitz_matrix
@@ -323,7 +323,7 @@ function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
     elseif n in 1:N # the matrix factors start at m=1
         function gradient_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
             An = factor(T, n)
             grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
             return grad
@@ -340,7 +340,7 @@ function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objecti
     if n in 1:N # the matrix factors start at m=1
         function gradient_matrix(T::AbstractTucker; kwargs...)
             matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), getnotindex(matrices, n); exclude=n)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
             An = factor(T, n)
             grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
             return grad

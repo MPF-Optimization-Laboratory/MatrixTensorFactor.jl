@@ -108,19 +108,25 @@ arguments as matricies in a Tucker decomposition.
 
 Example
 -------
-tuckerproduct(G, A, B, C) == G ×₁ A ×₂ B ×₃ C
-tuckerproduct(G, A, C; exclude=2) == G ×₁ A ×₃ C
+tuckerproduct(G, (A, B, C)) == G ×₁ A ×₂ B ×₃ C
+tuckerproduct(G, (A, B, C); exclude=2) == G ×₁ A ×₃ C
+tuckerproduct(G, (A, B, C); exclude=2, excludes_missing=false) == G ×₁ A ×₃ C
+tuckerproduct(G, (A, C); exclude=2, excludes_missing=true) == G ×₁ A ×₃ C
 """
-function tuckerproduct(core, matricies; exclude=nothing)
+function tuckerproduct(core, matricies; exclude=nothing, excludes_missing=false)
     N = ndims(core)
     if isnothing(exclude)
         N == length(matricies) ||
             throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
         return multifoldl(tucker_contractions(N), (core, matricies...))
-    else
+    elseif excludes_missing
         N == length(matricies) + length(exclude) ||
         throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
         return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, matricies...))
+    else
+        N == length(matricies) ||
+            throw(ArgumentError("expected $N number of matricies, got $(length(matricies))"))
+        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, getnotindex(matricies, exclude)...))
     end
 end
 tuckerproduct(core, matricies...; kwargs...) = tuckerproduct(core, matricies; kwargs...)
