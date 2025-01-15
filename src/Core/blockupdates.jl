@@ -279,29 +279,27 @@ function make_gradient(D::AbstractDecomposition, n::Integer, Y::AbstractArray; o
     error("Gradient not implemented for ", typeof(D), " with ", typeof(objective), " objective")
 end
 
-# Using this patter of inputs so that gradients for a generic decomposition could be calculated
+# Using this pattern of inputs so that gradients for a generic decomposition could be calculated
 # with auto diff by looking at the gradient of the function objective(D, Y) with respect to the nth factor in D
 function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function gradient0(T::Tucker1; kwargs...)
-            (C, A) = factors(T)
+        function gradient0(X::Tucker1; kwargs...)
+            (B, A) = factors(X)
             AA = A'A
             YA = Y×₁A'
-            grad = C×₁AA - YA # TODO define multiplication generally
+            grad = B×₁AA - YA
             return grad
         end
         return gradient0
-
     elseif n==1 # the matrix is the first factor
-        function gradient1(T::Tucker1; kwargs...)
-            (C, A) = factors(T)
-            CC = slicewise_dot(C, C)
-            YC = slicewise_dot(Y, C)
-            grad = A*CC - YC
+        function gradient1(X::Tucker1; kwargs...)
+            (B, A) = factors(X)
+            BB = slicewise_dot(B, B)
+            YB = slicewise_dot(Y, B)
+            grad = A*BB - YB
             return grad
         end
         return gradient1
-
     else
         error("No $(n)th factor in Tucker1")
     end
@@ -310,22 +308,25 @@ end
 function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n==0 # the core is the zeroth factor
-        function gradient_core(T::AbstractTucker; kwargs...)
-            C = core(T)
-            matrices = matrix_factors(T)
-            gram_matrices = map(A -> A'A, matrices) # gram matrices AA = A'A, BB = B'B...
-            YAB = tuckerproduct(Y, adjoint.(matrices)) # Y ×₁ A' ×₂ B' ...
-            grad = tuckerproduct(C, gram_matrices) - YAB
+        function gradient_core(X::AbstractTucker; kwargs...)
+            B = core(X)
+            matrices = matrix_factors(X)
+            gram_matrices = map(A -> A'A, matrices) # gram matrices AA = A'A,
+                                                    # BB = B'B, ...
+            grad = tuckerproduct(B, gram_matrices)
+                 - tuckerproduct(Y, adjoint.(matrices))
             return grad
         end
         return gradient_core
 
     elseif n in 1:N # the matrix factors start at m=1
-        function gradient_matrix(T::AbstractTucker; kwargs...)
-            matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
-            An = factor(T, n)
-            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+        function gradient_matrix(X::AbstractTucker; kwargs...)
+            B = core(X)
+            matrices = matrix_factors(X)
+            Aₙ = factor(X, n)
+            X̃ₙ = tuckerproduct(B, matrices; exclude=n)
+            grad = Aₙ * slicewise_dot(X̃ₙ, X̃ₙ; dims=n)
+                   - slicewise_dot(Y, X̃ₙ; dims=n)
             return grad
         end
         return gradient_matrix
@@ -338,11 +339,13 @@ end
 function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n in 1:N # the matrix factors start at m=1
-        function gradient_matrix(T::AbstractTucker; kwargs...)
-            matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
-            An = factor(T, n)
-            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+        function gradient_matrix(X::AbstractTucker; kwargs...)
+            B = core(X)
+            matrices = matrix_factors(X)
+            Aₙ = factor(X, n)
+            X̃ₙ = tuckerproduct(B, matrices; exclude=n)
+            grad = Aₙ * slicewise_dot(X̃ₙ, X̃ₙ; dims=n)
+                   - slicewise_dot(Y, X̃ₙ; dims=n)
             return grad
         end
         return gradient_matrix
