@@ -291,6 +291,7 @@
 #import "@preview/fontawesome:0.1.0": *
 #import "@preview/ctheorems:1.1.0": *
 #show: thmrules
+#let theorem = thmbox("theorem", "Theorem", base_level: 1)
 #let definition = thmbox("definition", "Definition", base_level: 1)
 
 #show: doc => article(
@@ -416,9 +417,15 @@ Since we commonly use $I$ as the size of a tensor’s dimension, we use $upright
 
 BlockTensorDecomposition.jl defines `identity_tensor(I, ndims)` to construct $upright(i d)_I$.
 
-=== Operations
-<operations>
-The Frobenius inner product between two tensors $A , B in bb(R)^(I_1 times dots.h times I_N)$ is denoted
+=== Products of Tensors
+<products-of-tensors>
+The outer product $times.circle$ between two tensors $A in bb(R)^(I_1 times dots.h times I_M)$ and $B in bb(R)^(J_1 times dots.h times J_N)$ yields an order $M + N$ tensor $A times.circle B in bb(R)^(I_1 times dots.h times I_M times J_1 times dots.h times J_N)$ that is entry-wise
+
+$ (A times.circle B) [i_1 , dots.h , i_M , j_1 , dots.h , j_N] = A [i_1 , dots.h , i_M] B [j_1 , dots.h , j_N] . $
+
+TODO Define in BlockTensorDecomposition.jl
+
+The Frobenius inner product between two tensors $A , B in bb(R)^(I_1 times dots.h times I_N)$ yields a real number $A dot.op B in bb(R)$ and is defined as
 
 $ ⟨A , B⟩ = A dot.op B = sum_(i_1 = 1)^(I_1) dots.h sum_(i_N = 1)^(I_N) A [i_1 , dots.h , i_N] B [i_1 , dots.h , i_N] . $
 
@@ -532,6 +539,26 @@ icon:
 "❕"
 )
 ]
+The $n$-mode product and $n$-slice product can be thought of as opposites of each other. The $n$-mode product sums over just the $n$th dimension of the first tensor, whereas the $n$-slice product sums over all but the $n$th dimension.
+
+We can extend the $n$-mode product to sum over multiple indices between two tensors.
+
+The (complete) multi-mode product $times_(1 , dots.h , n) = times_([n])$ between a tensor $A in bb(R)^(I_1 times dots.h times I_N)$ and tensor $B in bb(R)^(I_1 times dots.h times I_n)$, returns a tensor $(A times_([n]) B) in bb(R)^(I_(n + 1) times dots.h times I_N)$ with entries
+
+$ (A times_([n]) B) [i_(n + 1) , dots.h , i_N] = sum_(i_1 , dots.h , i_n) A [i_1 , dots.h , i_n , i_(n + 1) , dots.h , i_N] B [i_1 , dots.h , i_n] . $
+
+=== Gradients, Norms, and Lipschitz Constants
+<gradients-norms-and-lipschitz-constants>
+The gradient $nabla f : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)^(I_1 times dots.h times I_N)$ of a (differentiable) function $f : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)$ is defined entry-wise for a tensor $A in bb(R)^(I_1 times dots.h times I_N)$ by
+
+$ nabla f (A) [i_1 , dots.h , i_N] = frac(partial f, partial A [i_1 , dots.h , i_N]) (A) . $
+
+The Hessian $nabla^2 f : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)^((I_1 times dots.h times I_N)^2)$ of a (second-differentiable) function $f : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)$ is the gradient of the gradient and is defined for a tensor $A in bb(R)^(I_1 times dots.h times I_N)$ entry-wise by
+
+$ nabla^2 f (A) [i_1 , dots.h , i_N , j_1 , dots.h , j_N] = frac(partial^2 f, partial A [i_1 , dots.h , i_N] partial A [j_1 , dots.h , j_N]) (A) . $
+
+For a tensor input $A$ of order $N$, the Hessian tensor $nabla^2 f (A)$ is of order $2 N$.
+
 The Frobenius norm of a tensor $A$ is the square root of its dot product with itself
 
 $ norm(A)_F = sqrt(⟨A , A⟩) . $
@@ -540,14 +567,42 @@ For vectors $v$, this is equivalent to the (Euclidean) 2-norm
 
 $ norm(v)_F = norm(v)_2 = sqrt(⟨v , v⟩) . $
 
-For matrices $M$, the (Operator) 2-norm is defined as
+For matrices $M$, the (operator) 2-norm is defined as
 
-$ norm(M)_2 = arg thin max_(norm(v)_2 = 1) norm(M v)_2 = sigma_1 (M) $
+$ norm(M)_(upright("op")) = norm(M)_2 = sup_(lr(bar.v.double v bar.v.double)_2 = 1) norm(M v)_2 = sigma_1 (M) $
 
 where $sigma_1 (M)$ is the largest singular value of $M$.
 
-For tensors $T$, the (Operator) 2-norm needs to be defined in terms of how we treat them as function on other tensors. There is a canonical way to do this for vectors $x arrow.r v^tack.b x$ and matrices $x arrow.r M x$, but not tensors. This is relevant to @sec-lipschitz-computation where the Lipschitz step-size is computed in terms of the Operator norm of the Hessian of our objective function.
+For tensors $T$, the (operator) 2-norm needs to be defined in terms of how we treat them as function on other tensors. There is a canonical way to do this for vectors $x arrow.r v^tack.b x$ and matrices $x arrow.r M x$, but not tensors. This is relevant to @sec-lipschitz-computation where the Lipschitz step-size is computed in terms of the Operator norm of the Hessian of our objective function. In the case of the Hessian tensor $nabla^2 f (A)$ evaluated at $A$, we consider the function $X arrow.r nabla^2 f (A) times_([N]) X$. This gives us
 
+$ norm(nabla^2 f (A))_(upright("op")) = sup_(norm(X)_F = 1) norm(nabla^2 f (A) times_([N]) X)_F = sigma_1 (upright("mat") (nabla^2 f (A))) $
+
+where $upright("mat") : bb(R)^((I_1 times dots.h times I_N)^2) arrow.r bb(R)^((I_1 dots.h I_N) times (I_1 dots.h I_N))$ takes a $2 N$-ordered tensor and flattens it into a square $(I_1 dots.h I_N) times (I_1 dots.h I_N)$ matrix.
+
+A function $g : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)^(I_1 times dots.h times I_N)$ is $L$-Lipschitz when
+
+$ norm(g (A) - g (B))_F lt.eq L norm(A - B)_F , quad forall A , B in bb(R)^(I_1 times dots.h times I_N) . $
+
+We call the smallest such $L$ #emph[the] Lipschitz constant of $g$.
+
+A differentiable function $f : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)$ is $L$-smooth when its gradient $g = nabla f$ is $L$-Lipschitz.
+
+#theorem("Quadratic Smoothness")[
+Let $f : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)$ be a quadratic function
+
+$ f (X) = 1 / 2 A (X , X) + B (X) + C $
+
+of $X$ with bilinear function $A : (bb(R)^(I_1 times dots.h times I_N))^2 arrow.r bb(R)$, linear function $B : bb(R)^(I_1 times dots.h times I_N) arrow.r bb(R)$, and constant $C in bb(R)^(I_1 times dots.h times I_N)$.
+
+Then
+
++ the Hessian $nabla^2 f$ is a constant function that evaluates to $nabla^2 f (X) = D$ at every point $X$ for some $D in bb(R)^((I_1 times dots.h times I_N)^2)$,
++ the tensor $D$ only depends on the bilinear function $A$ (and not on $B$ and $C$), and
++ the quadratic function $f$ is $L$-smooth with constant
+
+$ L = norm(D)_(upright("op")) = sigma_1 ("mat" D) . $
+
+] <thm-quadratic-smoothness>
 == Common Decompositions
 <sec-common-decompositions>
 - Extensions of PCA/ICA/NMF to higher dimensions
@@ -597,9 +652,28 @@ A rank-$(R_1 , dots.h , R_N)$ Tucker decomposition of a tensor $Y in bb(R)^(I_1 
 
 entry-wise. More compactly, this decomposition can be written using the $n$-mode product, or with double brackets
 
-$ Y = B times_1 A_1 times_2 dots.h times_N A_N = B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $
+#math.equation(block: true, numbering: "(1)", [ $ Y = B times_1 A_1 times_2 dots.h times_N A_N = B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $ ])<eq-tucker-product>
 
 ] <def-tucker-decomposition>
+The #emph[Tucker Product] defined by @eq-tucker-product is implemented in BlockTensorDecomposition.jl with `tuckerproduct(B, (A1, ..., AN))` and computes $ B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $
+
+It can also optionally "exclude" one of the matrix factors with the call `tuckerproduct(B, (A1, ..., AN); exclude=n)` to compute
+
+$ B times.big_(m eq.not n) A_m = lr(bracket.l.double B \; A_1 , dots.h , A_(n - 1) , upright("id")_(R_n) , A_(n + 1) , dots.h , A_N bracket.r.double) . $
+
+```julia
+function tuckerproduct(core, matrices; exclude=nothing)
+    N = ndims(core)
+    if isnothing(exclude)
+        return multifoldl(tucker_contractions(N), (core, matrices...))
+    else
+        return multifoldl(getnotindex(tucker_contractions(N), exclude), (core, getnotindex(matrices, exclude)...))
+    end
+end
+
+tucker_contractions(N) = Tuple((B, A) -> nmode_product(B, A, n) for n in 1:N)
+```
+
 Sometimes we write $A_0 = B$ to ease notation, and suggest the "zeroth" factor of the tucker decomposition is the core tensor $B$. In the special case when $N = 3$, we can visualize Tucker decomposition as multiplying the core tensor by matrices on all three sides as shown in @fig-tucker.
 
 #figure([
@@ -843,7 +917,7 @@ end
 The magic of the code is in defining the functions at runtime for a particular decomposition requested, from a reasonable set of default keyword arguments. This is discussed further in @sec-flexibility.
 
 === Computing Gradients
-<computing-gradients>
+<sec-gradient-computation>
 - Use Auto diff generally
 - But hand-crafted gradients and Lipschitz calculations #emph[can] be faster (e.g.~symmetrized slicewise dot product)
 
@@ -871,13 +945,36 @@ A similar story can be said about $nabla_A f (B , A)$ which is most efficiently 
 
 $ nabla_A f (B , A) = A (B dot.op_1 B) - Y dot.op_1 B . $
 
+#block[
+#callout(
+body: 
+[
+For the family of Tucker decompositions, the objective function $f$ is "block-quadratic" with respect to the factors. This means the gradient with respect to a factor is an affine function of that factor. This is exactly what we see in @eq-tucker-1-gradient-2 where $B$ is multiplied by the "slope" $A^tack.b A$ plus a shift of $- Y times_1 A^tack.b$.
+
+]
+, 
+title: 
+[
+Note
+]
+, 
+background_color: 
+rgb("#dae6fb")
+, 
+icon_color: 
+rgb("#0758E5")
+, 
+icon: 
+"❕"
+)
+]
 The associated implementation with BlockTensorDecomposition.jl is shown below. We define a `make_gradient` which takes the decomposition, factor index `n`, and data tensor `Y`, and creates a function that computes the gradient for the same type of decomposition. This lets us manipulate the function that computes the gradient, rather than just the computed gradient.
 
 ```julia
 function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     if n==0 # the core is the zeroth factor
-        function gradient0(T::Tucker1; kwargs...)
-            (B, A) = factors(T)
+        function gradient0(X::Tucker1; kwargs...)
+            (B, A) = factors(X)
             AA = A'A
             YA = Y×₁A'
             grad = B×₁AA - YA
@@ -885,8 +982,8 @@ function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, 
         end
         return gradient0
     elseif n==1 # the matrix is the first factor
-        function gradient1(T::Tucker1; kwargs...)
-            (B, A) = factors(T)
+        function gradient1(X::Tucker1; kwargs...)
+            (B, A) = factors(X)
             BB = slicewise_dot(B, B)
             YB = slicewise_dot(Y, B)
             grad = A*BB - YB
@@ -905,30 +1002,37 @@ The gradient with respect to the core for a full Tucker factorization is
 
 $ nabla_B f (B , A_1 , dots.h , A_N) = B times.big_n A_n^tack.b A_n - Y times.big_n A_n^tack.b , $
 
-and the gradient with respect to the matrix factor $A_m$ is
+and the gradient with respect to the matrix factor $A_n$ is
 
-$ nabla_(A_m) f (B , A_1 , dots.h , A_N) = A_m (B times.big_(n eq.not m) A_n) dot.op_m (B times.big_(n eq.not m) A_n) - Y dot.op_m (B times.big_(n eq.not m) A_n) . $
+$ nabla_(A_n) f (B , A_1 , dots.h , A_N) = A_n (tilde(X)_n dot.op_n tilde(X)_n) - Y dot.op_n tilde(X)_n $
+
+where
+
+$ tilde(X)_n = (B times.big_(m eq.not n) A_m) = lr(bracket.l.double B \; A_1 , dots.h , A_(n - 1) , upright("id")_(R_n) , A_(n + 1) , dots.h , A_N bracket.r.double) . $
 
 ```julia
 function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n==0 # the core is the zeroth factor
-        function gradient_core(T::AbstractTucker; kwargs...)
-            C = core(T)
-            matrices = matrix_factors(T)
-            gram_matrices = map(A -> A'A, matrices) # gram matrices AA = A'A, BB = B'B...
-            YAB = tuckerproduct(Y, adjoint.(matrices)) # Y ×₁ A' ×₂ B' ...
-            grad = tuckerproduct(C, gram_matrices) - YAB
+        function gradient_core(X::AbstractTucker; kwargs...)
+            B = core(X)
+            matrices = matrix_factors(X)
+            gram_matrices = map(A -> A'A, matrices) # gram matrices AA = A'A,
+                                                    # BB = B'B, ...
+            grad = tuckerproduct(B, gram_matrices)
+                 - tuckerproduct(Y, adjoint.(matrices))
             return grad
         end
         return gradient_core
 
     elseif n in 1:N # the matrix factors start at m=1
-        function gradient_matrix(T::AbstractTucker; kwargs...)
-            matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
-            An = factor(T, n)
-            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+        function gradient_matrix(X::AbstractTucker; kwargs...)
+            B = core(X)
+            matrices = matrix_factors(X)
+            Aₙ = factor(X, n)
+            X̃ₙ = tuckerproduct(B, matrices; exclude=n)
+            grad = Aₙ * slicewise_dot(X̃ₙ, X̃ₙ; dims=n)
+                   - slicewise_dot(Y, X̃ₙ; dims=n)
             return grad
         end
         return gradient_matrix
@@ -938,16 +1042,26 @@ function make_gradient(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, k
     end
 end
 ```
+
+For the CP Decomposition, we can simply treat the core as $B = upright("id")_R$ and compute the gradient with respect to the matrix factors similarly to the Tucker decomposition:
+
+$ nabla_(A_n) f (A_1 , dots.h , A_N) = A_n (tilde(X)_n dot.op_n tilde(X)_n) - Y dot.op_n tilde(X)_n $
+
+where
+
+$ tilde(X)_n = (upright("id")_R times.big_(m eq.not n) A_m) = lr(bracket.l.double upright("id")_R \; A_1 , dots.h , A_(n - 1) , upright("id")_R , A_(n + 1) , dots.h , A_N bracket.r.double) . $
 
 ```julia
 function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
     if n in 1:N # the matrix factors start at m=1
-        function gradient_matrix(T::AbstractTucker; kwargs...)
-            matrices = matrix_factors(T)
-            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
-            An = factor(T, n)
-            grad = An*slicewise_dot(TExcludeAn, TExcludeAn; dims=n) - slicewise_dot(Y, TExcludeAn; dims=n)
+        function gradient_matrix(X::AbstractTucker; kwargs...)
+            B = core(X)
+            matrices = matrix_factors(X)
+            Aₙ = factor(X, n)
+            X̃ₙ = tuckerproduct(B, matrices; exclude=n)
+            grad = Aₙ * slicewise_dot(X̃ₙ, X̃ₙ; dims=n)
+                   - slicewise_dot(Y, X̃ₙ; dims=n)
             return grad
         end
         return gradient_matrix
@@ -958,27 +1072,127 @@ function make_gradient(T::CPDecomposition, n::Integer, Y::AbstractArray; objecti
 end
 ```
 
-The function `tuckerproduct(B, (A₁, ..., Aₙ))` computes $ B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) , $
-
-and can optionally "exclude" one of the matrix factors `tuckerproduct(B, (A₁, ..., Aₙ); exclude=m)` to compute
-
-$ B times.big_(n eq.not m) A_n = lr(bracket.l.double B \; A_1 , dots.h , A_(n - 1) , upright("id")_(I_n) , A_(n + 1) , dots.h , A_N bracket.r.double) $ where $B in bb(R)^(I_1 times dots.h times I_N)$.
-
 === Computing Lipschitz Step-sizes
 <sec-lipschitz-computation>
 Similar to automatic differentiation, there exist "automatic Lipschitz" calculations to upper bound the Lipschitz constant of a function @virmaux_lipschitz_2018.
 
+For the family of Tucker decompositions, we can compute the Lipschitz constants efficiently similar to how we compute the gradient in @sec-gradient-computation.
+
+#block[
+#callout(
+body: 
+[
+For the family of Tucker decompositions, the objective function $f$ is "block-quadratic" with respect to the factors. We saw in @eq-tucker-1-gradient-2 that the gradient is an affine map where $B$ is multiplied by the "slope" $A^tack.b A$ plus a shift of $- Y times_1 A^tack.b$.
+
+This means the Lipschitz constant of the gradient for that block is the operator norm of the "slope".
+
+]
+, 
+title: 
+[
+Note
+]
+, 
+background_color: 
+rgb("#dae6fb")
+, 
+icon_color: 
+rgb("#0758E5")
+, 
+icon: 
+"❕"
+)
+]
+Since our least-squares objective $f$ is a block-quadratic function in each factor, we can use @thm-quadratic-smoothness to find the smoothness $L_(A_n)$ with respect to each factor $A_n$ by calculating the largest eigenvalue of the partial Hessian $nabla_(A_n)^2 f (A_1 , dots.h , A_N)$.
+
+Starting with the Tucker-1 decomposition (@def-tucker-1-decomposition) objective $f (B , A) = 1 / 2 norm(A B - Y)_F^2$, we have
+
+$ nabla_B^2 f (B , A) = A $
+
+TODO Explain how we get the following. General idea is to take partial Hessian of our quadratic function with respect to one block, and get that the operator norm of the hessian (as a map from $bb(R)^(I_1 times dots.h times I_N)$ to itself) is the Lipschitz constant of the gradient. See Obsidian note "Gradients Hessians and Lipschitz Constants of a Tucker Decomposition".
+
+```julia
+function make_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    if n==0 # the core is the zeroth factor
+        function lipschitz0(T::Tucker1; kwargs...)
+            A = matrix_factor(T, 1)
+            return opnorm(A'A)
+        end
+        return lipschitz0
+
+    elseif n==1 # the matrix is the zeroth factor
+        function lipschitz1(T::Tucker1; kwargs...)
+            C = core(T)
+            return opnorm(slicewise_dot(C, C))
+        end
+        return lipschitz1
+
+    else
+        error("No $(n)th factor in Tucker1")
+    end
+end
+
+function make_lipschitz(T::Tucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n==0 # the core is the zeroth factor
+        function lipschitz_core(T::AbstractTucker; kwargs...)
+            #matrices = matrix_factors(T)
+            #gram_matrices = map(A -> A'A, matrices)
+            #return prod(opnorm.(gram_matrices))
+            return prod(A -> opnorm(A'A), matrix_factors(T))
+        end
+        return lipschitz_core
+
+    elseif n in 1:N # the matrix is the zeroth factor
+        function lipschitz_matrix(T::AbstractTucker; kwargs...)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n)
+            return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
+        end
+        return lipschitz_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+
+function make_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
+    N = ndims(T)
+    if n in 1:N # the matrix is the zeroth factor
+        function lipschitz_matrix(T::AbstractTucker; kwargs...)
+            matrices = matrix_factors(T)
+            TExcludeAn = tuckerproduct(core(T), matrices; exclude=n) # TODO optimize this to avoid making the super diagonal core
+            return opnorm(slicewise_dot(TExcludeAn, TExcludeAn; dims=n))
+        end
+        return lipschitz_matrix
+
+    else
+        error("No $(n)th factor in Tucker")
+    end
+end
+```
+
 = Computational Techniques
 <computational-techniques>
-== For Improving Convergence Speed
-<for-improving-convergence-speed>
 - As stated, algorithm works
 - But can be slow, especially for constrained or large problems
+
+As stated, the algorithm described in @sec-base-algorithm works. It will converge to a solution to our optimization problem and factorize the input tensor. It is worth discussing how the algorithm can be modified to improve convergence to maintain quick convergence for large problems, and what sort of architectural methods are used to allow for maximum flexibility, without over engineering the package.
+
+== For Improving Convergence Speed
+<for-improving-convergence-speed>
+There are a few techniques used to assist convergence. Two ideas that are well studied are discussed in this section. They are 1) breaking up the updates into smaller blocks, and 2) using momentum or acceleration. What is perhaps novel is considering the synergy between these two ideas.
+
+Two more techniques are implemented in BlockTensorDecomposition.jl to improve convergence. To the authors knowledge, these are new to tensor factorization, but may or may not be applicable depending on the exact factorization problem or data being studied. For these reasons, these other techniques are discussed separately in @sec-ppr and @sec-multi-scale.
 
 === Sub-block Descent
 <sub-block-descent>
 - Use smaller blocks, but descent in parallel (sub-blocks don’t wait for other sub-blocks)
 - Can perform this efficiently with a "matrix step-size"
+
+When using block coordinate descent as in @sec-base-algorithm, it is natural to treat each factor as its own block. This requires the fewest blocks while ensuring the objective is still convex with respect to each block. We could just as easily use smaller blocks.
+
+In @lee_algorithms_2000, the multiplicative update algorithm used to solve nonnegative matrix factorization problems is written in a way so that each row of the first factor
 
 === Momentum
 <momentum>
@@ -1016,7 +1230,7 @@ Similar to automatic differentiation, there exist "automatic Lipschitz" calculat
   - need to go together since there are multiple ways to enforce them e.g.~simplex (see next section)
 
 = Partial Projection and Rescaling
-<partial-projection-and-rescaling>
+<sec-ppr>
 - for bounded linear constraints
   - first project
   - then rescale to enforce linear constraints
@@ -1024,7 +1238,7 @@ Similar to automatic differentiation, there exist "automatic Lipschitz" calculat
 - often does not loose progress because of the rescaling (decomposition dependent)
 
 = Multi-scale
-<multi-scale>
+<sec-multi-scale>
 - use a coarse discretization along continuous dimensions
 - factorize
 - linearly interpolate decomposition to warm start larger decompositions
