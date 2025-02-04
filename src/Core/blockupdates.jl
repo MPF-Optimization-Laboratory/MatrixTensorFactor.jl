@@ -104,7 +104,7 @@ function make_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; object
         return lipschitz_matrix
 
     else
-        error("No $(n)th factor in Tucker")
+        error("No $(n)th factor in CPDecomposition")
     end
 end
 
