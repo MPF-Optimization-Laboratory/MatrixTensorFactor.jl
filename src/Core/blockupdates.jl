@@ -648,7 +648,7 @@ function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
     # a .*= 1 + a
     # a .-= ω .* a_last
 
-    a = U.combine(a, id + ω) # handle diagonal Lipschitz constants
+    a .= U.combine(a, id + ω) # handle diagonal Lipschitz constants
     a .-= U.combine(a_last, ω)
 end
 

@@ -634,7 +634,7 @@ To avoid the headache, the equality
 
 $ T = A_1 times.circle dots.h.c times.circle A_N $
 
-should be thought of as the following entry-wise equation
+in @thm-operator-norm-outer-product should be thought of as the following entry-wise equation
 
 #math.equation(block: true, numbering: "(1)", [ $ T [i_1 , dots.h , i_N , j_1 , dots.h , j_N] = A_1 [i_1 , j_1] dots.h.c A_N [i_N , j_N] . $ ])<eq-corrected-outer-product>
 
@@ -1001,7 +1001,7 @@ The magic of the code is in defining the functions at runtime for a particular d
 === Computing Gradients
 <sec-gradient-computation>
 - Use Auto diff generally
-- But hand-crafted gradients and Lipschitz calculations #emph[can] be faster (e.g.~symmetrized slicewise dot product)
+- But hand-crafted gradients and Lipschitz calculations #emph[can] be faster (e.g.~symmetrized slice-wise dot product)
 
 Generally, we can use automatic differentiation on $f$ to compute gradients. Some care needs to be taken otherwise the forward or backwards pass will have to be recompiled every iteration since the factors are updated every iteration.
 
@@ -1333,7 +1333,7 @@ where we have the $R_n times R_n$ diagonal "Lipschitz Matrix"
 
 $ hat(L)_n^t = mat(delim: "[", L_(n , 1)^t, 0, , 0; 0, L_(n , 2)^t, , 0; #none, , dots.down, dots.v; 0, 0, dots.h.c, L_(n , R_n)^t) . $
 
-It is not too hard to show that $L_(n , r)^t$ is the Euclidean norm of the $r$th column#footnote[We could have used the $r$th row of $tilde(X)_n dot.op_n tilde(X)_n$ since this matrix is symmetric. Since Julia store matrices in column-major order, many operations that perform column-wise are more efficient than their equivalent row-wise operation.] of the matrix $tilde(X)_n dot.op_n tilde(X)_n$ from @cor-least-squares-matrix,
+It is not too hard to show that the Lipschitz $L_(n , r)^t$ for $nabla f_(n , r)^t$ is the Euclidean norm of the $r$th column#footnote[We could have used the $r$th row of $tilde(X)_n dot.op_n tilde(X)_n$ since this matrix is symmetric. Since Julia store matrices in column-major order, many operations that perform column-wise are more efficient than their equivalent row-wise operation.] of the matrix $tilde(X)_n dot.op_n tilde(X)_n$ from @cor-least-squares-matrix,
 
 $ L_(n , r)^t = norm((tilde(X)_n dot.op_n tilde(X)_n) [: , r])_2 . $
 
@@ -1374,9 +1374,12 @@ The merged sub-block update for the core becomes
 
 with the multiplication
 
-$ nabla f_0^t (B^t) times_B (hat(L)_B^t)^(- 1) & = nabla f_0^t (B^t) times.big_n (hat(L)_(B , n)^t)^(- 1) = lr(bracket.l.double nabla f_0^t (B^t) \; (hat(L)_(B , 1)^t)^(- 1) , dots.h , (hat(L)_(B , n)^t)^(- 1) bracket.r.double) . $
+#math.equation(block: true, numbering: "(1)", [ $ nabla f_0^t (B^t) times_B (hat(L)_B^t)^(- 1) & = nabla f_0^t (B^t) times.big_n (hat(L)_(B , n)^t)^(- 1)\
+ & = lr(bracket.l.double nabla f_0^t (B^t) \; (hat(L)_(B , 1)^t)^(- 1) , dots.h , (hat(L)_(B , n)^t)^(- 1) bracket.r.double) . $ ])<eq-tensor-matrices-product>
 
 This should be thought of as normalizing each dimension of the tensor $nabla f_0^t (B^t)$ so that we can take a unit step-size.
+
+TODO use the multi-mode product in stead of defining a new multiplication $times_B$ here. I think I’ll have the same tensor product issue as before where the indices.
 
 Putting the core and matrices Lipschitz calculations together gives us the following Julia code. Note we store $hat(L)_B^t$ in factored form as a tuple of diagonal matrices to save space and computation.
 
@@ -1411,74 +1414,77 @@ end
 
 In practice, we find that extrapolating the iterate based on the prior iterate
 
-$ hat(A)_n^t arrow.l A_n^t + omega_n^t (A_n^t - A_n^(t - 1)) $
+#math.equation(block: true, numbering: "(1)", [ $ hat(A)_n^t arrow.l A_n^t + omega_n^t (A_n^t - A_n^(t - 1)) $ ])<eq-extrapolation-ideal>
 
 for some amount of extrapolation $omega_n^t gt.eq 0$ before applying the update @eq-sub-block-update greatly improves the speed of descent. This can be thought of as a type of momentum where we continue to move in directions that showed a lot of improvement during the last iteration.
 
-Our selection for $omega_n^t$ follows Xu and Yin’s method for block coordinate descent #cite(<xu_BlockCoordinateDescent_2013>, form: "prose");, which is itself inspired by Tseng and Yun’s coordinate gradient descent method #cite(<tseng_coordinate_2009>, form: "prose").
+Our selection for $omega_n^t$ follows Xu and Yin’s method for block coordinate descent @xu_BlockCoordinateDescent_2013, which is itself inspired by Tseng and Yun’s coordinate gradient descent method @tseng_coordinate_2009.
 
-TODO CONTINUE FROM HERE
+Given a parameter#footnote[Usually we pick a number close to $1$. For example, we use the default $delta = 0.9999$.] $delta in \[ 0 , 1 \)$, we define the momentum parameters and $tau^t$ and $omega_n^t$ according to the following updates
+
+#math.equation(block: true, numbering: "(1)", [ $ tau^0 & = 1\
+tau^(t + 1) & arrow.l 1 / 2 (1 + sqrt(1 + 4 (tau^t)^2))\
+hat(omega)^t & arrow.l frac(tau^t - 1, tau^(t + 1))\
+omega_n^t & arrow.l min (hat(omega)^t , delta sqrt(hat(L)_n^(t - 1) (hat(L)_n^t)^(- 1))) . $ ])<eq-momentum-parameters>
+
+TODO notation is going to get confusing. We use hat/not hat $L$ for the scaler vs matrix/tensor version. But we use hat/not hat $omega$ for the ideal vs clamped momentum.
+
+What is novel with our approach is that we perform this momentum on the Lipschitz matrices and tensors $hat(L)_n^t$ rather than scaler Lipschitz constant $L_n^t$. In this way, we should interpret the operations shown in @eq-momentum-parameters as operating element-wise. This also means the momentum parameter $omega_n^t$ is a matrix or tensor and takes the same shape as $hat(L)_n^t$.
+
+In order to perform @eq-extrapolation-ideal, we use the equivalent but more efficient formulation
+
+$ hat(A)_n^t & arrow.l A_n^t (upright("id")_(R_n) + omega_n^t) - A_n^(t - 1) omega_n^t . $
 
 ```julia
-function (U::MomentumUpdate)(x::T; x_last::T, ω, δ, kwargs...) where T
+function (U::MomentumUpdate)(X::T; X_last::T, ω, δ, kwargs...) where T
     n = U.n
-    if checkfrozen(x, n)
-        return x
-    end
-    # TODO avoid redoing this lipschitz calculation and instead store the previous L
-    # TODO generalize this momentum update to allow for other decaying momentums ω
-    L = U.lipschitz(x; kwargs...)
-    L_last = U.lipschitz(x_last; kwargs...)
+
+    L = U.lipschitz(X; kwargs...)
+    L_last = U.lipschitz(X_last; kwargs...)
     ω = min.(ω, δ .* .√(L_last/L))
 
-    a, a_last = factor(x, n), factor(x_last, n)
+    A, A_last = factor(X, n), factor(X_last, n)
 
-    # Equivalent mathematically, but slightly less efficient ways of applying momentum
-    # @. a = a + ω * (a - a_last)
-
-    # @. a += ω * (a - a_last)
-
-    # a .*= 1 + a
-    # a .-= ω .* a_last
-
-    a = U.combine(a, id + ω) # handle diagonal Lipschitz constants
-    a .-= U.combine(a_last, ω)
+    A .= U.combine(A, id + ω)
+    A .-= U.combine(A_last, ω)
 end
 ```
 
+In the code above, the momentum stores the factor $n$ in acts on, how to compute the Lipschitz constant, matrix, or tensor, and how to combine (multiply) the constant with the factor. In the case of matrix factors $A_n$ in a Tucker decomposition, this is simply right matrix-matrix multiplication. The core factor $B$ uses $times_B$ as described in @eq-tensor-matrices-product.
+
+The parameters of the momentum update are handled separately. This is to treat the momentum update as "apply this update with these parameters". The parameters $tau^t$ and $hat(omega)^t$ are updated by the following function that keeps track of all parameters needed to perform the iteration. In this case, we keep track of what iteration $t$ we are at, the previous iterate, and a few options for the order in which to cycle through and update the blocks.
+
 ```julia
-"""update parameters needed for the update"""
+update_τ(τ) = 0.5*(1 + sqrt(1 + 4*τ^2))
+
 function initialize_parameters(decomposition, Y, previous; momentum::Bool, random_order, recursive_random_order, kwargs...)
     # parameters for the update step are symbol => value pairs
-    # they are held in a dictionary since we may mutate these for ex. the stepsize
+    # held in a dictionary since we may mutate these, e.g. the step-size
     parameters = Dict{Symbol, Any}()
 
     # General Looping
     parameters[:iteration] = 0
-    parameters[:x_last] = previous[begin] # Last iterate
+    parameters[:X_last] = previous[begin] # Last iterate
     parameters[:random_order] = random_order
     parameters[:recursive_random_order] = recursive_random_order
 
     # Momentum
     if momentum
-        parameters[:t_last] = float(1) # need this field to hold Floats, not Ints
-        parameters[:t] = update_t(float(1))
-        parameters[:ω] = (parameters[:t_last] - 1) / parameters[:t]
+        parameters[:τ_last] = float(1) # need this field to hold Floats, not Ints
+        parameters[:τ] = update_τ(float(1))
+        parameters[:ω] = (parameters[:τ_last] - 1) / parameters[:τ]
         parameters[:δ] = kwargs[:δ]
     end
 
     function updateparameters!(parameters, decomposition, previous)
         parameters[:iteration] += 1
-        #parameters[:x_last] = previous[begin] # Last iterate updated with updateprevious!
-                                               # this ensures we only copy over the decomposition
-                                               # once since updateparameters! happens before updateprevious!
+        # parameters[:x_last] = previous[begin]
+# This is commented since parameters[:x_last] already points to previous[begin]
 
-                                               # This is commented since parameters[:x_last] already points to previous[begin]
-        # Momentum
         if momentum
-            parameters[:t_last] = parameters[:t]
-            parameters[:t] = update_t(parameters[:t_last])
-            parameters[:ω] = (parameters[:t_last] - 1) / parameters[:t]
+            parameters[:τ_last] = parameters[:τ]
+            parameters[:τ] = update_τ(parameters[:τ_last])
+            parameters[:ω] = (parameters[:τ_last] - 1) / parameters[:τ]
         end
     end
 
@@ -1486,6 +1492,8 @@ function initialize_parameters(decomposition, Y, previous; momentum::Bool, rando
 end
 ```
 
+=== Empirical evidence for
+<empirical-evidence-for>
 == For Flexibility
 <sec-flexibility>
 - there are a number of software engineering techniques used
