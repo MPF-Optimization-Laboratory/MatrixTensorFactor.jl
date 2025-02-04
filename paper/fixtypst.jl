@@ -32,6 +32,11 @@ patterns = (
     # Missing callout box icons
     "fa-lightbulb()" => "\"❔\"",
     "fa-info()" => "\"❕\"",
+    "fa-exclamation-triangle()" => "\"⚠\"",
+
+    # \dots always gets converted to dots.h, sometimes it should be dots.h.c (TeX's \cdots)
+    "times dots.h times" => "times dots.h.c times",
+    "times.circle dots.h times.circle" => "times.circle dots.h.c times.circle",
 
     # Custom citation style in bibliography
     #".bib\")" => ".bib\", style: \"citationstyles/ieee-compressed-in-text-citations.csl\")",
