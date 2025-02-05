@@ -1492,8 +1492,82 @@ function initialize_parameters(decomposition, Y, previous; momentum::Bool, rando
 end
 ```
 
-=== Empirical evidence for
-<empirical-evidence-for>
+=== Empirical Evidence for Sub-Block Descent and Momentum
+<empirical-evidence-for-sub-block-descent-and-momentum>
+To showcase that the combination of these two tricks can speed up convergence, we will benchmark them by factorizing a random $10 times 10$ tensor (a matrix) with rank $3$. The Julia code is shown below, and the results are shown in @tbl-subblock-momentum-results.
+
+```julia
+using BenchmarkTools
+using BlockTensorDecomposition
+
+fact = BlockTensorDecomposition.factorize
+
+options = (
+    :rank => 3,
+    :tolerence => (1, 0.03),
+    :converged => (GradientNNCone, RelativeError),
+    :δ => 0.9,
+)
+
+n_subblock_n_momentum(Y) = fact(Y;
+    do_subblock_updates=false,
+    momentum=false,
+    options...
+)
+
+y_subblock_n_momentum(Y) = fact(Y;
+    do_subblock_updates=true,
+    momentum=false,
+    options...
+)
+
+n_subblock_y_momentum(Y) = fact(Y;
+    do_subblock_updates=false,
+    momentum=true,
+    options...
+)
+
+y_subblock_y_momentum(Y) = fact(Y;
+    do_subblock_updates=true,
+    momentum=true,
+    options...
+)
+
+I, J = 10, 10
+R = 3
+
+@benchmark n_subblock_n_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark n_subblock_y_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark y_subblock_n_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark y_subblock_y_momentum(Y) setup=(Y=Tucker1((I, J), R))
+
+performance_increase(old, new) = (old - new) / new * 100
+```
+
+The code `Tucker1((I, J), R)` produces a random $I times J$ rank-$R$ matrix by generating two matrices $A in bb(R)^(I times R)$ and $B in bb(R)^(R times J)$ with standard normal entries, and multiplies them together.
+
+#figure([
+#table(
+  columns: (25.33%, 37.33%, 37.33%),
+  align: (auto,auto,auto,),
+  table.header([], [#strong[No Momentum];], [#strong[Yes Momentum];],),
+  table.hline(),
+  [#strong[No Sub-Block];], [48.843 ms], [45.738 ms (6.7887% faster)],
+  [#strong[Yes Sub-Block];], [27.473 ms (77.785% faster)], [#strong[24.350 ms (100.59% faster)];],
+)
+], caption: figure.caption(
+position: top, 
+[
+Summary of median times to factorize a random $10 times 10$ rank-3 matrix under different methods. The performance increase is given by the formula $(upright("old") - upright("new")) \/ upright("new")$.
+]), 
+kind: "quarto-float-tbl", 
+supplement: "Table", 
+)
+<tbl-subblock-momentum-results>
+
+
+In @tbl-subblock-momentum-results, you can see that having both sub-block descent and momentum yields the fastest factorization. Moreover, the performance increase is #emph[more] than simply the performance increases obtained by exclusively sub-block or momentum alone.#footnote[The expected performance increase if sub-block descent and momentum where independence would be $(1 + 0.067887) (1 + 0.77785) = 1.89854$ or only 89.854% faster.] This suggests that there is synergy with these two methods and are best used together.
+
 == For Flexibility
 <sec-flexibility>
 - there are a number of software engineering techniques used
