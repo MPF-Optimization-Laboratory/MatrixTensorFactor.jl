@@ -1411,6 +1411,8 @@ The code `Tucker1((I, J), R)` produces a random $I\times J$ rank-$R$ matrix by g
 
 In @tbl-subblock-momentum-results, you can see that having both sub-block descent and momentum yields the fastest factorization. Moreover, the performance increase is *more* than simply the performance increases obtained by exclusively sub-block or momentum alone.^[The expected performance increase if sub-block descent and momentum where independence would be $(1+0.067887)(1+0.77785) = 1.89854$ or only 89.854% faster.] This suggests that there is synergy with these two methods and are best used together.
 
+TODO Repeat this experiment on a less trivial factorization. What I've done above can be done with an SVD in less time. Ideally use a 10 x 10 x 10 Tucker decomposition with rank 2 x 3 x 4.
+
 ## For Flexibility {#sec-flexibility}
 - there are a number of software engineering techniques used
 - these help flexibility for hot swapping and a language for making custom...
@@ -1420,9 +1422,48 @@ In @tbl-subblock-momentum-results, you can see that having both sub-block descen
   - cyclically or partially randomly or fully randomly update factors
 - smart enough to apply these in a reasonable order
 
+There are a number of software engineering techniques used to ensure BlockTensorDecomposition.jl is flexible and applicable to a wide range of problems. These enable key algorithmic choices to be hot-swapped and easily compared with each other.
+
 ### Convergence Criteria and Stats {#sec-convergence-criteria}
 - Can request info about any factor at each outer iteration
 - any subset of stats can be the convergence criteria
+
+Some iterative algorithms produce the exact solution of a problem after a finite number of iterations. Generalized minimal residual method (GMRES) is a good example of this [TODO cite!]. Our algorithm, like many others, only converges to the exact solution in the limit as the number of iterations grow. Since we would like a solution in finite time, we must halt the algorithm early.
+
+In finite precision, we can halt the algorithm if we can guarantee the solution is accurate to machine precision. This can often be too strict if convergence is not at a fast enough rate. Furthermore, depending on *why* we are decomposing a tensor, we may want different stats to be within a given a tolerance. BlockTensorDecomposition.jl attempts to solve this issue by defining some standard criteria that can be used to halt the algorithm. These are subtypes of the abstract type `AbstractStat` and are listed below.
+
+```julia
+# X is the decomposition model e.g. Tucker((B, A1, A2, A2)))
+# Y is the input tensor we want to decompose
+# norm(X) is the Frobenius norm of X
+
+GradientNorm # norm(∇f(X))
+GradientNNCone # sqrt(sum(norm(∇f(Ai)[Ai .> 0 .| ∇f(Ai) .< 0])^2 for Ai in factors(X)))
+ObjectiveValue # 1/2 norm(X - Y)^2
+ObjectiveRatio # norm(X_last - Y)^2 / norm(X_current - Y)^2
+RelativeError # norm(X - Y) / norm(Y)
+IterateNormDiff # norm(X_current - X_last)
+IterateRelativeDiff # norm(X_current - X_last) / norm(X_last)
+```
+
+Most of these are self explanatory, expect perhaps `GradientNNCone`. When performing first order unconstrained optimization, we usually slow down progress when the norm of the gradient is small. In the limit, we expect to converge to a stationary point where the gradient is zero. When performing optimization under nonnegative constraints, and even further restrictions like simplex constraints, is makes more sense to ignore entries of the gradient where `X` is negative and the gradient is positive since those coordinates of `X` will not change after they are projected back to the nonnegative constraint.
+
+TODO add theory of negative gradient is in the normal cone of the constraint?
+
+As many or as few of these stats can be used in the call to `factorize`. Their tolerances can also be set independently of each other. The algorithm stops iterating when at least one of the criteria has a value less than its tolerance. As a fail safe, we also define one more type, `Iteration`, which is always active and halts the algorithm when that many iterations have past.
+
+The `AbstractStat` type can also be subtyped to create custom stats that may be used to probe the iterates and diagnose issues.
+
+```julia
+EuclidianStepSize
+EuclidianLipschitz
+FactorNorms
+```
+
+These stats are recorded every iteration in a `DataFrame` and are one of the returns of `factorize`.
+
+Finally, there are two auxiliary stats `PrintStats` and `DisplayDecomposition` which can be used to print all stats or the current decomposition each iteration.
+
 
 ### `BlockUpdate` Language
 - construct the updates as a list of updates
