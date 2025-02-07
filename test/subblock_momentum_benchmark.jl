@@ -1,13 +1,25 @@
 using BenchmarkTools
+using Logging
 using BlockTensorDecomposition
+
+
+global_logger(SimpleLogger(Warn))
 
 fact = BlockTensorDecomposition.factorize
 
+function nnrankr_matrix((I, J), R)
+    A = randn(I, R) .|> abs
+    B = randn(R, J) .|> abs
+    return A*B
+end
+
 options = (
-    :rank => 3,
-    :tolerence => (1, 0.03),
-    :converged => (GradientNNCone, RelativeError),
-    :δ => 0.9,
+    :rank => (2,3,4),
+    :tolerence => (0.01),
+    :converged => (RelativeError),
+    :δ => 0.9999,
+    :model => Tucker,
+    #:constraints => nonnegative!,
 )
 
 n_subblock_n_momentum(Y) = fact(Y;
@@ -37,14 +49,45 @@ y_subblock_y_momentum(Y) = fact(Y;
 I, J = 10, 10
 R = 3
 
-@benchmark n_subblock_n_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark n_subblock_n_momentum(Y) setup=(Y=array(Tucker1((I, J), R)))
 
-@benchmark y_subblock_n_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark y_subblock_n_momentum(Y) setup=(Y=nnrankr_matrix((I, J), R))
 
-@benchmark n_subblock_y_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark n_subblock_y_momentum(Y) setup=(Y=nnrankr_matrix((I, J), R))
 
-@benchmark y_subblock_y_momentum(Y) setup=(Y=Tucker1((I, J), R))
+@benchmark y_subblock_y_momentum(Y) setup=(Y=nnrankr_matrix((I, J), R))
 
 performance_increase(old, new) = (old - new) / new * 100
 
 time_decrease(old, new) = (old - new) / old * 100
+
+
+###################
+
+
+I, J, K = 10, 10, 10
+R1, R2, R3 = 2, 3, 4
+
+b = @benchmark n_subblock_n_momentum(Y) setup=(Y=Tucker((I, J, K), (R1, R2, R3))|>array)
+display(b)
+b = @benchmark y_subblock_n_momentum(Y) setup=(Y=Tucker((I, J, K), (R1, R2, R3))|>array)
+display(b)
+b = @benchmark n_subblock_y_momentum(Y) setup=(Y=Tucker((I, J, K), (R1, R2, R3))|>array)
+display(b)
+b = @benchmark y_subblock_y_momentum(Y) setup=(Y=Tucker((I, J, K), (R1, R2, R3))|>array)
+display(b)
+
+##########
+
+
+I, J, K = 6, 6, 6
+R = 3
+
+b = @benchmark n_subblock_n_momentum(Y) setup=(Y=CPDecomposition((I, J, K), R)|>array)
+display(b)
+b = @benchmark y_subblock_n_momentum(Y) setup=(Y=CPDecomposition((I, J, K), R)|>array)
+display(b)
+b = @benchmark n_subblock_y_momentum(Y) setup=(Y=CPDecomposition((I, J, K), R)|>array)
+display(b)
+b = @benchmark y_subblock_y_momentum(Y) setup=(Y=CPDecomposition((I, J, K), R)|>array)
+display(b)
