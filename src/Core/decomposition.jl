@@ -19,7 +19,8 @@ abstract type AbstractDecomposition{T, N} <: AbstractArray{T, N} end
 
 # Fallback interface for any AbstractDecomposition to behave like an AbstractArray
 Base.size(D::AbstractDecomposition) = size(array(D))
-Base.getindex(D::AbstractDecomposition, i::Int) = getindex(array(D), i)
+Base.getindex(D::AbstractDecomposition, i::Int) = D[CartesianIndices(D)[i]] # usually more efficient to compute a single entry given the cartesian index rather than linear index
+Base.getindex(D::AbstractDecomposition, I::CartesianIndex) = getindex(D, Tuple(I)...)
 Base.getindex(D::AbstractDecomposition, I::Vararg{Int}) = getindex(array(D), I...)
 
 # copy/deepcopy all factors and any other properties before reconstructing
@@ -266,6 +267,7 @@ isfrozen(T::AbstractTucker, n::Integer) = frozen(T)[n+1]
 
 # AbstractDecomposition Interface
 array(T::AbstractTucker) = multifoldl(contractions(T), factors(T))
+array(T::Tucker) = tuckerproduct(core(T), matrix_factors(T))
 factors(T::AbstractTucker) = T.factors
 contractions(T::Tucker) = tucker_contractions(ndims(T))
 contractions(_::Tucker1) = ((×₁),)
@@ -290,21 +292,17 @@ eachfactorindex(D::AbstractTucker) = 0:(nfactors(D)-1) # 0 based, where core is 
 # Efficient size and indexing for CPDecomposition
 Base.size(T::Tucker) = map(x -> size(x, 1), matrix_factors(T))
 Base.size(T::Tucker1) = (size(matrix_factors(T)[begin], 1), size(core(T))[begin+1:end]...)
-Base.getindex(T::Tucker1, i::Int) = array(T)[i]
+
+Base.getindex(T::Tucker, i::Int) = T[CartesianIndices(T)[i]]
+Base.getindex(T::Tucker, I::Vararg{Int}) = _gettuckerindex(T, I)
+_gettuckerindex(T::Tucker, I) = _gettuckerindex(core(T), matrix_factors(T), I)
+
+Base.getindex(T::Tucker1, i::Int) = T[CartesianIndices(T)[i]]
 function Base.getindex(T::Tucker1, I::Vararg{Int})
     G, A = factors(T)
     i, J... = I # (i, J) = (I[1], I[begin+1:end])
     return (@view A[i, :]) ⋅ view(G, :, J...)
 end
-# Example: D[i, j, k] = sum_r sum_s sum_t G[r, s, t] * A[i, r] * B[j, s] * C[k, t])
-# which is like the single product
-#=
-function Base.getindex(T::Tucker, I::Vararg{Int})
-    matrix_factors_slice = ((@view f[i,:]) for (f,i) in zip(factors(T)[begin+1:end], I))
-    ops = Tuple((×₁) for _ in 1:ndims(T)) # the leading index gets collapsed each time, so it is always the 1 mode product
-    return multifoldl(ops, (core(T), matrix_factors_slice...))
-end=#
-# TODO add optimized indexing for full tucker decomposition
 
 """
 CP decomposition. Takes the form of an outerproduct of multiple matrices.
@@ -351,7 +349,7 @@ core(CPD::CPDecomposition{T, N}) where {T, N} = identity_tensor(T, rankof(CPD), 
 # Efficient size and indexing for CPDecomposition
 Base.size(CPD::CPDecomposition) = map(x -> size(x, 1), factors(CPD))
 # Example: CPD[i, j, k] = sum(A[i, :] .* B[j, :] .* C[k, :])
-Base.getindex(CPD::CPDecomposition, i::Int) = array(CPD)[i]
+Base.getindex(CPD::CPDecomposition, i::Int) = CPD[CartesianIndices(CPD)[i]]
 Base.getindex(CPD::CPDecomposition, I::Vararg{Int}) = sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
 
 # Additional CPDecomposition interface

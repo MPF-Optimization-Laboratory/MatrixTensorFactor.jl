@@ -93,8 +93,11 @@ Base.min(A::AbstractArray, x::Number) = min.(A, x)
 
 ########################################################
 
-getnotindex(A, i::Int) = A[eachindex(A) .!= i]
-getnotindex(A, I) = A[eachindex(A) .∉ (I,)]
+# ( (x-1) % 4 +1, (x-1) ÷ 4 % 3 + 1, (x-1) ÷ 4 ÷ 3 % 2 + 1)
+
+"""Like `getindex` but returns the compliment to the index or indices requested."""
+getnotindex(A, i::Int; view=false) = view ? (@view A[eachindex(A) .!= i]) : A[eachindex(A) .!= i]
+getnotindex(A, I; view=false) = view ? (@view A[eachindex(A) .∉ (I,)]) : A[eachindex(A) .∉ (I,)]
 
 """
     eachfibre(A::AbstractArray; n::Integer, kwargs...)

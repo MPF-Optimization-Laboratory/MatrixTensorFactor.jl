@@ -118,7 +118,7 @@ function tuckerproduct(core, matrices; exclude=nothing, excludes_missing=false)
     if isnothing(exclude)
         N == length(matrices) ||
             throw(ArgumentError("expected $N number of matrices, got $(length(matrices))"))
-        return multifoldl(tucker_contractions(N), (core, matrices...))
+        return _fulltuckerproduct(core, matrices)
     elseif excludes_missing
         N == length(matrices) + length(exclude) ||
         throw(ArgumentError("expected $N number of matrices, got $(length(matrices))"))
@@ -130,6 +130,26 @@ function tuckerproduct(core, matrices; exclude=nothing, excludes_missing=false)
     end
 end
 tuckerproduct(core, matrices...; kwargs...) = tuckerproduct(core, matrices; kwargs...)
+
+function _fulltuckerproduct(core, matrices)
+    output_size = first.(size.(matrices))
+    Y = zeros(promote_type(eltype(core), eltype.(matrices)...), output_size)
+    for Is in CartesianIndices(Y)
+        Y[Is] += _gettuckerindex(core, matrices, Is)
+    end
+    return Y
+end
+
+_gettuckerindex(core, matrices, I::CartesianIndex) = _gettuckerindex(core, matrices, Tuple(I))
+
+"""Just computes index I in the tucker product"""
+function _gettuckerindex(core, matrices, I)
+    Y = 0 # zero(promote_type(eltype(core), eltype.(matrices)...))
+    for Rs in CartesianIndices(core) # need to wrap in a Tuple so I can iterate over the index
+        Y += core[Rs] * prod(A[i, r] for (A, i, r) in zip(matrices, I, Tuple(Rs)))
+    end
+    return Y
+end
 
 """
     cpproduct((A, B, C, ...))

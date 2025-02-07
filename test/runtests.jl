@@ -271,6 +271,23 @@ end
     @test G[1] ≈ array(G)[1] # vectorized indexing, check approx because it calculates in a slightly different way
     @test G[1,1,1] ≈ array(G)[1] # regular indexing, check approx because it calculates in a slightly different way
 
+    # Tucker test
+
+    Y = [776 1008 1240 1472; 1072 1392 1712 2032; 1368 1776 2184 2592;;; 1104 1432 1760 2088; 1524 1976 2428 2880; 1944 2520 3096 3672]
+
+    A = reshape(1:6, 3, 2)
+    B = reshape(1:8, 4, 2)
+    C = reshape(1:4, 2, 2)
+    G = reshape(1:8, 2, 2, 2)
+
+    T = Tucker((G, A, B, C))
+
+    @test array(T) == Y
+    @test T[2] == 1072
+    @test typeof(T[2]) == typeof(1072)
+    @test eltype(T) == typeof(1072)
+    @test eltype(T) == typeof(T[2])
+
     # CPDecomposition test
     A = reshape(1:6, 3, 2)
     B = reshape(1:8, 4, 2)
