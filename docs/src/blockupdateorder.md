@@ -1,8 +1,8 @@
 # Block Update Order
 
-The default order the blocks are updated is cyclicaly through each factor of the decomposition `D::AbstractDecomposition`, in the order of `factors(D)`. For `AbstractTucker` decompositions like Tucker, Tucker-1, and CP, this means starting with the core, followed by the matrix factor for the first dimention, second dimention, and so on.
+The default order the blocks are updated is cyclically through each factor of the decomposition `D::AbstractDecomposition`, in the order of `factors(D)`. For `AbstractTucker` decompositions like Tucker, Tucker-1, and CP, this means starting with the core, followed by the matrix factor for the first dimension, second dimension, and so on.
 
-As an example, this would be the default order of updates for nonegative CP decomposition on an order 3 tensor.
+As an example, this would be the default order of updates for nonnegative CP decomposition on an order 3 tensor.
 ```julia
 BlockedUpdate(
     MomentumUpdate(1, lipschitz)
