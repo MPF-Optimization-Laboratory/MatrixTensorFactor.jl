@@ -267,9 +267,23 @@ end
     geomean(v)
     geomean(v...)
 
-Geometric mean of a collection of numbers: `prod(v)^(1/length(v))``.
+Geometric mean of a collection: `prod(v)^(1/length(v))`.
+
+If prod(v) is detected to be 0 or Inf, the safer (but slower) implementation `exp(mean(log.(v)))` is used.
 """
-geomean(v) = prod(v)^(1/length(v))
+function geomean(v)
+    p = prod(v)
+    if isinf(p) | iszero(p)
+        # Slower, but more robust to very large or very small values in v
+        # or if length(v) is large
+        return exp(mean(log.(v)))
+        # if there is a zero element in v, this gets propagated correctly. log(0) == -Inf, the mean will keep the mean as -Inf, and exp(-Inf) == 0.0
+    else
+        # Faster, but more sensitive
+        return p^(1/length(v))
+    end
+end
+
 geomean(v...) = geomean(v)
 
 """
