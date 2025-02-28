@@ -17,7 +17,7 @@ X_absrandn = CPDecomposition(ntuple(_ -> N, D), R; init=abs_randn)
 X_randexp = CPDecomposition(ntuple(_ -> N, D), R; init=randexp)
 
 options = (
-    tolerence=.01,
+    tolerance=.01,
     maxiter=1000,
     converged=RelativeError,
     constraints=[l1scale_cols! ∘ nonnegative!, simplex_cols!],

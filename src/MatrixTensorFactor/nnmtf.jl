@@ -382,7 +382,7 @@ function _nnmtf_proxgrad(
         constraints=[constraintB, constraintA],
         converged=factorize_criterion,
         maxiter,
-        tolerence=tol,#(criterion == :ncone ? tol * sqrt(problem_size) : tol), # scale tolerance by √(R(I+JK)) if using distance ot NN cone criteria
+        tolerance=tol,#(criterion == :ncone ? tol * sqrt(problem_size) : tol), # scale tolerance by √(R(I+JK)) if using distance ot NN cone criteria
         momentum,
         δ=delta,
         constrain_output,

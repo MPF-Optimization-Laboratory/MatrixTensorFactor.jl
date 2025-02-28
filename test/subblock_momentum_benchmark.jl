@@ -15,7 +15,7 @@ end
 
 options = (
     :rank => (2,3,4),
-    :tolerence => (0.01),
+    :tolerance => (0.01),
     :converged => (RelativeError),
     :δ => 0.9999,
     :model => Tucker,

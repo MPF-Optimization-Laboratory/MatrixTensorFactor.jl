@@ -106,8 +106,8 @@ Handles all keywords and options, and sets defaults if not provided.
 
 ## Stats
 - `stats`: `[Iteration, ObjectiveValue, GradientNorm]` or in the case of nonnegative `Y`, `GradientNNCone` in place of `GradientNorm`
-- `converged`: `GradientNorm` or in the case of nonnegative `Y`, `GradientNNCone`. What stat(s) to use for convergence. Will converge is any one of the provided stats is below their respective tolerence
-- `tolerence`: `1`. A list the same length as `converged`
+- `converged`: `GradientNorm` or in the case of nonnegative `Y`, `GradientNNCone`. What stat(s) to use for convergence. Will converge is any one of the provided stats is below their respective tolerance
+- `tolerance`: `1`. A list the same length as `converged`
 - `maxiter`: `1000`. Additional stopping criterion if the number of iterations exceeds this number
 """
 function default_kwargs(Y; kwargs...)
@@ -171,8 +171,8 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :converged, isnonnegative(Y) ? GradientNNCone : GradientNorm) # can be a single AbstractStat or a tuple/vector of them
 											 # and must be a subset of kwargs[:stats]
 	@assert all(s -> s <: AbstractStat, kwargs[:converged])
-	get!(kwargs, :tolerence, 1) # need one tolerence per stat
-	@assert length(kwargs[:tolerence]) == length(kwargs[:converged])
+	get!(kwargs, :tolerance, 1) # need one tolerance per stat
+	@assert length(kwargs[:tolerance]) == length(kwargs[:converged])
 	get!(kwargs, :maxiter, 1000) # maximum number of iterations
 
 	union!(kwargs[:stats], kwargs[:converged]) # add any missing converged criteria to stats
@@ -382,15 +382,15 @@ end
 
 update_t(t) = 0.5*(1 + sqrt(1 + 4*t^2))
 
-function make_converged(; converged, tolerence, maxiter, kwargs...)
-	converged_tol = zip(converged, tolerence)
+function make_converged(; converged, tolerance, maxiter, kwargs...)
+	converged_tol = zip(converged, tolerance)
 	function isconverged(stats_data; kwargs...)
 		if any(((c, t),) -> stats_data[end, Symbol(c)] < t, converged_tol) # note the use of ((c, t),) rather than (c, t) since each element of the zipped converged_tol is a tuple, not two values
 			if length(converged) == 1
-				@info "converged based on $converged less than $tolerence"
+				@info "converged based on $converged less than $tolerance"
 			else
 				indexes = findall(((c, t),) -> stats_data[end, Symbol(c)] < t, collect(converged_tol))
-				@info "converged based on $(join(converged[indexes], ", ", " and ")) less than $(join(tolerence[indexes], ", ", " and "))"
+				@info "converged based on $(join(converged[indexes], ", ", " and ")) less than $(join(tolerance[indexes], ", ", " and "))"
 			end
 			return true
 		elseif stats_data[end, Symbol(Iteration)] >= maxiter

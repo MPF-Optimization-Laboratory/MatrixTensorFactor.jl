@@ -421,26 +421,26 @@ end
     # check hitting maximum number of iterations
     decomposition, stats_data = fact(Y; rank=5, momentum=false, maxiter=2);
     # check convergence on first iteration
-    decomposition, stats_data = fact(Y; rank=5, momentum=false, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, momentum=false, tolerance=Inf);
     # check momentum
-    decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerance=Inf);
     # check constraints
     ## a single constraint, to be applied on every block
-    decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerence=Inf);
+    decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerance=Inf);
     ## a collection of constraints
-    decomposition, stats_data = fact(Y; rank=5, tolerence=Inf,
+    decomposition, stats_data = fact(Y; rank=5, tolerance=Inf,
         constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
     );
     ## check if you can constrain the initialization
-    decomposition, stats_data = fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+    decomposition, stats_data = fact(Y; rank=5, tolerance=Inf, constrain_init=true,
         constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
     );
 
-    fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+    fact(Y; rank=5, tolerance=Inf, constrain_init=true,
         constraints=[l1scale_12slices! ∘ nonnegative!, nonnegative!],
     ); # constraints are ok since l1scale_12slices! can be applied to the core (the 0th factor)
 
-    @test_broken fact(Y; rank=5, tolerence=Inf, constrain_init=true,
+    @test_broken fact(Y; rank=5, tolerance=Inf, constrain_init=true,
         constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!],
     ); # the constraint l1scale_12slices! cannot be applied to a matrix (the 1st factor)
 
@@ -477,7 +477,7 @@ end
 
     decomposition, stats_data = fact(Y;
         rank=5,
-        tolerence=(2, 0.05),
+        tolerance=(2, 0.05),
         converged=(GradientNNCone, RelativeError),
         constrain_init=true,
         constraints=nonnegative!,
@@ -506,13 +506,13 @@ end
     core_constraint_update! = ConstraintUpdate(0, l1scale_average12slices! ∘ nonnegative!; whats_rescaled=(x -> eachcol(matrix_factor(x, 1))))
 
     X, stats, kwargs = BlockTensorDecomposition.factorize(Y2;
-        model=Tucker1, rank=R, tolerence=0.001, converged=RelativeError,
+        model=Tucker1, rank=R, tolerance=0.001, converged=RelativeError,
         constraints=[core_constraint_update!, ConstraintUpdate(1, nonnegative!)],
         )
     A2 = matrix_factor(X, 1)
     B2 = core(X)
 
-    @test_broken norm(X-Y1)/norm(Y1) <= 0.001 # could be a bit worse than tolerence=0.001
+    @test_broken norm(X-Y1)/norm(Y1) <= 0.001 # could be a bit worse than tolerance=0.001
         # since we auto-apply constraints at the last step
 
     @test norm(X-Y1)/norm(Y1) <= 0.005 # should still be reasonably good

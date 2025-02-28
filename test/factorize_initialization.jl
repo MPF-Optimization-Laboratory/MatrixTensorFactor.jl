@@ -15,7 +15,7 @@ Y = array(Ydecomp)
 X = CPDecomposition(ntuple(_ -> N, D), R)
 
 options = (
-    tolerence=.01,
+    tolerance=.01,
     decomposition=X,
     maxiter=1000,
     converged=RelativeError,
