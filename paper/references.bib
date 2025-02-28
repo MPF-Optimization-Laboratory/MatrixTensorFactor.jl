@@ -278,7 +278,6 @@ Publisher: Multidisciplinary Digital Publishing Institute},
 }
 
 
-
 %%%%%%%%%%%%%%%%%%%%%%%
 %% Probibility & KDE %%
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -336,8 +335,6 @@ Publisher: Multidisciplinary Digital Publishing Institute},
    pages = {1065--1076},
    file = {Full Text PDF:C\:\\Users\\Nicholas\\Zotero\\storage\\VPV867RP\\Parzen - 1962 - On Estimation of a Probability Density Function an.pdf:application/pdf},
 }
-
-
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1872,6 +1869,103 @@ chosen to ensure convergence.},
 %%% Optimization (and convex analysis)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% Preconditioned gradient %%
+
+
+@article{kunstner_searching_2023,
+   title = {Searching for {Optimal} {Per}-{Coordinate} {Step}-sizes with {Multidimensional} {Backtracking}},
+   volume = {36},
+   url = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/07e436cdeb48e2a67618274f5d5eff85-Abstract-Conference.html},
+   language = {en},
+   urldate = {2025-02-12},
+   journal = {Advances in Neural Information Processing Systems},
+   author = {Kunstner, Frederik and Sanches Portella, Victor and Schmidt, Mark and Harvey, Nicholas},
+   month = dec,
+   year = {2023},
+   pages = {2725--2767},
+   file = {Full Text PDF:C\:\\Users\\Nicholas\\Zotero\\storage\\JY3WVEYB\\Kunstner et al. - 2023 - Searching for Optimal Per-Coordinate Step-sizes wi.pdf:application/pdf},
+}
+
+
+@misc{gao_gradient_2024,
+   title = {Gradient {Methods} with {Online} {Scaling}},
+   url = {http://arxiv.org/abs/2411.01803},
+   doi = {10.48550/arXiv.2411.01803},
+   abstract = {We introduce a framework to accelerate the convergence of gradient-based methods with online learning. The framework learns to scale the gradient at each iteration through an online learning algorithm and provably accelerates gradient-based methods asymptotically. In contrast with previous literature, where convergence is established based on worst-case analysis, our framework provides a strong convergence guarantee with respect to the optimal scaling matrix for the iteration trajectory. For smooth strongly convex optimization, our results provide an \$O({\textbackslash}kappa{\textasciicircum}{\textbackslash}star {\textbackslash}log(1/{\textbackslash}varepsilon)\$) complexity result, where \${\textbackslash}kappa{\textasciicircum}{\textbackslash}star\$ is the condition number achievable by the optimal preconditioner, improving on the previous \$O({\textbackslash}sqrt\{n\}{\textbackslash}kappa{\textasciicircum}{\textbackslash}star {\textbackslash}log(1/{\textbackslash}varepsilon))\$ result. In particular, a variant of our method achieves superlinear convergence on convex quadratics. For smooth convex optimization, we show for the first time that the widely-used hypergradient descent heuristic improves on the convergence of gradient descent.},
+   urldate = {2025-02-07},
+   publisher = {arXiv},
+   author = {Gao, Wenzhi and Chu, Ya-Chi and Ye, Yinyu and Udell, Madeleine},
+   month = nov,
+   year = {2024},
+   note = {arXiv:2411.01803 [math]},
+   keywords = {Computer Science - Machine Learning, Mathematics - Optimization and Control},
+   file = {Preprint PDF:C\:\\Users\\Nicholas\\Zotero\\storage\\9LDXDETB\\Gao et al. - 2024 - Gradient Methods with Online Scaling.pdf:application/pdf;Snapshot:C\:\\Users\\Nicholas\\Zotero\\storage\\GJQWKG7N\\2411.html:text/html},
+}
+
+@misc{gao_scalable_2024,
+   title = {Scalable {Approximate} {Optimal} {Diagonal} {Preconditioning}},
+   url = {http://arxiv.org/abs/2312.15594},
+   doi = {10.48550/arXiv.2312.15594},
+   abstract = {We consider the problem of finding the optimal diagonal preconditioner for a positive definite matrix. Although this problem has been shown to be solvable and various methods have been proposed, none of the existing approaches are scalable to matrices of large dimension, or when access is limited to black-box matrix-vector products, thereby significantly limiting their practical application. In view of these challenges, we propose practical algorithms applicable to finding approximate optimal diagonal preconditioners of large sparse systems. Our approach is based on the idea of dimension reduction, and combines techniques from semi-definite programming (SDP), random projection, semi-infinite programming (SIP), and column generation. Numerical experiments demonstrate that our method scales to sparse matrices of size greater than \$10{\textasciicircum}7\$. Notably, our approach is efficient and implementable using only black-box matrix-vector product operations, making it highly practical for a wide variety of applications.},
+   urldate = {2025-02-11},
+   publisher = {arXiv},
+   author = {Gao, Wenzhi and Qu, Zhaonan and Udell, Madeleine and Ye, Yinyu},
+   month = nov,
+   year = {2024},
+   note = {arXiv:2312.15594 [math]},
+   keywords = {Mathematics - Numerical Analysis, Mathematics - Optimization and Control, Computer Science - Numerical Analysis},
+   file = {Preprint PDF:C\:\\Users\\Nicholas\\Zotero\\storage\\SSMDLJ3C\\Gao et al. - 2024 - Scalable Approximate Optimal Diagonal Precondition.pdf:application/pdf;Snapshot:C\:\\Users\\Nicholas\\Zotero\\storage\\VZ7MQZDY\\2312.html:text/html},
+}
+
+@article{qu_optimal_2024,
+   title = {Optimal {Diagonal} {Preconditioning}},
+   issn = {0030-364X, 1526-5463},
+   url = {https://pubsonline.informs.org/doi/10.1287/opre.2022.0592},
+   doi = {10.1287/opre.2022.0592},
+   abstract = {Preconditioning has long been a staple technique in optimization, often applied to reduce the condition number of a matrix and speed up the convergence of algorithms. Although there are many popular preconditioning techniques in practice, most lack guarantees on reductions in condition number, and the degree to which we can improve over existing heuristic preconditioners remains an important question. In this paper, we study the problem of optimal diagonal preconditioning that achieves maximal reduction in the condition number of any full-rank matrix by scaling its rows and/or columns with positive numbers. We first reformulate the problem as a quasiconvex optimization problem and provide a simple algorithm based on bisection. Then, we develop an interior point algorithm with [Formula: see text] iteration complexity, where each iteration consists of a Newton update based on the Nesterov-Todd direction. Next, we specialize in one-sided optimal diagonal preconditioning problems and demonstrate that they can be formulated as standard dual semidefinite program (SDP) problems. We then develop efficient customized solvers for the SDP approach and study the empirical performance of our optimal diagonal preconditioning procedures through extensive experiments. Our findings suggest that optimal diagonal preconditioners can significantly improve upon existing heuristics-based diagonal preconditioners at reducing condition numbers, and our SDP approach can find such optimal preconditioners efficiently. We also extend our SDP approach to compute optimal mixtures of heuristic preconditioners, which further improves its scalability and applicability.},
+   language = {en},
+   urldate = {2025-02-11},
+   journal = {Operations Research},
+   author = {Qu, Zhaonan and Gao, Wenzhi and Hinder, Oliver and Ye, Yinyu and Zhou, Zhengyuan},
+   month = mar,
+   year = {2024},
+   pages = {opre.2022.0592},
+   file = {Submitted Version:C\:\\Users\\Nicholas\\Zotero\\storage\\A4S38FGZ\\Qu et al. - 2024 - Optimal Diagonal Preconditioning.pdf:application/pdf},
+}
+
+
+%% Other %%
+
+@misc{ducellier_uncertainty_2024,
+   title = {Uncertainty {Quantification} under {Noisy} {Constraints}, with {Applications} to {Raking}},
+   url = {http://arxiv.org/abs/2407.20520},
+   doi = {10.48550/arXiv.2407.20520},
+   abstract = {We consider statistical inference problems under uncertain equality constraints, and provide asymptotically valid uncertainty estimates for inferred parameters. The proposed approach leverages the implicit function theorem and primal-dual optimality conditions for a particular problem class. The motivating application is multi-dimensional raking, where observations are adjusted to match marginals; for example, adjusting estimated deaths across race, county, and cause in order to match state all-race all-cause totals. We review raking from a convex optimization perspective, providing explicit primal-dual formulations, algorithms, and optimality conditions for a wide array of raking applications, which are then leveraged to obtain the uncertainty estimates. Empirical results show that the approach obtains, at the cost of a single solve, nearly the same uncertainty estimates as computationally intensive Monte Carlo techniques that pass thousands of observed and of marginal draws through the entire raking process.},
+   urldate = {2025-02-26},
+   publisher = {arXiv},
+   author = {Ducellier, Ariane and Hsu, Alexander and Kendrick, Parkes and Gustafson, Bill and Dwyer-Lindgren, Laura and Murray, Christopher and Zheng, Peng and Aravkin, Aleksandr},
+   month = sep,
+   year = {2024},
+   note = {arXiv:2407.20520 [stat]},
+   keywords = {Computer Science - Numerical Analysis, Mathematics - Numerical Analysis, Statistics - Applications, Statistics - Computation, Statistics - Methodology},
+   file = {Full Text PDF:C\:\\Users\\Nicholas\\Zotero\\storage\\7PLI5KVW\\Ducellier et al. - 2024 - Uncertainty Quantification under Noisy Constraints.pdf:application/pdf;Snapshot:C\:\\Users\\Nicholas\\Zotero\\storage\\IQWQURMA\\2407.html:text/html},
+}
+
+@misc{chen_projection_2011,
+   title = {Projection {Onto} {A} {Simplex}},
+   url = {http://arxiv.org/abs/1101.6081},
+   doi = {10.48550/arXiv.1101.6081},
+   abstract = {This mini-paper presents a fast and simple algorithm to compute the projection onto the canonical simplex \${\textbackslash}triangle{\textasciicircum}n\$. Utilizing the Moreau's identity, we show that the problem is essentially a univariate minimization and the objective function is strictly convex and continuously differentiable. Moreover, it is shown that there are at most n candidates which can be computed explicitly, and the minimizer is the only one that falls into the correct interval.},
+   urldate = {2023-08-18},
+   publisher = {arXiv},
+   author = {Chen, Yunmei and Ye, Xiaojing},
+   month = feb,
+   year = {2011},
+   note = {arXiv:1101.6081 [math]},
+   keywords = {Mathematics - Optimization and Control, G.1.6, 49M37},
+   file = {Chen and Ye - 2011 - Projection Onto A Simplex.pdf:C\:\\Users\\Nicholas\\Zotero\\storage\\7K3VUPQH\\Chen and Ye - 2011 - Projection Onto A Simplex.pdf:application/pdf},
+}
+
 @article{friedlander_exact_2008,
    title = {Exact {Regularization} of {Convex} {Programs}},
    volume = {18},
@@ -3134,21 +3228,21 @@ year = {2023}
    type = {Journal Article}
 }
 
-
-
-@misc{graham_tracing_2024,
-	title = {Tracing {Sedimentary} {Origins} in {Multivariate} {Geochronology} via {Constrained} {Tensor} {Factorization}},
-	copyright = {All rights reserved},
-	url = {https://friedlander.io/publications/2024-sediment-source-analysis/},
-	urldate = {2024-06-28},
-	author = {Graham, Naomi and Richardson, Nicholas and Friedlander, Michael P. and Saylor, Joel},
-	month = may,
-	year = {2024},
-	file = {Michael P. Friedlander  UBC  Computational Mathe.pdf:C\:\\Users\\Nicholas\\Zotero\\storage\\JGF342AF\\Michael P. Friedlander  UBC  Computational Mathe.pdf:application/pdf;Michael P. Friedlander | UBC | Computational Mathematics:C\:\\Users\\Nicholas\\Zotero\\storage\\6JKKQWAN\\2024-sediment-source-analysis.html:text/html},
-   note = {Preprint},
-   journal = {Preprint},
+@article{graham_tracing_2025,
+   title = {Tracing {Sedimentary} {Origins} in {Multivariate} {Geochronology} via {Constrained} {Tensor} {Factorization}},
+   issn = {1874-8953},
+   url = {https://doi.org/10.1007/s11004-024-10175-0},
+   doi = {10.1007/s11004-024-10175-0},
+   abstract = {We devise a novel statistical method for deconvolving multivariate geochronology and geochemistry datasets to characterize sediment sources. The approach employs a third-order constrained Tucker-1 tensor decomposition to estimate the probability distributions of multiple features in sediment samples. By integrating kernel density estimation with matrix-tensor factorization, the model quantitatively determines the distributions and mixing proportions of sediment sources. The methodology introduces a numerical test for rank estimation to define the number of latent sources, and uses a maximum-likelihood approach to correlate individual detrital grains to these latent sources based on an arbitrary number of features. The method’s efficacy is validated through a numerical experiment with detrital zircon data that captures natural variability associated with temporal changes in crustal thickness in the Andes. The findings hold potential implications for resolving sediment sources, determining sediment mixing, enhancing the understanding of sediment transport processes, and characterizing the lithology, tectonic motion, or metallogenetic potential of sediment sources. This method is adaptable to other data demixing problems and is available in a publicly released software package.},
+   language = {en},
+   urldate = {2025-02-10},
+   journal = {Mathematical Geosciences},
+   author = {Graham, Naomi and Richardson, Nicholas and Friedlander, Michael P. and Saylor, Joel},
+   month = feb,
+   year = {2025},
+   keywords = {Constrained tensor decomposition, Demixing, Detrital zircon, Kernel density estimation},
+   file = {Full Text PDF:C\:\\Users\\Nicholas\\Zotero\\storage\\QUA4Q9SV\\Graham et al. - 2025 - Tracing Sedimentary Origins in Multivariate Geochr.pdf:application/pdf},
 }
-
 
 @article{chen_tutorial_2017,
 	title = {A tutorial on kernel density estimation and recent advances},

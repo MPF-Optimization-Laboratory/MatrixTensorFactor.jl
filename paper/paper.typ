@@ -418,6 +418,8 @@ Since we commonly use $I$ as the size of a tensor’s dimension, we use $upright
 
 BlockTensorDecomposition.jl defines `identity_tensor(I, ndims)` to construct $upright(i d)_I$.
 
+For a vector, matrix, or tensor filled with ones, we use $bb(1) in bb(R)^(I_1 times dots.h.c times I_N)$. This can be constructed in Julia with `ones(I₁, ..., Iₙ)`.
+
 === Products of Tensors
 <products-of-tensors>
 #definition()[
@@ -1301,7 +1303,7 @@ There are a few techniques used to assist convergence. Two ideas that are well s
 Two more techniques are implemented in BlockTensorDecomposition.jl to improve convergence. To the authors knowledge, these are new to tensor factorization, but may or may not be applicable depending on the exact factorization problem or data being studied. For these reasons, these other techniques are discussed separately in @sec-ppr and @sec-multi-scale.
 
 === Sub-block Descent
-<sub-block-descent>
+<sec-sub-block-descent>
 - Use smaller blocks, but descent in parallel (sub-blocks don’t wait for other sub-blocks)
 - Can perform this efficiently with a "matrix step-size"
 
@@ -1383,6 +1385,8 @@ TODO use the multi-mode product in stead of defining a new multiplication $times
 
 Putting the core and matrices Lipschitz calculations together gives us the following Julia code. Note we store $hat(L)_B^t$ in factored form as a tuple of diagonal matrices to save space and computation.
 
+TODO Compare to preconditioned decent. See @kunstner_searching_2023@gao_gradient_2024@gao_scalable_2024@qu_optimal_2024
+
 ```julia
 function make_block_lipschitz(T::AbstractTucker, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
     N = ndims(T)
@@ -1407,7 +1411,7 @@ end
 ```
 
 === Momentum
-<momentum>
+<sec-momentum>
 - This one is standard
 - Use something similar to @xu_BlockCoordinateDescent_2013
 - This is compatible with sub-block descent with appropriately defined matrix operations
@@ -1623,21 +1627,728 @@ These stats are recorded every iteration in a `DataFrame` and are one of the ret
 
 Finally, there are two auxiliary stats `PrintStats` and `DisplayDecomposition` which can be used to print all stats or the current decomposition each iteration.
 
-=== `BlockUpdate` Language
-<blockupdate-language>
-- construct the updates as a list of updates
-- very functional programming
-- can apply them in sequence or in a random order (or partially random)
-
 === Constraints
-<constraints>
+<sec-constraints>
 - one type of update (other than the typical GD update)
 - can combine them with composition
   - which is different than projecting onto their intersection!
 - Constraint updates combine the constraint with how they are enforced
   - need to go together since there are multiple ways to enforce them e.g.~simplex (see next section)
 
-= Partial Projection and Rescaling
+One of the main motivations for developing BlockTensorDecomposition.jl is to solve constrained tensor problems. Other code did not have the expressivity to handle constraints beyond the most common constraints on the factors: nonnegativity and Euclidean normalized columns. To enable flexibility, BlockTensorDecomposition.jl defines
+
+```julia
+abstract type AbstractConstraint <: Function end
+```
+
+which has two interfaces. The first treats the constraint like a function
+
+```julia
+(C::AbstractConstraint)(A::AbstractArray)
+```
+
+and applies the constraint to an abstract array, and the other interface
+
+```julia
+check(C::AbstractConstraint, A::AbstractArray)
+```
+
+checks if the array `A` satisfies the constraint `C`. A generic constrain only needs to define these two functions.
+
+```julia
+struct GenericConstraint <: AbstractConstraint
+    apply::Function # input a AbstractArray -> mutate it so that `check` would return true
+    check::Function
+end
+
+function (C::GenericConstraint)(D::AbstractArray)
+    (C.apply)(D)
+end
+
+check(C::GenericConstraint, A::AbstractArray) = (C.check)(A)
+```
+
+In general, the function `check` could be defined as the following,
+
+```julia
+function check(C, A)
+    A_copy = copy(A)
+    C(A)
+    return A ≈ A_copy
+end
+```
+
+but there is often an easier way to check if a tensor is constrained than to apply the constraint.
+
+Although our basic block projected gradient descent algorithm @eq-proximal-explicit relies on Euclidean projections to the relevant constraint set, we want to remain flexible and allow for other maps that move an iterate to the constraint set. So each constraint needs to store more than just the constraint itself (the #emph[what];), but also the map from an iterate to the constraint set (the #emph[how];). When prototyping algorithms, it is worth comparing alternate approaches to see if there is a more efficient method to enforce a given constraint (See @sec-ppr for an example of constraining to a set without Euclidean projections).
+
+The first class of constraints are entry-wise constraints. This is convenient for defining a scalar function that gets applied to all entries of a tensor.
+
+```julia
+struct Entrywise <: AbstractConstraint
+    apply::Function
+    check::Function
+end
+
+function (C::Entrywise)(A::AbstractArray)
+    A .= (C.apply).(A)
+end
+
+check(C::Entrywise, A::AbstractArray) = all((C.check).(A))
+```
+
+Some common examples would be a nonnegative constraint, constraining entries to an interval, or constraining entries to be one or zero.
+
+```julia
+nonnegative! = Entrywise(x -> max(0, x), x ≥ 0)
+
+IntervalConstraint(a, b) = Entrywise(x -> clamp(x, a, b), x -> a ≤ x ≤ b)
+
+binary! = Entrywise(x > 0.5 ? one(x) : zero(x), x -> x in (0, 1))
+```
+
+Another class of constraints are normalizations $cal(C)_(lr(bar.v.double dot.op bar.v.double)_a) = {v mid(bar.v) lr(bar.v.double v bar.v.double)_a = 1}$ for some norm $lr(bar.v.double dot.op bar.v.double)_a$. These can be enforced by a (Euclidean) projection
+
+$ hat(v) in arg thin min_(u in cal(C)_(lr(bar.v.double dot.op bar.v.double)_a)) lr(bar.v.double u - v bar.v.double)_2^2 , $
+
+or a scaling (assuming $v eq.not 0$)
+
+$ hat(v) arrow.l v / lr(bar.v.double v bar.v.double)_a . $
+
+These operations agree for the Frobenius norm (entry-wise $2$-norm), but are different operations in general. In BlockTensorDecomposition.jl, we define these classes as the following.
+
+TODO simplify the following code?
+
+```julia
+abstract type AbstractNormalization <: AbstractConstraint end
+```
+
+```julia
+struct ProjectedNormalization <: AbstractNormalization
+    norm::Function # calculate the norm of an AbstractArray
+    projection::Function # mutate an AbstractArray so it has norm == 1
+    whats_normalized::Function # what part of the array is normalized
+                               # e.g. eachrow, or omit for the entire array
+end
+
+ProjectedNormalization(norm, projection; whats_normalized=identityslice) =
+    ProjectedNormalization(norm, projection, whats_normalized)
+
+function (P::ProjectedNormalization)(A::AbstractArray)
+    whats_normalized_A = P.whats_normalized(A)
+    (P.projection).(whats_normalized_A)
+end
+
+check(P::ProjectedNormalization, A::AbstractArray) =
+    all((P.norm).(P.whats_normalized(A)) .≈ 1)
+```
+
+```julia
+struct ScaledNormalization{T<:Union{Real,AbstractArray{<:Real},Function}} <: AbstractNormalization
+    norm::Function # calculate the norm of an AbstractArray
+    whats_normalized::Function # what part of the array is normalized
+    scale::T # the scale that `whats_normalized` should be normalized to
+             # Can be a real, array of reals, or function of the input that
+             # that returns a real or array of reals
+end
+
+ScaledNormalization(norm;whats_normalized=identityslice,scale=1) =
+    ScaledNormalization{typeof(scale)}(norm, whats_normalized, scale)
+
+function (S::ScaledNormalization{T})(A::AbstractArray) where {T<:Union{Real,AbstractArray{<:Real}}}
+    whats_normalized_A = S.whats_normalized(A)
+    A_norm = (S.norm).(whats_normalized_A) ./ S.scale
+    whats_normalized_A ./= A_norm
+    return A_norm
+end
+
+function (S::ScaledNormalization{T})(A::AbstractArray) where {T<:Function}
+    whats_normalized_A = S.whats_normalized(A)
+    A_norm = (S.norm).(whats_normalized_A) ./ S.scale(A)
+    whats_normalized_A ./= A_norm
+    return A_norm
+end
+
+check(S::ScaledNormalization{<:Union{Real,AbstractArray{<:Real}}}, A::AbstractArray) =
+    all((S.norm).(S.whats_normalized(A)) .≈ S.scale)
+
+check(S::ScaledNormalization{<:Function}, A::AbstractArray) =
+    all((S.norm).(S.whats_normalized(A)) .≈ S.scale(A))
+```
+
+We can define some common constraints like $L_1$ normalized through a projection
+
+```julia
+l1normalize! =
+    ProjectedNormalization(l1norm, l1project!)
+l1normalize_rows! =
+    ProjectedNormalization(l1norm, l1project!; whats_normalized=eachrow)
+l1normalize_1slices! =
+    ProjectedNormalization(l1norm, l1project!;
+        whats_normalized=(x -> eachslice(x; dims=1)))
+```
+
+or $L_oo$ normalized by scaling
+
+```julia
+linftyscale_cols! = ScaledNormalization(linftynorm; whats_normalized=eachcol)
+```
+
+or even normalize the 3-fibres of a third order tensor on average!
+
+```julia
+l2scale_average12slices! = ScaledNormalization(l2norm;
+    whats_normalized=(x -> eachslice(x; dims=1)),
+    scale=(A -> size(A, 2)))
+```
+
+Constraints can also be composed. This is #emph[not] the same as the intersection of constraints. This is only a handy way to apply multiple constraints in series, but there is no clever logic that interprets the constraints and combines them into a single constraint.
+
+```julia
+struct ComposedConstraint{T<:AbstractConstraint, U<:AbstractConstraint} <: AbstractConstraint
+    outer::T
+    inner::U
+end
+
+function (C::ComposedConstraint)(A::AbstractArray)
+    C.inner(A)
+    C.outer(A)
+end
+
+check(C::ComposedConstraint, A::AbstractArray) =
+    check(C.outer, A) & check(C.inner, A)
+
+Base.:∘(f::AbstractConstraint, g::AbstractConstraint) =
+    ComposedConstraint(f, g)
+```
+
+This means the following three constraints are all different!
+
+```julia
+l1normalize! ∘ nonnegative!
+nonnegative! ∘ l1normalize!
+simplex!
+```
+
+See @sec-ppr for a discussion on why it may be advantages to use one of these constraints over the other.
+
+=== `BlockUpdate` Language
+<blockupdate-language>
+- construct the updates as a list of updates
+- very functional programming
+- can apply them in sequence or in a random order (or partially random)
+
+To put all these pieces together, we define an abstract type that can be subtyped for the various types of update. This will include gradient descent steps, momentum updates, and constraint enforcing updates.
+
+```julia
+abstract type AbstractUpdate <: Function end
+```
+
+A generic update is a function that can take some keyword arguments and mutate an iterate.
+
+```julia
+struct GenericUpdate <: AbstractUpdate
+    f::Function
+end
+
+(U::GenericUpdate)(x; kwargs...) = U.f(x; kwargs...)
+```
+
+The first types of updates are gradient descent updates.
+
+```julia
+abstract type AbstractGradientDescent <: AbstractUpdate end
+```
+
+This includes the regular gradient descent update, and also the sub-block descent updates.
+
+```julia
+struct GradientDescent <: AbstractGradientDescent
+    n::Integer
+    gradient::Function
+    step::AbstractStep
+end
+
+function (U::GradientDescent)(x; x_last, kwargs...)
+    n = U.n
+    if checkfrozen(x, n)
+        return x
+    end
+    grad = U.gradient(x; kwargs...)
+    # Note we pass a function for grad_last (lazy) so that we only compute it if needed for the step
+    s = U.step(x; n, x_last, grad, grad_last=(x -> U.gradient(x; kwargs...)), kwargs...)
+    a = factor(x, n)
+    @. a -= s*grad
+end
+```
+
+The only addition to `BlockGradientDescent` is a function that combines the step with the gradient.
+
+```julia
+struct BlockGradientDescent <: AbstractGradientDescent
+    n::Integer
+    gradient::Function
+    step::AbstractStep
+    combine::Function # takes a step (number, matrix, or tensor) and combines it with a gradient
+end
+
+function (U::BlockGradientDescent)(x; x_last, kwargs...)
+    n = U.n
+    if checkfrozen(x, n)
+        return x
+    end
+    grad = U.gradient(x; kwargs...)
+    # Note we pass a function for grad_last (lazy) so that we only compute it if needed for the step
+    s = U.step(x; n, x_last, grad, grad_last=(x -> U.gradient(x; kwargs...)), kwargs...)
+    a = factor(x, n)
+    a .-= U.combine(grad, s)
+end
+```
+
+A separate step type is defined to allow for different types of steps like constant step, Lipschitz, and spectral projected gradient (SPG).
+
+```julia
+abstract type AbstractStep <: Function end
+```
+
+```julia
+struct LipschitzStep <: AbstractStep
+    lipschitz::Function
+end
+
+function (step::LipschitzStep)(x; kwargs...)
+    L = step.lipschitz(x)
+    return L^(-1) # allow for Lipschitz to be a diagonal matrix
+end
+
+function (step::LipschitzStep)(x::Tucker; kwargs...)
+    L = step.lipschitz(x)
+    if typeof(L) <: Tuple # Currently the only case is when we are updating the core of a Tucker factorization
+                          # Using this condition as a way to tell if it is the core we are calculating the constant for
+        return map(X -> X^(-1), L)
+    else
+        return L^(-1) # allow for Lipschitz to be a diagonal matrix
+    end
+end
+```
+
+```julia
+struct ConstantStep <: AbstractStep
+    stepsize::Real
+end
+
+(step::ConstantStep)(x; kwargs...) = step.stepsize
+```
+
+```julia
+struct SPGStep <: AbstractStep
+    min::Real
+    max::Real
+end
+
+SPGStep(;min=1e-10, max=1e10) = SPGStep(min, max)
+
+# Convert an input of the full decomposition, to a calculation on the nth factor
+(step::SPGStep)(x::T; n, x_last::T, grad_last::Function, kwargs...) where {T <: AbstractDecomposition} =
+    step(factor(x,n); x_last=factor(x_last,n), grad_last=grad_last(x_last), kwargs...)
+
+function (step::SPGStep)(x; grad, x_last, grad_last, stepmin=step.min, stepmax=step.max, kwargs...)
+    s = x - x_last
+    y = grad - grad_last
+    sy = (s ⋅ y)
+    if sy <=0
+        return stepmax
+    else
+        suggested_step = (s ⋅ s) / sy
+        return clamp(suggested_step, stepmin, stepmax)
+    end
+end
+```
+
+The gradient and Lipschitz stepsize is calculated by a separate function that gets make on initialization of the `factorization` algorithm (See @sec-gradient-computation and @sec-lipschitz-computation). This de-couples applying the gradient descent (the #emph[what];), and the computation of the gradient (the #emph[how];) so that the gradient can be calculated manually (if an efficient method is known), or with automatic differentiation. This also allows other updates to use the same computation code. For example, momentum updates also use the same Lipschitz calculation function. Momentum updates also use the same `combine` function as the sub-block gradient descent updates.
+
+```julia
+struct MomentumUpdate <: AbstractUpdate
+    n::Integer
+    lipschitz::Function
+    combine::Function # How to combine the momentum variable `ω` with a factor `a`
+end
+
+MomentumUpdate(n, lipschitz) = MomentumUpdate(n, lipschitz, (ω, a) -> ω * a)
+
+function MomentumUpdate(GD::AbstractGradientDescent)
+    n, step = GD.n, GD.step
+    @assert typeof(step) <: LipschitzStep
+
+    return MomentumUpdate(n, step.lipschitz)
+end
+
+function MomentumUpdate(GD::BlockGradientDescent)
+    n, step, combine = GD.n, GD.step, GD.combine
+    @assert typeof(step) <: LipschitzStep
+
+    return MomentumUpdate(n, step.lipschitz, combine)
+end
+```
+
+Constraints also get their own abstract subtype of updates.
+
+```julia
+abstract type ConstraintUpdate <: AbstractUpdate end
+```
+
+We define a constructor for applying a constraint to a particular factor $n$. This turns an `AbstractConstraint` into a `ConstraintUpdate`.
+
+```julia
+ConstraintUpdate(n, constraint::GenericConstraint; kwargs...) =
+    GenericConstraintUpdate(n, constraint)
+ConstraintUpdate(n, constraint::ProjectedNormalization; kwargs...) =
+    Projection(n, constraint)
+ConstraintUpdate(n, constraint::Entrywise; kwargs...) =
+    Projection(n, constraint)
+
+function ConstraintUpdate(n, constraint::ScaledNormalization; skip_rescale=false, whats_rescaled=missing, kwargs...)
+    if skip_rescale
+        ismissing(whats_rescaled) ||
+        isnothing(whats_rescaled) ||
+        @warn "skip_rescale=true but whats_rescaled=$whats_rescaled was given. Overriding to whats_rescaled=nothing"
+        return Rescale(n, constraint, nothing)
+    else
+        return Rescale(n, constraint, whats_rescaled)
+    end
+end
+```
+
+A generic constraint update extracts the factor it needs to constrain, and applies the constraint to that factor.
+
+```julia
+struct GenericConstraintUpdate <: ConstraintUpdate
+    n::Integer
+    constraint::GenericConstraint
+end
+
+check(U::GenericConstraintUpdate, D::AbstractDecomposition) = check(U.constraint, factor(D, U.n))
+
+function (U::GenericConstraintUpdate)(x::T; kwargs...) where T
+    n = U.n
+    A = factor(x, n)
+    U.constraint(A)
+    check(U, A) ||
+        error("Something went wrong with GenericConstraintUpdate: $GenericConstraintUpdate")
+end
+```
+
+Projections follow this pattern closely.
+
+```julia
+struct Projection <: ConstraintUpdate
+    n::Integer
+    proj::Union{ProjectedNormalization, Entrywise}
+end
+
+check(P::Projection, D::AbstractDecomposition) = check(P.proj, factor(D, P.n))
+
+function (U::Projection)(x::T; kwargs...) where T
+    n = U.n
+    U.proj(factor(x, n))
+end
+```
+
+A more involved type of constraint update is a rescaled update. This uses a scaled normalization, but moves the weight of the factor to other factors.
+
+For example, if we have three matrix factors $A , B , C$ in a CP decomposition where we want the sum of the entries in $A$ to sum to $1$, we can divide $A$ by its sum, and multiple factor $B$ by this amount. That way the recombined tensor $⟦A , B , C⟧$ remains unchanged, but now $A$ satisfies the desired constraint. We could instead multiply both $B$ and $C$ by the square root of the sum to achieve a similar outcome. When it is not specified what is rescaled (`whats_rescaled = missing`), we assume we should multiply every other factor by the geometric mean of the scaling. If we just want to scale the factor but skip any rescaling, we can use `whats_rescaled = nothing`.
+
+```julia
+struct Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
+    n::Integer
+    scale::ScaledNormalization
+    whats_rescaled::T
+end
+
+check(S::Rescale, D::AbstractDecomposition) = check(S.scale, factor(D, S.n))
+
+function (U::Rescale{<:Function})(x; kwargs...)
+    Fn_scale = U.scale(factor(x, U.n))
+    to_scale = U.whats_rescaled(x)
+    to_scale .*= Fn_scale
+end
+
+(U::Rescale{Nothing})(x; kwargs...) =
+    U.scale(factor(x, U.n))
+
+function (U::Rescale{Missing})(x; skip_rescale=false, kwargs...)
+    Fn_scale = U.scale(factor(x, U.n))
+    x_factors = factors(x)
+    N = length(x_factors) - 1
+
+    # Nothing to rescale, so return here
+    if N == 0 || skip_rescale
+        return nothing
+    end
+
+    # Assume we want to evenly rescale all other factors by the Nth root of Fn_scale
+    scale = geomean(Fn_scale)^(1/N)
+    for (i, A) in zip(eachfactorindex(x), x_factors)
+        # skip over the factor we just updated
+        if i == U.n
+            continue
+        end
+        A .*= scale
+    end
+end
+```
+
+See @sec-ppr for a more in-depth discussion on when it may be beneficial to use this type of constraint update over a simple projection.
+
+We would like to combine all these updates to execute them in serial. We use a `BlockedUpdate` type to do this. This should be thought of as a list of `AbstractUpdates` that get applied one after another.
+
+```julia
+struct BlockedUpdate <: AbstractUpdate
+    updates::Vector{AbstractUpdate}
+end
+```
+
+#block[
+#callout(
+body: 
+[
+We need the updates to be exactly something of the form `AbstractUpdate[]` since we want to push any type of `AbstractUpdate`s such as a `MomentumUpdate` or another `BlockedUpdate`, even if not already present. This means it cannot be `Vector{<:AbstractUpdate}` since a `BlockedUpdate` constructed with only `GradientDescent` would give a `GradientDescent[]` vector and we couldn’t push a `MomentumUpdate`. And it cannot be `AbstractVector{AbstractUpdate}` since we may not be able to `insert!` or `push!` into other `AbstractVectors` like `Views`.
+
+]
+, 
+title: 
+[
+Technical Julia Note
+]
+, 
+background_color: 
+rgb("#dae6fb")
+, 
+icon_color: 
+rgb("#0758E5")
+, 
+icon: 
+"❕"
+)
+]
+We forward many standard methods so that `BlockedUpdate`s can behave like usual Julia vectors.
+
+TODO should I actually show all these details?
+
+```julia
+Base.getindex(U::BlockedUpdate, i::Int) = getindex(updates(U), i)
+Base.getindex(U::BlockedUpdate, I::Vararg{Int}) = getindex(updates(U), I...)
+Base.getindex(U::BlockedUpdate, I) = getindex(updates(U), I) # catch all
+Base.firstindex(U::BlockedUpdate) = firstindex(updates(U))
+Base.lastindex(U::BlockedUpdate) = lastindex(updates(U))
+Base.keys(U::BlockedUpdate) = keys(updates(U))
+Base.length(U::BlockedUpdate) = length(updates(U))
+Base.iterate(U::BlockedUpdate, state=1) = state > length(U) ? nothing : (U[state], state+1)
+Base.filter(f, U::BlockedUpdate) = BlockedUpdate(filter(f, updates(U)))
+```
+
+We define how `BlockedUpdates` get applied to a tensor with the following function.
+
+```julia
+function (U::BlockedUpdate)(x::T; recursive_random_order::Bool=false, random_order::Bool=recursive_random_order, kwargs...) where T
+    U_updates = updates(U)
+    if random_order
+        order = shuffle(eachindex(U_updates))
+        U_updates = U_updates[order]
+    end
+
+    for update! in U_updates
+        update!(x; recursive_random_order, kwargs...)
+        # note random_order does not get passed down
+    end
+end
+```
+
+The default order the blocks are updated is cyclically through each factor of the decomposition `D::AbstractDecomposition`, in the order of `factors(D)`. For `AbstractTucker` decompositions like Tucker, Tucker-1, and CP, this means starting with the core, followed by the matrix factor for the first dimension, second dimension, and so on.
+
+As an example, this would be the default order of updates for nonnegative CP decomposition on an order 3 tensor.
+
+```julia
+BlockedUpdate(
+    MomentumUpdate(1, lipschitz)
+    GradientStep(1, gradient, LipschitzStep)
+    Projection(1, Entrywise(ReLU, isnonnegative))
+    MomentumUpdate(2, lipschitz)
+    GradientStep(2, gradient, LipschitzStep)
+    Projection(2, Entrywise(ReLU, isnonnegative))
+    MomentumUpdate(3, lipschitz)
+    GradientStep(3, gradient, LipschitzStep)
+    Projection(3, Entrywise(ReLU, isnonnegative))
+)
+```
+
+The order of updates can be randomized with the `random_order` keyword.
+
+```julia
+X, stats, kwargs = factorize(Y; random_order=true)
+```
+
+By default, this will keep momentum steps, gradient steps, and constraint steps for each factor together as a block, in this order.
+
+A possible order of updates could be the following. Note that the updates for each factor are grouped together, but each factor is updated in a random order.
+
+```julia
+BlockedUpdate(
+    BlockedUpdate(
+        MomentumUpdate(2, lipschitz)
+        GradientStep(2, gradient, LipschitzStep)
+        Projection(2, Entrywise(ReLU, isnonnegative))
+    )
+    BlockedUpdate(
+        MomentumUpdate(1, lipschitz)
+        GradientStep(1, gradient, LipschitzStep)
+        Projection(1, Entrywise(ReLU, isnonnegative))
+    )
+    BlockedUpdate(
+        MomentumUpdate(3, lipschitz)
+        GradientStep(3, gradient, LipschitzStep)
+        Projection(3, Entrywise(ReLU, isnonnegative))
+    )
+)
+```
+
+For more randomization, use the `recursive_random_order` keyword which will also randomize the order in which the momentum steps, gradient steps, and constraint steps are performed.
+
+```julia
+X, stats, kwargs = factorize(Y; recursive_random_order=true)
+```
+
+A possible order of updates could now be the following. The updates for each factor are still grouped together, but the updates within each block appear in a random order.
+
+```julia
+BlockedUpdate(
+    BlockedUpdate(
+        Projection(2, Entrywise(ReLU, isnonnegative))
+        MomentumUpdate(2, lipschitz)
+        GradientStep(2, gradient, LipschitzStep)
+    )
+    BlockedUpdate(
+        MomentumUpdate(1, lipschitz)
+        Projection(1, Entrywise(ReLU, isnonnegative))
+        GradientStep(1, gradient, LipschitzStep)
+    )
+    BlockedUpdate(
+        GradientStep(3, gradient, LipschitzStep)
+        Projection(3, Entrywise(ReLU, isnonnegative))
+        MomentumUpdate(3, lipschitz)
+    )
+)
+```
+
+The opposite of this would be to keep the outer order of blocks as given, but randomize the order which the updates for each factor gets applied, use the following code.
+
+```julia
+X, stats, kwargs = factorize(Y; recursive_random_order=true, random_order=false, group_by_factor=true)
+```
+
+A possible order of updates could now be the following. Note the order of factors is preserved (1, 2, 3) but the inner `BlockedUpdate`s have a random order.
+
+```julia
+BlockedUpdate(
+    BlockedUpdate(
+        Projection(1, Entrywise(ReLU, isnonnegative))
+        MomentumUpdate(1, lipschitz)
+        GradientStep(1, gradient, LipschitzStep)
+    )
+    BlockedUpdate(
+        MomentumUpdate(2, lipschitz)
+        Projection(2, Entrywise(ReLU, isnonnegative))
+        GradientStep(2, gradient, LipschitzStep)
+    )
+    BlockedUpdate(
+        GradientStep(3, gradient, LipschitzStep)
+        MomentumUpdate(3, lipschitz)
+        Projection(3, Entrywise(ReLU, isnonnegative))
+    )
+)
+```
+
+Note all the previously mentioned options still keeps the various updates for each factor together. For full randomization, use the following code.
+
+```julia
+X, stats, kwargs = factorize(Y; recursive_random_order=true, group_by_factor=false)
+```
+
+A possible order of updates could now be the following. Note that every update can appear anywhere in the order.
+
+```julia
+BlockedUpdate(
+    Projection(3, Entrywise(ReLU, isnonnegative))
+    MomentumUpdate(2, lipschitz)
+    GradientStep(2, gradient, LipschitzStep)
+    MomentumUpdate(1, lipschitz)
+    GradientStep(1, gradient, LipschitzStep)
+    Projection(2, Entrywise(ReLU, isnonnegative))
+    MomentumUpdate(3, lipschitz)
+    MomentumUpdate(2, lipschitz)
+    Projection(1, Entrywise(ReLU, isnonnegative))
+    GradientStep(3, gradient, LipschitzStep)
+)
+```
+
+The complete behaviour is summarized in @tbl-blockupdate-randomization.
+
+We also use `BlockedUpdate` to handle a composition of constraints.
+
+```julia
+ConstraintUpdate(n, constraint::ComposedConstraint; kwargs...) =
+    BlockedUpdate(ConstraintUpdate(n, constraint.inner; kwargs...),
+                  ConstraintUpdate(n, constraint.outer; kwargs...))
+end
+```
+
+The `BlockUpdate` language becomes especially helpful for automaically inserting additional updates as they are requested. For example, if we want to add momentum to a list of updates, we can call the following function.
+
+```julia
+function add_momentum!(U::BlockedUpdate)
+    # Find all the GradientDescent updates
+    U_updates = updates(U)
+    indexes = findall(u -> typeof(u) <: AbstractGradientDescent, U_updates)
+
+    # insert MomentumUpdates before each GradientDescent
+    # do this in reverse order so "i" correctly indexes a GradientDescent
+    # as we mutate updates
+    for i in reverse(indexes)
+        insert!(U_updates, i, MomentumUpdate(U_updates[i]))
+    end
+end
+```
+
+We can also interlace two lists of updates to put updates on the same factor next to each other, or group all updates by the factor they act on.
+
+```julia
+function smart_interlace!(U::BlockedUpdate, other_updates)
+    for V in other_updates
+        smart_insert!(U::BlockedUpdate, V::AbstractUpdate)
+    end
+end
+
+smart_interlace!(U::BlockedUpdate, V::BlockedUpdate) = smart_interlace!(U::BlockedUpdate, updates(V))
+
+function smart_insert!(U::BlockedUpdate, V::AbstractUpdate)
+    U_updates = updates(U)
+    i = findlast(u -> u.n == V.n, U_updates)
+
+    # insert the other update immediately after
+    # or if there is no update, push it to the end
+    isnothing(i) ? push!(U_updates, V) : insert!(U_updates, i+1, V)
+end
+```
+
+```julia
+function group_by_factor(blockedupdate::BlockedUpdate)
+    factor_labels = unique(getproperty(U, :n) for U in blockedupdate)
+    updates_by_factor = [filter(U -> U.n == n, blockedupdate) for n in factor_labels]
+    return BlockedUpdate(updates_by_factor)
+end
+```
+
+= Rescaling to Constrain Tensor Factorization
 <sec-ppr>
 - for bounded linear constraints
   - first project
@@ -1645,6 +2356,133 @@ Finally, there are two auxiliary stats `PrintStats` and `DisplayDecomposition` w
 - faster to execute then a projection
 - often does not loose progress because of the rescaling (decomposition dependent)
 
+Constraints on factors in a tensor decomposition can arise naturally when modeling physical problems. A common class of constraints is normalizations which restrict a factor or slices of a factor to have unit norm. These are sometimes intersected with interval constraints such as requiring entries to be nonnegative.
+
+For example, the demixing of $R$ probibility densities $b_1 , dots.h , b_R$ from $I$ mixtures $y_1 , dots.h , y_I$ for $I > R$ can be accomplished with a nonneagive matrix factorization (cite). We have the system of equations
+
+$ med y_1 & = a_11 med b_1 + a_12 med b_2 + dots.h + a_(1 R) med b_R\
+med y_2 & = a_21 med b_1 + a_22 med b_2 + dots.h + a_(2 R) med b_R\
+ & dots.v\
+med y_I & = a_(I 1) med b_1 + a_(I 2) med b_2 + dots.h + a_(I R) med b_R\
+ $
+
+with unknown mixing coefficients $a_(i , r)$ and densities $b_r$. If we can discritized the mixtures $y_i$, we can rewrite this system as a rank $R$ factorization of the matrix $Y$ where $Y [i , :] = y_i$ and
+
+$ mat(delim: "[", arrow.l, med y_1^tack.b, arrow.r; arrow.l, med y_2^tack.b, arrow.r; arrow.l, med dots.v, arrow.r; arrow.l, med y_I^tack.b, arrow.r) & = mat(delim: "[", a_11, a_12, dots.h, a_(1 R); a_21, a_22, dots.h, a_(2 R); dots.v, , , dots.v; a_(I 1), a_(I 2), dots.h, a_(I R); #none) mat(delim: "[", arrow.l, med b_1^tack.b, arrow.r; arrow.l, med b_2^tack.b, arrow.r; med, dots.v, med; arrow.l, med b_R^tack.b, arrow.r) $
+
+$ Y = A B , $
+
+for matricies $A$ and $B$.
+
+For the factorization to remain interpretable, we need to ensure each row $b_r$ of $B$ is a density. This means we would like to constrain each row $B [r , :] = b_r$ to the simplex#footnote[This assumes the entries $b_r [j]$ in the discretization of the density $b_r$ represent probibilities or areas under some continuous 1D density function, not the sample values of the density $b_r (x_j)$. Assuming $J$ sample points $x_j$ of a grid on the interval $[x_0 , x_J]$, the entries of the discretization vector can be defined as $b_r [j] = b_r (x_j) (x_j - x_(j - 1))$.]
+
+$ b_r in Delta_J = {v in bb(R)^J mid(bar.v) sum_(j = 1)^J v [j] = 1 quad upright("and") quad forall j in [J] , med med v [j] gt.eq 0} , $
+
+which we can write as constraining the matrix $B$ to the simplex
+
+$ B in Delta_(R , J) = {B in bb(R)^(R times J) mid(bar.v) forall r in [R] , thin sum_(j = 1)^J B [r , j] = 1 quad upright("and") quad forall (r , j) in [R] times [J] , thin B [r , j] gt.eq 0} . $
+
+Given the rows of $B$ represent densities, to ensure the rows of the reconstructed matrix $hat(Y) = A B$ are still densities, we need the mixing coefficients to be nonnegative $a_(i r) gt.eq 0$ and rows to sum to one $sum_r a_(i r) = 1$. This constrains the matrix $A$ to the simplex
+
+$ A in Delta_(I , R) = {A in bb(R)^(I times R) mid(bar.v) forall i in [I] , thin sum_(r = 1)^R A [i , r] = 1 quad upright("and") quad forall (i , r) in [I] times [R] , thin A [i , r] gt.eq 0} . $
+
+== The two approaches for simplex constraints
+<the-two-approaches-for-simplex-constraints>
+With constraints being defined in a flexible manner (see @sec-constraints), we decided to test conventional wisdom that Euclidean projections are the right kind of map to use when enforcing a constraint. A constraint that came up in applications was enforcing the $1$st mode slices of a tensor (e.g.~rows in a matrix) or $3$rd mode fibres of a third order tensor to lie in their respective simplex.
+
+For example, to constrain a vector $v in bb(R)^J$ to the simplex
+
+$ Delta_J = {v in bb(R)^J mid(bar.v) sum_(j = 1)^J v [j] = 1 , quad upright("and") quad forall j in [J] , med med v [j] gt.eq 0} , $
+
+we could apply a Euclidean projection
+
+$ v arrow.l arg thin min_(u in Delta_J) lr(bar.v.double u - v bar.v.double)_2^2 , $
+
+or a generalized Kullback-Leibler divergence projection
+
+#math.equation(block: true, numbering: "(1)", [ $ v arrow.l arg thin min_(u in Delta_J) sum_j u [j] log (frac(u [j], v [j])) - u [j] + v [j] $ ])<eq-kl-projection>
+
+amoung other reasonable maps onto $Delta_J$.
+
+The Eucledian simplex projection can be done with the following implimentation of Chen and Ye’s algorithm @chen_projection_2011. The essence of the algorithm is to efficiently compute the special $t in bb(R)$ so that
+
+#math.equation(block: true, numbering: "(1)", [ $ v arrow.l max (0 , v - t bb(1)) in Delta_J . $ ])<eq-simplex-projection>
+
+The $max (0 , x)$ function should be understood as operating entrywise on $x$. In BlockTensorDecomposition, we use the helper `ReLU(x) = max(0, x)` for this function to assist with broadcasting.
+
+```julia
+function projsplx(v)
+    J = length(v)
+
+    if J==1 # quick exit for trivial length-1 "vectors" (i.e. scalars)
+        return [one(eltype(v))]
+    end
+
+    v_sorted = sort(v[:]) # Vectorize/extract input and sort all entries
+    j = J - 1
+    t = 0 # need to ensure t has scope outside the while loop
+    while true
+        t = (sum(@view v_sorted[j+1:end]) - 1) / (J-j)
+        if t >= v_sorted[j]
+            break
+        else
+            j -= 1
+        end
+
+        if j >= 1
+            continue
+        else # j == 0
+            t = (sum(v_sorted) - 1) / J
+            break
+        end
+    end
+    return ReLU.(v .- t)
+end
+```
+
+This is turned into an operation that can mutated `v` with the following definition,
+
+```julia
+function projsplx!(y)
+    y .= projsplx(y)
+end
+```
+
+and can be turned into a `ProjectedNormalization` (see @sec-constraints) with the following code.
+
+```julia
+simplex! = ProjectedNormalization(isnonnegative_sumtoone, projsplx!)
+isnonnegative_sumtoone(x) = all(isnonnegative, x) && sum(x) ≈ 1
+```
+
+The generalized Kullback-Leibler divergence projection as stated in @eq-kl-projection is only well-defined when $v [j] > 0$ for all $j in [J]$. In this case the solution is given by
+
+$ v arrow.l frac(v, sum_j v [j]) $
+
+which is well described by Ducellier et. al. @ducellier_uncertainty_2024[Sec. 2.1].
+
+To extend the applicability of this map to any $v$ (when there is at least one positive entry $v [j] > 0$), we can first (Euclidean) project onto the nonnegative orthant $bb(R)_(+)^J$,
+
+$ v arrow.l arg thin min_(u in bb(R)_(+)^J) lr(bar.v.double u - v bar.v.double)_2^2 = max (0 , v) , $
+
+and then apply the divergence projection.#footnote[In the unfortunate case where every entry of $v$ is nonpositive, we can fallback to the Euclean simplex projection.] All together, this looks like #math.equation(block: true, numbering: "(1)", [ $ v arrow.l frac(max (0 , v), sum_j max (0 , v [j])) . $ ])<eq-nnpr>
+
+We will refer to @eq-nnpr as nonnegative projection and rescaling (NNPR). NNPR has the following implimentation in BlockTensorDecomposition.jl.
+
+```julia
+nnpr! = l1scale! ∘ nonnegative!
+```
+
+We define the two constraints as the following, using the constraint language from @sec-constraints.
+
+```julia
+nonnegative! = Entrywise(ReLU, isnonnegative)
+l1scale! = ScaledNormalization(l1norm)
+l1norm(x) = mapreduce(abs, +, x)
+```
+
+== Constraining Tensor Factorizations to Simplexes
+<constraining-tensor-factorizations-to-simplexes>
 = Multi-scale
 <sec-multi-scale>
 - use a coarse discretization along continuous dimensions
@@ -1685,6 +2523,36 @@ $ nabla^2 f (A) [i_1 , dots.h , i_N , j_1 , dots.h , j_N] = frac(partial^2 f, pa
 but if the function has continuous second derivatives, we can perform the partial derivatives in either order
 
 $ frac(partial^2 f, partial A [j_1 , dots.h , j_N] partial A [i_1 , dots.h , i_N]) (A) = frac(partial^2 f, partial A [i_1 , dots.h , i_N] partial A [j_1 , dots.h , j_N]) (A) . $
+
+== Randomizing the order of updates
+<randomizing-the-order-of-updates>
+#figure([
+#table(
+  columns: (20%, 15%, 27%, 37%),
+  align: (auto,auto,auto,auto,),
+  table.header([`group_by_factor`], [`random_order`], [`recursive_random_order`], [Description],),
+  table.hline(),
+  [`false`], [`false`], [`false`], [In the order given],
+  [`false`], [`false`], [`true`], [In order given, but randomize how existing blocks are ordered (recursively)],
+  [`false`], [`true`], [`false`], [Randomize updates, but keep existing blocks in order],
+  [`false`], [`true`], [`true`], [Fully random],
+  [`true`], [`false`], [`false`], [In the order given],
+  [`true`], [`false`], [`true`], [In order of factors, but updates for each factor a random order],
+  [`true`], [`true`], [`false`], [Random order of factors, preserve order of updates within each factor],
+  [`true`], [`true`], [`true`], [Almost fully random, but updates for each factor are done together],
+)
+], caption: figure.caption(
+position: top, 
+[
+Full description of randomizing the order of updates within a `BlockUpdate`.
+]), 
+kind: "quarto-float-tbl", 
+supplement: "Table", 
+)
+<tbl-blockupdate-randomization>
+
+
+
 
  
   
