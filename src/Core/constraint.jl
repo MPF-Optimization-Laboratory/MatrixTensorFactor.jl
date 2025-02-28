@@ -2,7 +2,7 @@
 Low level code for the types of constraints
 """
 
-"""Abstract parent type for the verious constraints"""
+"""Abstract parent type for the various constraints"""
 abstract type AbstractConstraint <: Function end
 
 function Base.show(io::IO, X::AbstractConstraint)
@@ -23,7 +23,9 @@ end
 
 Returns `true` if `A` satisfies the constraint `C`.
 """
-function check(_::AbstractConstraint, _::AbstractArray); end
+function check(C::AbstractConstraint, _::AbstractArray)
+    throw("checking constraints with type $(typeof(C)) is not implemented")
+end
 
 """
     GenericConstraint <: AbstractConstraint
@@ -155,7 +157,7 @@ function makeNNprojection(norm)
     if norm == l1norm
         return projsplx!
 
-    elseif norm in (l2norm, linftynorm)
+    elseif norm in (l2norm, linftynorm) # TODO should the l2norm have a different projection?
         return proj_one_hot!
 
     else
@@ -249,10 +251,10 @@ const linftynormalize_12slices! = ProjectedNormalization(linftynorm, linftyproje
 
 Main constructor for the constraint where `norm` of `whats_normalized` equals `scale`.
 
-Scale can be a single `Real`, or an `AbstractArray{<:Real}`, but should be brodcast-able
+Scale can be a single `Real`, or an `AbstractArray{<:Real}`, but should be broadcast-able
 with the output of `whats_normalized`.
-Lasly, scale can be a `Function` which will act on an `AbstractArray{<:Real}` and return
-something that is brodcast-able `whats_normalized`.
+Lastly, scale can be a `Function` which will act on an `AbstractArray{<:Real}` and return
+something that is broadcast-able `whats_normalized`.
 """
 struct ScaledNormalization{T<:Union{Real,AbstractArray{<:Real},Function}} <: AbstractNormalization
     norm::Function
@@ -338,7 +340,7 @@ check(C::Entrywise, A::AbstractArray) = all((C.check).(A))
 
 const nonnegative! = Entrywise(ReLU, isnonnegative)
 
-IntervalConstraint(a, b) = Entrywise(x -> clamp(x, a, b), x -> a <= x <= b)
+IntervalConstraint(a, b) = Entrywise(x -> clamp(x, a, b), x -> a ≤ x ≤ b)
 
 function binaryproject(x)
     if x > 0.5
