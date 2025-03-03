@@ -202,6 +202,10 @@ function l1project!(x::AbstractArray)
     x .= signs .* projsplx(signs .* x)
 end
 
+# TODO in Julia, calling eachcol on matrices is cheaper than eachrow
+# If possible, factorize() should reframe the constraints to use eachcol
+# to speed up iterations
+
 const l1normalize! = ProjectedNormalization(l1norm, l1project!)
 const l1normalize_rows! = ProjectedNormalization(l1norm, l1project!; whats_normalized=eachrow)
 const l1normalize_cols! = ProjectedNormalization(l1norm, l1project!; whats_normalized=eachcol)
