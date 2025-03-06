@@ -355,3 +355,6 @@ Base.getindex(CPD::CPDecomposition, I::Vararg{Int}) = sum(reduce(.*, (@view f[i,
 # Additional CPDecomposition interface
 """The single rank for a CP Decomposition"""
 rankof(CPD::CPDecomposition) = size(matrix_factors(CPD)[begin], 2)
+
+# TODO Define a matrix factorization type Y=AB so that thinking about tensors can be avoided
+# Could even exploit Tucker1 or CPDecomposition to do this
