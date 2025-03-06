@@ -344,7 +344,7 @@ Some progress towards building a unified framework has been made @xu_BlockCoordi
   - constrained factorization (the what)
   - iterative updates (the how)
 - Implement new "tricks"
-  - a (Lipschitz) matrix step size for efficient sub-block updates
+  - a (Lipschitz) matrix stepsize for efficient sub-block updates
   - multi-scaled factorization when tensor entries are discretizations of a continuous function
   - partial projection and rescaling to enforce linear constraints (rather than Euclidean projection)
 - ?? rank detection ??
@@ -959,7 +959,7 @@ This implicit update has the #emph[projected gradient descent] closed form solut
 
 #math.equation(block: true, numbering: "(1)", [ $ A_n^(t + 1) arrow.l P_(cal(C)_n) (A_n^t - 1 / L_n^t nabla f_n^t (A_n^t)) . $ ])<eq-proximal-explicit>
 
-We typically choose $L_n^t$ to be the Lipschitz constant of $nabla f_n^t$, since it is a sufficient condition to guarantee $f_n^t (A_n^(t + 1)) lt.eq f_n^t (A_n^t)$, but other step sizes can be used in theory @nesterov_NonlinearOptimization_2018[Sec. 1.2.3].
+We typically choose $L_n^t$ to be the Lipschitz constant of $nabla f_n^t$, since it is a sufficient condition to guarantee $f_n^t (A_n^(t + 1)) lt.eq f_n^t (A_n^t)$, but other stepsizes can be used in theory @nesterov_NonlinearOptimization_2018[Sec. 1.2.3].
 
 ?ASIDE? To write $nabla f_n^t$, we have assumed (block) differentiability of the decomposition model $g$. In practice, most decompositions are "block-linear" (freeze all factors but one and you have a linear function) and in rare cases are "block-affine". "block-affine" is enough to ensure $f_n^t$ is convex (i.e.~$f$ is "block-convex") so the updates @eq-proximal-explicit converge to a Nash equilibrium (block minimizer).
 
@@ -2302,7 +2302,7 @@ ConstraintUpdate(n, constraint::ComposedConstraint; kwargs...) =
 end
 ```
 
-The `BlockUpdate` language becomes especially helpful for automaically inserting additional updates as they are requested. For example, if we want to add momentum to a list of updates, we can call the following function.
+The `BlockUpdate` language becomes especially helpful for automatically inserting additional updates as they are requested. For example, if we want to add momentum to a list of updates, we can call the following function.
 
 ```julia
 function add_momentum!(U::BlockedUpdate)
@@ -2358,7 +2358,9 @@ end
 
 Constraints on factors in a tensor decomposition can arise naturally when modeling physical problems. A common class of constraints is normalizations which restrict a factor or slices of a factor to have unit norm. These are sometimes intersected with interval constraints such as requiring entries to be nonnegative.
 
-For example, the demixing of $R$ probibility densities $b_1 , dots.h , b_R$ from $I$ mixtures $y_1 , dots.h , y_I$ for $I > R$ can be accomplished with a nonneagive matrix factorization (cite). We have the system of equations
+With constraints being defined in a flexible manner (see @sec-constraints), we decided to test conventional wisdom that Euclidean projections are the right kind of map to use when enforcing a constraint. A constraint that came up in recent applications of tensor decomposition to geology @graham_tracing_2025 was enforcing the $1$st mode slices of a tensor (e.g.~rows in a matrix) or $3$rd mode fibres of a third order tensor to lie in their respective simplex.
+
+For example, the demixing of $R$ probability densities $b_1 , dots.h , b_R$ from $I$ mixtures $y_1 , dots.h , y_I$ for $I > R$ can be accomplished with a nonnegative matrix factorization (cite). We have the system of equations
 
 $ med y_1 & = a_11 med b_1 + a_12 med b_2 + dots.h + a_(1 R) med b_R\
 med y_2 & = a_21 med b_1 + a_22 med b_2 + dots.h + a_(2 R) med b_R\
@@ -2366,45 +2368,45 @@ med y_2 & = a_21 med b_1 + a_22 med b_2 + dots.h + a_(2 R) med b_R\
 med y_I & = a_(I 1) med b_1 + a_(I 2) med b_2 + dots.h + a_(I R) med b_R\
  $
 
-with unknown mixing coefficients $a_(i , r)$ and densities $b_r$. If we can discritized the mixtures $y_i$, we can rewrite this system as a rank $R$ factorization of the matrix $Y$ where $Y [i , :] = y_i$ and
+with unknown mixing coefficients $a_(i , r)$ and densities $b_r$. If we can discretized the mixtures $y_i$, we can rewrite this system as a rank $R$ factorization of the matrix $Y$ where $Y [i , :] = y_i$ and
 
 $ mat(delim: "[", arrow.l, med y_1^tack.b, arrow.r; arrow.l, med y_2^tack.b, arrow.r; arrow.l, med dots.v, arrow.r; arrow.l, med y_I^tack.b, arrow.r) & = mat(delim: "[", a_11, a_12, dots.h, a_(1 R); a_21, a_22, dots.h, a_(2 R); dots.v, , , dots.v; a_(I 1), a_(I 2), dots.h, a_(I R); #none) mat(delim: "[", arrow.l, med b_1^tack.b, arrow.r; arrow.l, med b_2^tack.b, arrow.r; med, dots.v, med; arrow.l, med b_R^tack.b, arrow.r) $
 
 $ Y = A B , $
 
-for matricies $A$ and $B$.
+for matrices $A$ and $B$.
 
-For the factorization to remain interpretable, we need to ensure each row $b_r$ of $B$ is a density. This means we would like to constrain each row $B [r , :] = b_r$ to the simplex#footnote[This assumes the entries $b_r [j]$ in the discretization of the density $b_r$ represent probibilities or areas under some continuous 1D density function, not the sample values of the density $b_r (x_j)$. Assuming $J$ sample points $x_j$ of a grid on the interval $[x_0 , x_J]$, the entries of the discretization vector can be defined as $b_r [j] = b_r (x_j) (x_j - x_(j - 1))$.]
+For the factorization to remain interpretable, we need to ensure each row $b_r$ of $B$ is a density. This means we would like to constrain each row $B [r , :] = b_r$ to the simplex#footnote[This assumes the entries $b_r [j]$ in the discretization of the density $b_r$ represent probabilities or areas under some continuous 1D density function, and not the sample values of the density $b_r (x_j)$. One possible discretization is to take $J$ sample points $x_j$ of a grid on the interval $[x_0 , x_J]$ where $b_r$ is supported, and define the entries of the discretization to be $B [r , j] = b_r [j] = b_r (x_j) (x_j - x_(j - 1))$. For normalized densities $integral_(x_0)^(x_J) b_r (x) d x = 1$, the sum of the entries $sum_(j = 1)^J b_r [j] approx 1$ when large enough number of samples $J$ are taken.]
 
-$ b_r in Delta_J = {v in bb(R)^J mid(bar.v) sum_(j = 1)^J v [j] = 1 quad upright("and") quad forall j in [J] , med med v [j] gt.eq 0} , $
+$ b_r in Delta_J = {v in bb(R)_(+)^J mid(bar.v) sum_(j = 1)^J v [j] = 1} , $
 
 which we can write as constraining the matrix $B$ to the simplex
 
-$ B in Delta_(R , J) = {B in bb(R)^(R times J) mid(bar.v) forall r in [R] , thin sum_(j = 1)^J B [r , j] = 1 quad upright("and") quad forall (r , j) in [R] times [J] , thin B [r , j] gt.eq 0} . $
+$ B in Delta_J^R = {B in bb(R)_(+)^(R times J) mid(bar.v) forall r in [R] , thin sum_(j = 1)^J B [r , j] = 1} . $
 
 Given the rows of $B$ represent densities, to ensure the rows of the reconstructed matrix $hat(Y) = A B$ are still densities, we need the mixing coefficients to be nonnegative $a_(i r) gt.eq 0$ and rows to sum to one $sum_r a_(i r) = 1$. This constrains the matrix $A$ to the simplex
 
-$ A in Delta_(I , R) = {A in bb(R)^(I times R) mid(bar.v) forall i in [I] , thin sum_(r = 1)^R A [i , r] = 1 quad upright("and") quad forall (i , r) in [I] times [R] , thin A [i , r] gt.eq 0} . $
+$ A in Delta_R^I = {A in bb(R)_(+)^(I times R) mid(bar.v) forall i in [I] , thin sum_(r = 1)^R A [i , r] = 1} . $
+
+The question we investigate in this section is the following: how can we best constrain the factors $A$ and $B$ to their respective simplexes, while performing block gradient decent to minimize the least squared error $1 / 2 norm(A B - Y)_F^2$?
 
 == The two approaches for simplex constraints
 <the-two-approaches-for-simplex-constraints>
-With constraints being defined in a flexible manner (see @sec-constraints), we decided to test conventional wisdom that Euclidean projections are the right kind of map to use when enforcing a constraint. A constraint that came up in applications was enforcing the $1$st mode slices of a tensor (e.g.~rows in a matrix) or $3$rd mode fibres of a third order tensor to lie in their respective simplex.
+To constrain a vector $v in bb(R)^J$ to the simplex
 
-For example, to constrain a vector $v in bb(R)^J$ to the simplex
-
-$ Delta_J = {v in bb(R)^J mid(bar.v) sum_(j = 1)^J v [j] = 1 , quad upright("and") quad forall j in [J] , med med v [j] gt.eq 0} , $
+$ Delta_J = {v in bb(R)_(+)^J mid(bar.v) sum_(j = 1)^J v [j] = 1} , $
 
 we could apply a Euclidean projection
 
 $ v arrow.l arg thin min_(u in Delta_J) lr(bar.v.double u - v bar.v.double)_2^2 , $
 
-or a generalized Kullback-Leibler divergence projection
+or a generalized Kullback-Leibler (KL) divergence projection
 
 #math.equation(block: true, numbering: "(1)", [ $ v arrow.l arg thin min_(u in Delta_J) sum_j u [j] log (frac(u [j], v [j])) - u [j] + v [j] $ ])<eq-kl-projection>
 
-amoung other reasonable maps onto $Delta_J$.
+among other reasonable maps onto $Delta_J$.
 
-The Eucledian simplex projection can be done with the following implimentation of Chen and Ye’s algorithm @chen_projection_2011. The essence of the algorithm is to efficiently compute the special $t in bb(R)$ so that
+The Euclidean simplex projection can be done with the following implementation of Chen and Ye’s algorithm @chen_projection_2011. The essence of the algorithm is to efficiently compute the special $t in bb(R)$ so that
 
 #math.equation(block: true, numbering: "(1)", [ $ v arrow.l max (0 , v - t bb(1)) in Delta_J . $ ])<eq-simplex-projection>
 
@@ -2465,12 +2467,12 @@ To extend the applicability of this map to any $v$ (when there is at least one p
 
 $ v arrow.l arg thin min_(u in bb(R)_(+)^J) lr(bar.v.double u - v bar.v.double)_2^2 = max (0 , v) , $
 
-and then apply the divergence projection.#footnote[In the unfortunate case where every entry of $v$ is nonpositive, we can fallback to the Euclean simplex projection.] All together, this looks like #math.equation(block: true, numbering: "(1)", [ $ v arrow.l frac(max (0 , v), sum_j max (0 , v [j])) . $ ])<eq-nnpr>
+and then apply the divergence projection.#footnote[In the unfortunate case where every entry of $v$ is nonpositive, we can fallback to the Euclidean simplex projection.] All together, this looks like #math.equation(block: true, numbering: "(1)", [ $ v arrow.l frac(max (0 , v), sum_j max (0 , v [j])) . $ ])<eq-nnpr>
 
-We will refer to @eq-nnpr as nonnegative projection and rescaling (NNPR). NNPR has the following implimentation in BlockTensorDecomposition.jl.
+We will refer to @eq-nnpr as nonnegative projection and rescaling (NNPR). NNPR has the following implementation in BlockTensorDecomposition.jl.
 
 ```julia
-nnpr! = l1scale! ∘ nonnegative!
+l1scale! ∘ nonnegative!
 ```
 
 We define the two constraints as the following, using the constraint language from @sec-constraints.
@@ -2481,8 +2483,362 @@ l1scale! = ScaledNormalization(l1norm)
 l1norm(x) = mapreduce(abs, +, x)
 ```
 
-== Constraining Tensor Factorizations to Simplexes
-<constraining-tensor-factorizations-to-simplexes>
+== The Rescaling Trick for Matrix Factorization
+<sec-matrix-rescaling>
+- Explain that we can move the weight from one matrix to another
+
+Comparing the two methods of constraining a vector to the simplex 1) by Euclidean projection (@eq-simplex-projection) or 2) nonnegative projection and rescaling (NNPR, @eq-nnpr), the latter offers a few advantages. NNPR is cheaper and conceptually easier to compute. Another advantage of NNPR to tensor factorizations, is its ability to constrain a factor without loosing progress while performing gradient descent.
+
+For example, consider the low rank factorization problem of finding matrices $A , B$ such that $Y = A B$ where you would like the sum of entries in $B$ to be one
+
+#math.equation(block: true, numbering: "(1)", [ $ min_(A in bb(R)^(I times R) , B in bb(R)^(R times J)) 1 / 2 norm(A B - Y)_F^2 quad upright("s.t.") quad B in Delta_(R J) = {B in bb(R)_(+)^(R times J) mid(bar.v) sum_(r , j) B [r , j] = 1} . $ ])<eq-B-full-simplex-problem>
+
+The basic alternating projected gradient descent algorithm using a Euclidean projection would be
+
+$ A & arrow.l A - 1 / L_A nabla_A f (A , B)\
+B & arrow.l E P_(Delta_(R J)) (B - 1 / L_B nabla_B f (A , B)) $
+
+where $f (A , B) = 1 / 2 norm(A B - Y)_F^2$ and $E P_(Delta_(R J))$ is the Euclidean projection onto the simplex $Delta_(R J)$. In the event the updated value for $B$,
+
+$ B - 1 / L_B nabla_B f (A , B) := hat(B) in bb(R)_(+)^(R times J) $
+
+is already nonnegative, the objective $f$ at the new point $(A , E P_(Delta_(R J)) (hat(B)))$ could be bigger or smaller than the objective before the Euclidean projection $f (A , hat(B))$.
+
+If we use the nonnegative projection and rescaling $upright("NNPR")_(Delta_(R J))$ instead of the Euclidean projection $E P_(Delta_(R J))$ when $hat(B)$ is already nonnegative, then $ upright("NNPR")_(Delta_(R J)) (hat(B)) = frac(1, sum_(r j) B [r , j]) hat(B) := c^(- 1) hat(B) . $
+
+This means the objective value $f$ at the point $(c^(- 1) A , c hat(B))$ will be the same as the objective value before the KL divergence projection
+
+$ f (c A , upright("NNPR")_(Delta_(R J)) (hat(B))) = f (c A , c^(- 1) hat(B)) = 1 / 2 norm(A c c^(- 1) B - Y)_F^2 = 1 / 2 norm(A B - Y)_F^2 = f (A , hat(B)) . $
+
+This suggests the following update may be a useful alternative to the standard projected gradient descent
+
+$ A & arrow.l A - 1 / L_A nabla_A f (A , B)\
+B & arrow.l B - 1 / L_B nabla_B f (A , B)\
+c & arrow.l sum_(r , j) B [r , j]\
+A & arrow.l c A\
+B & arrow.l c^(- 1) B . $
+
+Of course, it is possible that $hat(B) = B - 1 / L_B nabla_B f (A , B)$ has negative entries. So we use both the nonnegative projection and rescaling part of NNPR in the alternating gradient descent with rescaling update
+
+#math.equation(block: true, numbering: "(1)", [ $ A & arrow.l A - 1 / L_A nabla_A f (A , B)\
+B & arrow.l max (0 , B - 1 / L_B nabla_B f (A , B))\
+c & arrow.l sum_(r , j) B [r , j]\
+A & arrow.l c A\
+B & arrow.l c^(- 1) B . $ ])<eq-nnpr-gd>
+
+This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[l1scale! ∘ nonnegative!, noconstraint],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+== Generalizing the Matrix Rescaling Trick
+<generalizing-the-matrix-rescaling-trick>
+The rescaling trick discussed in @sec-matrix-rescaling applies more generally to other tensor factorization, other simplex-type constraints, and other `ScaledNormalization`s.
+
+=== Simplex-type constraints
+<simplex-type-constraints>
+Instead of the matrix factorization problem where $B in Delta_(R J)$ is constrained to the full simplex (@eq-B-full-simplex-problem), we can apply the rescaling trick the problem where the rows of $B$ are constrained to the simplex
+
+#math.equation(block: true, numbering: "(1)", [ $ min_(A in bb(R)^(I times R)\
+B in bb(R)^(R times J)) 1 / 2 norm(A B - Y)_F^2 quad upright("s.t.") quad B in Delta_J^R = {B in bb(R)_(+)^(R times J) mid(bar.v) forall r in [R] , thin sum_(j = 1)^J B [r , j] = 1} . $ ])<eq-B-row-simplex-problem>
+
+This could make sense in applications where rows of $B$ represent probability densities such as the demixing problem discussed at the start of this section (@sec-ppr).
+
+We can adjust the alternating gradient descent update with NNPR (@eq-nnpr-gd) to the following update #math.equation(block: true, numbering: "(1)", [ $ A & arrow.l A - 1 / L_A nabla_A f (A , B)\
+B & arrow.l max (0 , B - 1 / L_B nabla_B f (A , B))\
+C [r , r] & arrow.l sum_j B [r , j] quad upright("(") C in bb(R)^(R times R) upright(" is diagonal)")\
+A & arrow.l A C\
+B & arrow.l C^(- 1) B . $ ])<eq-nnpr-gd-B-rows>
+
+It is clear that the objective value would be maintained for any invertible matrix $C$
+
+$ f (A C , C^(- 1) B) = 1 / 2 norm(A C C^(- 1) B - Y)_F^2 = 1 / 2 norm(A B - Y)_F^2 = f (A , B) . $
+
+This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[l1scale_rows! ∘ nonnegative!, noconstraint],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+#block[
+#callout(
+body: 
+[
+This trick would also work if we wanted the columns of $A$ normalized to the simplex. But it does #emph[not] work when we would like each column of $B$ to be constrained to the simplex. The normalizing matrix $C$ would have to be multiplied to the right of $B$ rather than between $A$ amd $B$. A similar story can be said with the rows of $A$.
+
+]
+, 
+title: 
+[
+Warning
+]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+"⚠"
+)
+]
+=== Other `ScaledNormalization`’s
+<other-scalednormalizations>
+This trick can also apply to other normalization constraints. For example, we may want the maximum magnitude of each row of $B$ to one. This could make sense in applications where each row represents a waveform audio file (WAV) which has an audio format that takes values between $- 1$ and $1$. Instead of the Euclidean projection#footnote[In audio processing, this is commonly called "clipping".]
+
+$ v arrow.l max (- 1 , min (1 , v)) $
+
+onto the infinity ball
+
+$ cal(B)_J (oo) = {v in bb(R)^J mid(bar.v) max_(j in [J]) abs(v [j]) lt.eq 1} , $
+
+we can apply the rescaling#footnote[In audio processing, this is commonly called "normalizing". Normalizing is often preferred to clipping since it maintains the perceived audio, but just at a different volume than the original signal. Clipping often introduces undesirable distortion (think of sound from a megaphone).]
+
+$ v arrow.l frac(v, max_(j in [J]) abs(v [j])) . $
+
+Applying this principle to the factorization problem
+
+#math.equation(block: true, numbering: "(1)", [ $ min_(A in bb(R)^(I times R)\
+B in bb(R)^(R times J)) 1 / 2 norm(A B - Y)_F^2 quad upright("s.t.") quad B in cal(B)_J^R (oo) = {B in bb(R)^(R times J) mid(bar.v) forall r in [R] , thin max_(j in [J]) abs(B [r , j]) lt.eq 1} $ ])<eq-B-row-infinity-problem>
+
+gives us the update
+
+#math.equation(block: true, numbering: "(1)", [ $ A & arrow.l A - 1 / L_A nabla_A f (A , B)\
+B & arrow.l B - 1 / L_B nabla_B f (A , B)\
+C [r , r] & arrow.l max_(j in [J]) abs(B [r , j]) quad upright("(") C in bb(R)^(R times R) upright(" is diagonal)")\
+A & arrow.l A C\
+B & arrow.l C^(- 1) B . $ ])<eq-nnpr-gd-B-rows-infinity>
+
+This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[linftyscale_rows! ∘ nonnegative!, noconstraint],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+A similar story can be made about other $p$-norm balls $cal(B) (p)$ or spheres.
+
+=== Other Tensor Factorizations
+<other-tensor-factorizations>
+The rescaling trick is applicable to other tensor factorizations, but is dependent on the exact model and constraints.
+
+The simplest extension of matrix factorization is the Tucker-1 factorization of an order $N$ tensor $Y = B times_1 A$.
+
+If we would like the first order slices of $B$ to be constrained to the simplex
+
+$ B [r , : , :] in Delta_(J K) & = {B [r , : , :] in bb(R)_(+)^(J times K) mid(bar.v) sum_(j , k) B [r , j , k] = 1}\
+B in Delta_(J K)^R & = {B in bb(R)_(+)^(R times J times K) mid(bar.v) forall r in [R] , thin sum_(j , k) B [r , j , k] = 1} , $
+
+we can solve the problem
+
+#math.equation(block: true, numbering: "(1)", [ $ min_(A in bb(R)^(I times R)\
+B in bb(R)^(R times J times K)) 1 / 2 norm(B times_1 A - Y)_F^2 quad upright("s.t.") quad B in Delta_(J K)^R . $ ])<eq-B-slice-simplex-problem>
+
+by iterating the update
+
+#math.equation(block: true, numbering: "(1)", [ $ A & arrow.l A - 1 / L_A nabla_A f (A , B)\
+B & arrow.l B - 1 / L_B nabla_B f (A , B)\
+C [r , r] & arrow.l sum_(j in [J] , k in [K]) B [r , j , k] quad upright("(") C in bb(R)^(R times R) upright(" is diagonal)")\
+A & arrow.l A C\
+B & arrow.l B times_1 C^(- 1) . $ ])<eq-nnpr-gd-B-slices-simplex>
+
+This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[l1scale_1slices! ∘ nonnegative!, noconstraint],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+A setting where this model applies would be if the first order slices of $B$ represent 2-dimensional probability densities.#footnote[If sampling a 2-dimensional probability density $p_r (x , y)$ on a rectangular grid, entries of $B$ could be interpreted as $B [r , j , k] = p_r (x_j , y_k) (x_j - x_(j - 1)) (y_k - y_(k - 1))$.]
+
+For constraints that constrain an entire factor to some scale, the weight of that factor can be distributed to one or multiple other factors. For example, we may wish to find a CP-decomposition of an order 4-tensor $Y = lr(bracket.l.double A , B , C , D bracket.r.double)$ where the Frobenius norm of $A$ is $1$. In the rescaling step, we could move the norm of $A$ to just the matrix $B$
+
+$ c arrow.l norm(A)_F\
+A arrow.l c^(- 1) A\
+B arrow.l c B $
+
+or all three other factors equally
+
+$ c arrow.l norm(A)_F\
+A arrow.l c^(- 1) A\
+B arrow.l c^(1 \/ 3) B\
+C arrow.l c^(1 \/ 3) C\
+D arrow.l c^(1 \/ 3) D . $
+
+In either case, the recombined tensor remains unchanged
+
+$ lr(bracket.l.double c^(- 1) A , c B , C , D bracket.r.double) = lr(bracket.l.double c^(- 1) A , c^(1 \/ 3) B , c^(1 \/ 3) C , c^(1 \/ 3) D bracket.r.double) = lr(bracket.l.double A , B , C , D bracket.r.double) . $
+
+The two algorithms can be called in BlockTensorDecomposition.jl with the following code.
+
+```julia
+options = (
+    model=CPDecomposition,
+    constraints=ConstraintUpdate(1, l2scaled!;
+        whats_rescaled=(Y -> factor(Y, 2))), # B is the second factor
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+```julia
+options = (
+    model=CPDecomposition,
+    constraints=ConstraintUpdate(1, l2scaled!),
+    # assumes all other factors are rescaled
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+== Constraining Multiple Factors
+<constraining-multiple-factors>
+When constraining multiple factors with the rescaling approach, there must be at least one factor that is not constrained with rescaling.
+
+Consider the following matrix factorization $Y = A B$ problem where we want both the columns of $A$ and rows of $B$ to be constrained to the simplex.#footnote[We define the constraint on $A$ in terms of $A^tack.b$ to be consistent with the simplex constraint defined on $B$.]
+
+#math.equation(block: true, numbering: "(1)", [ $  & min_(A in bb(R)^(I times R)\
+B in bb(R)^(R times J)) 1 / 2 norm(A B - Y)_F^2\
+ & upright("s.t.")\
+quad A^tack.b in Delta_I^R & = {A^tack.b in bb(R)_(+)^(R times I) mid(bar.v) forall r in [R] , thin sum_i A^tack.b [r , i] = 1}\
+quad B in Delta_J^R & = {B in bb(R)_(+)^(R times J) mid(bar.v) forall r in [R] , thin sum_j B [r , j] = 1} $ ])<eq-AB-row-col-simplex-problem>
+
+If we try to rescale both $A$ and $B$ while moving the weights to the other factor, we often observe numerical instability or blow up. To be clear, the following update does not seem to work in practice.
+
+$ A & arrow.l max (0 , A - 1 / L_A nabla_A f (A , B))\
+C_A [r , r] & arrow.l sum_(i in [I]) A [i , r]\
+A & arrow.l A C_A^(- 1)\
+B & arrow.l C_A B\
+B & arrow.l max (0 , B - 1 / L_B nabla_B f (A , B))\
+C_B [r , r] & arrow.l sum_(j in [J]) B [r , j]\
+A & arrow.l A C_B\
+B & arrow.l C_B^(- 1) B $
+
+The relevant call in BlockTensorDecomposition would be the following.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[ # B is the 0th factor, A is the 1st factor
+        ConstraintUpdate(1, l1scale_cols! ∘ nonnegative!;
+            whats_rescaled=(x -> eachrow(factor(x, 0)))),
+        ConstraintUpdate(0, l1scale_rows! ∘ nonnegative!;
+            whats_rescaled=(x -> eachcol(factor(x, 1)))),
+    ],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+Instead, one of the factors can be scaled without moving the weight to the other factor. For example, if we wanted to remove the 4th line $B arrow.l C_A B$, we can call the following.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[ # B is the 0th factor, A is the 1st factor
+        ConstraintUpdate(1, l1scale_cols! ∘ nonnegative!;
+            whats_rescaled=nothing),
+        ConstraintUpdate(0, l1scale_rows! ∘ nonnegative!;
+            whats_rescaled=(x -> eachcol(factor(x, 1)))),
+    ],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+This approach seems to work better in practice. The same principle of relaxing how constraints are enforced can be applied to the very similar problem
+
+#math.equation(block: true, numbering: "(1)", [ $  & min_(A in bb(R)^(I times R)\
+B in bb(R)^(R times J)) 1 / 2 norm(A B - Y)_F^2\
+ & upright("s.t.")\
+quad A in Delta_R^I & = {A in bb(R)_(+)^(I times R) mid(bar.v) forall i in [I] , thin sum_r A [i , r] = 1}\
+quad B in Delta_J^R & = {B in bb(R)_(+)^(R times J) mid(bar.v) forall r in [R] , thin sum_j B [r , j] = 1} , $ ])<eq-AB-row-simplex-problem>
+
+where we want both the rows of $A$ and $B$ to be constrained to the simplex. Here, we cannot move the weights from $A$ to $B$ since there are $I$ rows of $A$ but only $R$ rows of $B$. Instead, we relax the problem to
+
+#math.equation(block: true, numbering: "(1)", [ $  & min_(A in bb(R)^(I times R)\
+B in bb(R)^(R times J)) 1 / 2 norm(A B - Y)_F^2\
+ & upright("s.t.")\
+ & quad A in bb(R)_(+)^(I times R)\
+quad B in Delta_J^R & = {B in bb(R)_(+)^(R times J) mid(bar.v) forall r in [R] , thin sum_j B [r , j] = 1} . $ ])<eq-AB-row-simplex-problem-relaxed>
+
+The relevant update for this relaxed problem would be
+
+$ A & arrow.l max (0 , A - 1 / L_A nabla_A f (A , B))\
+B & arrow.l max (0 , B - 1 / L_B nabla_B f (A , B))\
+C_B [r , r] & arrow.l sum_(j in [J]) B [r , j]\
+A & arrow.l A C_B\
+B & arrow.l C_B^(- 1) B $
+
+and is called in BlockTensorDecomposition.jl with the following code.
+
+```julia
+options = (
+    model=Tucker1,
+    constraints=[ # B is the 0th factor, A is the 1st factor
+        ConstraintUpdate(1, nonnegative!),
+        ConstraintUpdate(0, l1scale_rows! ∘ nonnegative!;
+            whats_rescaled=(x -> eachcol(factor(x, 1)))),
+    ],
+)
+
+decomposition, stats, kwargs = factorize(Y; options...);
+```
+
+We justify this relaxation with the following argument. When the rows of $Y$ are in the simplex, we can bound how close the rows of $A$ are to summing to one with @thm-closeness-to-simplex.
+
+#theorem("Closeness of A’s rows summing to one")[
+Let $Y in Delta_J^I$, $A in bb(R)_(+)^(I times R)$, and $B in Delta_J^R$ where
+
+$ norm(Y - A B)_F lt.eq epsilon.alt . $
+
+Then for any row $i in [I]$, the sum of the row is $epsilon.alt sqrt(J)$ close to 1
+
+$ abs(1 - sum_(r in [R]) A [i , r]) lt.eq epsilon.alt sqrt(J) . $
+
+#block[
+#emph[Proof]. We have the following inequalities.
+
+$ norm(Y - A B)_F & lt.eq epsilon.alt\
+1 / sqrt(J) norm(Y - A B)_oo & lt.eq epsilon.alt quad (1 / sqrt(J) norm(X)_oo lt.eq norm(X)_2 lt.eq norm(X)_F med upright("for") med X in bb(R)^(I times J))\
+1 / sqrt(J) max_(i in [I]) (sum_(j in [J]) abs((Y - A B) [i , j])) & lt.eq epsilon.alt\
+max_(i in [I]) (sum_(j in [J]) abs((Y - A B) [i , j])) & lt.eq epsilon.alt sqrt(J) $ So for all rows $i in [I]$,
+
+$ epsilon.alt sqrt(J) & gt.eq sum_(j in [J]) abs((Y - A B) [i , j])\
+ & gt.eq abs(sum_(j in [J]) (Y - A B) [i , j])\
+ & = abs(sum_(j in [J]) Y [i , j] - sum_(j in [J]) (A B) [i , j])\
+ & = abs(1 - sum_(j in [J]) sum_(r in [R]) A [i , r] B [r , j]) quad (upright("since") med Y in Delta_J^I)\
+ & = abs(1 - sum_(r in [R]) A [i , r] (sum_(j in [J]) B [r , j]))\
+ & = abs(1 - sum_(r in [R]) A [i , r]) quad (upright("since") med B in Delta_J^R) . $
+
+]
+] <thm-closeness-to-simplex>
+@thm-closeness-to-simplex implies that solutions to the relaxed problem (@eq-AB-row-simplex-problem-relaxed) are approximate solutions to the problem shown in @eq-AB-row-simplex-problem. Moreover, if there exists an exact factorization $Y = A B$ for the relaxed problem, then it is also a solution the original problem.
+
+== Experiment
+<experiment>
+To illustrate the advantage of this rescaling trick over Euclidean projection, we will consider solving the problem shown in @eq-AB-row-simplex-problem where $Y in Delta_J^I$ and there exists an exact factorization $Y = A B$ with $A in Delta_R^I$ and $B in Delta_J^R$ using eight different algorithms.
+
 = Multi-scale
 <sec-multi-scale>
 - use a coarse discretization along continuous dimensions
