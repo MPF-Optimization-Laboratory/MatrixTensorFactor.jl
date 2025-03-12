@@ -2845,6 +2845,45 @@ To illustrate the advantage of this rescaling trick over Euclidean projection, w
 - factorize
 - linearly interpolate decomposition to warm start larger decompositions
 
+In many applications @saylor_CharacterizingSedimentSources_2019 \[TODO add spatial transcriptomics\], the data tensor $Y$ represents a discretization of continuous data. In these cases, we can decide how finely or coarsely to sample the data and effectively have control over the dimension of tensor needing to be factored.
+
+For high quality results, we would like as fine of a discretization as possible. Or if the data is already collected in a discretized form, we would like to incorporate all the data. But smaller tensors are faster to decompose because there are fewer parameters to fit and learn. Most matrix operations like addition, multiplication, and finding their norm are also faster for smaller tensors.
+
+We propose a multiresolution approach inspired by multi-grid \[\] and wavelets \[\] that factorizes the data at progressively finer scales, using the . The can greatly speed up how fast large scale tensors can be factorized.
+
+== Basic Approach
+<sec-basic-multi-scale>
+We will start with same example from the beginning of @sec-ppr. Give a tensor $Y in bb(R)_(+)^(I times J)$ representing mixtures of discretized densities, we would like to demix the densities according to the model
+
+$ mat(delim: "[", arrow.l, med y_1^tack.b, arrow.r; arrow.l, med y_2^tack.b, arrow.r; arrow.l, med dots.v, arrow.r; arrow.l, med y_I^tack.b, arrow.r) & = mat(delim: "[", a_11, a_12, dots.h, a_(1 R); a_21, a_22, dots.h, a_(2 R); dots.v, , , dots.v; a_(I 1), a_(I 2), dots.h, a_(I R); #none) mat(delim: "[", arrow.l, med b_1^tack.b, arrow.r; arrow.l, med b_2^tack.b, arrow.r; med, dots.v, med; arrow.l, med b_R^tack.b, arrow.r) $
+
+or $ Y = A B . $
+
+Notice that the rows of $Y$ and $B$ represent samples of continuous densities, so the size of their second dimension $J$ is arbitrary. Suppose each of the 1-dimensional densities are uniformly discretized on an interval $[a , b]$ with $J_s$ number of points. We use $s$ to represent the scale or spacing of the number of points. For example, $J_1 = J$ would be the finest scale using every point in a discretization $x_1 , x_2 , x_3 dots.h , x_(J_1)$ with $x_1 = a$ and $x_(J_1) = b$, $J_2 = J_1 \/ 2$ would be coarser and use every other point $x_1 , x_3 , x_5 , dots.h x_(J_1 - 1)$.#footnote[We assume $J$ is even here, but we could define $J_2 = (J_1 - 1) \/ 2$ if $J_1 = J$ is odd.]
+
+The basic approach is to factorize $Y_2 in bb(R)^(I times J_2)$ with entries $Y_2 [i , j] = y_i (x_(2 j - 1))$ to obtain $A_2^(T_2) in bb(R)^(I times R)$ and $B_(""^(T_2)) in bb(R)^(I times J_2)$ after $T_2$ many iterations. We use the factors $A_2^(T_2)$ and $B_2^(T_2)$ to initialize the factorization of $Y_1 = Y in bb(R)^(I times J_1)$. We can initialize $A_1^0 = A_2^(T_2)$ since the size of $A$ is the same at both scales, and repeat every entry of $B$ to initialize $B_1^0$ with entries $B_1^0 [i , j] = B_2^(T_2) [i , ⌈ j \/ 2 ⌉]$.
+
+Factorizing $Y_2$ is faster than factorizing $Y_1$ since 1) there are fewer parameters to learn#footnote[Only $(I + J_2) R$ at the coarse scale which is less than $(I + J_1) R$ for the fine scale.] and 2) most arithmetic like addition and multiplication, as well as calling other operators like `norm` are faster to compute. This gives us a better initialization for $A$ and $B$ in the factorization of $Y_1$ than some other random initialization so that fewer iterations are needed at the more expensive finer scale.
+
+== General Approach
+<general-approach>
+The basic approach can be generalized in two ways: the data could be continuous in multiple dimensions, and we can recursively apply this multi-scale approach to progressively refine a very coarse factorization.
+
+Suppose we are given a tensor $Y in bb(R)^(I_1 times dots.h.c times I_N)$ where the dimensions $I_(n_1) , dots.h , I_(n_M)$ represent a grided discretization of $M$-dimensional continuous data.
+
+A natural extension of the example shown in @sec-basic-multi-scale would be to higher dimensional distributions. For example, we could consider an order-$3$ tensor where the horizontal slices correspond to a $2$-dimensional discretization of a bivariate density. Entries of the input tensor $Y$ would be given by $Y [i , j , k] = f_i (x_j , y_k)$ for continuous probability density functions $f_i : bb(R)^2 arrow.r bb(R)_(+)$ for a 2D grid of points $(x_j , y_k)$. In this example, the second and third dimensions would be continuous.
+
+Factors that de
+
+, and $J_s$ would be a discretization that uses every $2^s$ points, or $J_s = 2^(S - s) + 1$ points in total.
+
+The basic approach will be to factorize the coarsest version of $Y$, $Y_S in bb(R)^(I times J_S)$, to obtain $A_S$ and $B_S$.
+
+== Convergence of a Multi-scale Method
+<convergence-of-a-multi-scale-method>
+- show the multi-scale method has tighter bounds than regular gradient descent for lipschitz data
+- this assumes no constraints
+
 = Conclusion
 <conclusion>
 - all-in-one package
