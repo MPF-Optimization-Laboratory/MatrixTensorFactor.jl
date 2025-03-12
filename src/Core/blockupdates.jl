@@ -33,8 +33,16 @@ end
 
 function (step::LipschitzStep)(x; kwargs...)
     L = step.lipschitz(x)
-    return L^(-1) # allow for Lipschitz to be a diagonal matrix
+    try
+        return L^(-1)  # allow for Lipschitz to be a diagonal matrix
+    catch
+        @warn "Could not invert the Lipschitz constant to get a stepsize. Ignoring zero coordinates."
+
+        return _safe_invert.(L)
+    end
 end
+
+_safe_invert(x) = iszero(x) ? x : x^(-1)
 
 function (step::LipschitzStep)(x::Tucker; kwargs...)
     L = step.lipschitz(x)
