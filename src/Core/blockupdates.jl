@@ -120,14 +120,14 @@ function make_block_lipschitz(T::Tucker1, n::Integer, Y::AbstractArray; objectiv
     if n==0 # the core is the zeroth factor
         function lipschitz0(T::Tucker1; kwargs...)
             A = matrix_factor(T, 1)
-            return Diagonal_col_norm(A'A) # Diagonal(norm2.(eachcol(A)))
+            return Diagonal_col_norm(A'A)#Diagonal(A'A)# # Diagonal(norm2.(eachcol(A)))
         end
         return lipschitz0
 
     elseif n==1 # the matrix is the zeroth factor
         function lipschitz1(T::Tucker1; kwargs...)
             C = core(T)
-            return Diagonal_col_norm(slicewise_dot(C, C)) #Diagonal(norm2.(eachslice(C; dims=1)))
+            return Diagonal_col_norm(slicewise_dot(C, C))#Diagonal(slicewise_dot(C, C))# #Diagonal(norm2.(eachslice(C; dims=1)))
         end
         return lipschitz1
 
@@ -427,7 +427,7 @@ function make_blockGD_combines(T::CPDecomposition, n::Integer, Y::AbstractArray;
         return combine_matrix
 
     else
-        error("No $(n)th factor in Tucker1")
+        error("No $(n)th factor in CPDecomposition")
     end
 end
 
