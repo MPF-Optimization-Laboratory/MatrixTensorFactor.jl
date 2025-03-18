@@ -31,7 +31,7 @@ l1scale_rows!(A_init)
 B_init = abs_randn(R, J)
 l1scale_rows!(B_init)
 
-n_iterations = 5000
+n_iterations = 20000
 
 options = (
     model=Tucker1,
@@ -74,7 +74,7 @@ algorithms = (
     simplexB = [euclideanProjB!, nonnegativeA!],
     bothScale = [scaleB_rows!, scaleA_rows!],
     scaleA = [nonnegativeB!, scaleA_rows!],
-    scaleB = [scaleB_rows!, nonnegativeA!], #
+    #scaleB = [scaleB_rows!, nonnegativeA!], #
     rescaleB_scaleA = [scaleB_rows_rescaleA!, scaleA_rows!],
     rescaleB = [scaleB_rows_rescaleA!, nonnegativeA!],
 )
@@ -97,6 +97,7 @@ p = plot(; yscale=:log10)
 kwargs = nothing
 stats = nothing
 for (algorithm, constraints) in pairs(algorithms)
+    @show algorithm
     X_init = Tucker1((copy(B_init), copy(A_init))) # Fresh decomposition since it gets mutated
     # but still the same initialization for A and B
 
