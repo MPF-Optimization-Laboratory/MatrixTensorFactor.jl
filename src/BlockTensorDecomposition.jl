@@ -70,6 +70,9 @@ export smart_insert!, smart_interlase!, group_by_factor
 #include("./factorize.jl")
 export factorize
 
+#include("./multiscale.jl")
+export coarsen
+
 # Legacy code
 include("./MatrixTensorFactor/MatrixTensorFactor.jl")
 using .MatrixTensorFactor

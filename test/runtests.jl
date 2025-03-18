@@ -525,4 +525,14 @@ end
     # @test all(B1 .≈ B2)
 end
 
+@testset "MultiScale" begin
+    Y = randn(12, 12, 12)
+
+    @test coarsen(Y, 1) == Y
+    @test coarsen(Y, 2) == Y[begin:2:end, begin:2:end, begin:2:end]
+    @test coarsen(Y, 3; dims=2) == Y[:, begin:3:end, :]
+    @test coarsen(Y, 4; dims=(1, 3)) == Y[begin:4:end, :, begin:4:end]
+    @test coarsen(Y, 12) == Y[begin, begin, begin]
+end
+
 end
