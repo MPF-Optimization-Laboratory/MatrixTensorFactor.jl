@@ -2812,7 +2812,7 @@ Let $Y in Delta_J^I$, $A in bb(R)_(+)^(I times R)$, and $B in Delta_J^R$ where
 
 $ norm(Y - A B)_F lt.eq epsilon.alt . $
 
-Then for any row $i in [I]$, the sum of the row is $epsilon.alt sqrt(J)$ close to 1
+Then for any row $i in [I]$, the sum of the row $A [i , :]$ is $epsilon.alt sqrt(J)$ close to 1
 
 $ abs(1 - sum_(r in [R]) A [i , r]) lt.eq epsilon.alt sqrt(J) . $
 
@@ -2849,7 +2849,7 @@ In many applications @saylor_CharacterizingSedimentSources_2019 \[TODO add spati
 
 For high quality results, we would like as fine of a discretization as possible. Or if the data is already collected in a discretized form, we would like to incorporate all the data. But smaller tensors are faster to decompose because there are fewer parameters to fit and learn. Most matrix operations like addition, multiplication, and finding their norm are also faster for smaller tensors.
 
-We propose a multiresolution approach inspired by multi-grid \[\] and wavelets \[\] that factorizes the data at progressively finer scales, using the . The can greatly speed up how fast large scale tensors can be factorized.
+We propose a multiresolution approach inspired wavelets @benedetto_wavelets_1993 and multigrid @trottenberg_multigrid_2001 that factorizes the data at progressively finer scales. This can greatly speed up how fast large scale tensors can be factorized.
 
 == Basic Approach
 <sec-basic-multi-scale>
@@ -2871,13 +2871,53 @@ The basic approach can be generalized in two ways: the data could be continuous 
 
 Suppose we are given a tensor $Y in bb(R)^(I_1 times dots.h.c times I_N)$ where the dimensions $I_(n_1) , dots.h , I_(n_M)$ represent a grided discretization of $M$-dimensional continuous data.
 
-A natural extension of the example shown in @sec-basic-multi-scale would be to higher dimensional distributions. For example, we could consider an order-$3$ tensor where the horizontal slices correspond to a $2$-dimensional discretization of a bivariate density. Entries of the input tensor $Y$ would be given by $Y [i , j , k] = f_i (x_j , y_k)$ for continuous probability density functions $f_i : bb(R)^2 arrow.r bb(R)_(+)$ for a 2D grid of points $(x_j , y_k)$. In this example, the second and third dimensions would be continuous.
+An example of this setting would be an extension of the example shown in @sec-basic-multi-scale to higher dimensional distributions. We could consider an order-$3$ tensor where the horizontal slices correspond to a $2$-dimensional discretization of a bivariate density. Entries of the input tensor $Y$ would be given by $Y [i , j , k] = f_i (x_j , y_k)$ for continuous probability density functions $f_i : bb(R)^2 arrow.r bb(R)_(+)$ for a 2D grid of points $(x_j , y_k)$. In this example, the second and third dimensions would be continuous.
 
-Factors that de
+If we want to perform a rank-$(R_1 , dots.h , R_N)$ Tucker decomposition of $Y = ⟦A_0 \; A_1 , dots.h , A_N⟧$, we can initialize the factors with a very corse factorization $A_(n_m)^s in bb(R)^(J_(n_m)^s times R_(n_m))$ where $J^s$ would be a discretization that uses every $2^s$ points, or more accurately
 
-, and $J_s$ would be a discretization that uses every $2^s$ points, or $J_s = 2^(S - s) + 1$ points in total.
+$ J_(n_m)^s = 2^(max (S_m - s , 0)) + 1 $
 
-The basic approach will be to factorize the coarsest version of $Y$, $Y_S in bb(R)^(I times J_S)$, to obtain $A_S$ and $B_S$.
+points in total. We select $S_m$ so that at the finest scale $s = 0$, we have $J_(n_m)^0 = I_(n_m)$. The dimensions that do not represent continuous values will use the full sized factors $A_n^s in bb(R)^(J_n times R_n)$ with $J_n = I_n$, and the core will remain $A_0^s in bb(R)^(R_1 times dots.h.c times R_N)$ at all scales $s$.#footnote[This assumes the dimensions of $Y$ where $Y$ is continuous have been discretized as one more than a power of two. The same idea holds with some other discretization plan, but becomes more complicated to express notationally and keep track of the number of points at each scale.]
+
+The aim is to fit the product of the factors $⟦A_0^s \; A_1^s , dots.h , A_N^s⟧$ to a lower resolution version of $Y in bb(R)^(I_1 times dots.h.c times I_N)$, namely $Y^s in bb(R)^(J_1^s times dots.h.c times J_N^s)$, and use the result to initialize a finer version of the factors $A$. The code for this looks like the following.
+
+```julia
+function multiscale_factorize(Y; kwargs...)
+    scales, kwargs = initialize_scales(Y, kwargs)
+    coarsest_scale, finer_scales... = scales
+
+    # Factorize Y at the coarsest scale
+    Yₛ = coarsen(Y, coarsest_scale; kwargs...)
+    decomposition, stats, kwargs = factorize(Yₛ; kwargs...)
+
+    # Factorize Y at progressively finer scales
+    for scale in finer_scales
+        # Use an interpolated version of the coarse factorization
+        # as the initialization
+        decomposition = interpolate(decomposition, scale; kwargs...)
+        kwargs[:decomposition] = decomposition
+
+        Yₛ = coarsen(Y, scale; kwargs...)
+        decomposition, stats, kwargs = factorize(Yₛ; kwargs...)
+    end
+    return decomposition, stats, kwargs
+end
+```
+
+Straightforward subsampled coarsening and constant interpolating can be used for `coarsen` and `interpolate`, but more sophisticated methods can be used in principle. Since the final solve of `factorize` is on the original sized problem, the choice of coarsening and interpolating only influences the initialization used at this finest scale. Bellow are examples of the basic coarsening and interpolation methods.
+
+```julia
+function coarsen(Y, scale; dims=1:ndims(A), kwargs...)
+    N = ndims(A)
+
+    slice = join((d in dims ? "begin:scale:end" : "begin:end" for d in 1:N), ",")
+
+    Y_coarsened = eval(Meta.parse("Y[$(slice)]"))
+
+    return Y_coarsened
+    # Y[(d in dims ? (begin:scale:end) : (begin:end) for d in 1:N)...] does not work since it treats end as length(Y), not the length of just that corresponding dimension
+end
+```
 
 == Convergence of a Multi-scale Method
 <convergence-of-a-multi-scale-method>
