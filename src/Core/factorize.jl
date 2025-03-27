@@ -117,7 +117,7 @@ function default_kwargs(Y; kwargs...)
 	# get!(kwargs, :option) do
 	#     calculate_default()
 	# end
-	isempty(kwargs) ? kwargs = Dict{Symbol,Any}() : kwargs = Dict{Symbol,Any}(kwargs)
+	kwargs = isempty(kwargs) ? Dict{Symbol,Any}() : Dict{Symbol,Any}(kwargs)
 
 	# Decomposition Initialization
 	get!(kwargs, :decomposition, nothing)
