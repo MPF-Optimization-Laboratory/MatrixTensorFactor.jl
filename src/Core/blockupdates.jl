@@ -442,6 +442,7 @@ ConstraintUpdate(n, constraint::AbstractConstraint; kwargs...) = error("converti
 ConstraintUpdate(n, constraint::GenericConstraint; kwargs...) = GenericConstraintUpdate(n, constraint)
 ConstraintUpdate(n, constraint::ProjectedNormalization; kwargs...) = Projection(n, constraint)
 ConstraintUpdate(n, constraint::Entrywise; kwargs...) = Projection(n, constraint)
+ConstraintUpdate(n, constraint::LinearConstraint; kwargs...) = GenericConstraintUpdate(n, constraint)
 
 function ConstraintUpdate(n, constraint::ScaledNormalization; skip_rescale=false, whats_rescaled=missing, kwargs...)
     if skip_rescale
@@ -479,7 +480,7 @@ function (U::GenericConstraintUpdate)(x::T; kwargs...) where T
     end
     A = factor(x, n)
     U.constraint(A)
-    check(U, A) || error("Something went wrong with GenericConstraintUpdate: $GenericConstraintUpdate")
+    check(U, A) || error("Something went wrong with GenericConstraintUpdate $GenericConstraintUpdate using constraint $(U.constraint) of type $(typeof(U.constraint)).")
 end
 
 """Perform a projected gradient update on the nth factor of an Abstract Decomposition x"""

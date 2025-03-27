@@ -355,3 +355,34 @@ function binaryproject(x)
 end
 
 const binary! = Entrywise(binaryproject, x -> x in (0, 1)) # this is a 0, 1 tuple, not an open intervel
+
+"""
+    LinearConstraint(A::T, B::AbstractArray) where {T <: Union{Function, AbstractArray}}
+
+The constraint AX = B for a linear operator A and array B.
+
+When A is a matrix, this projects onto the subspace with the solution given by
+`X .-= A' * ( (A*A') \\ (A*X .- b) )`
+"""
+struct LinearConstraint{T <: Union{Function, AbstractArray}} <: AbstractConstraint
+    linear_operator::T
+    bias::AbstractArray
+end
+
+check(C::LinearConstraint{Function}, X::AbstractArray) = C.linear_operator(X) ≈ C.bias
+check(C::LinearConstraint{<:AbstractArray}, X::AbstractArray) = C.linear_operator * X ≈ C.bias
+
+# TODO implement linear constraint given an operator
+function (C::LinearConstraint{Function})(X::AbstractArray)
+    error("Linear Constraints defined in terms of an operator are not implemented (YET!)")
+end
+
+function (C::LinearConstraint{<:AbstractArray})(X::AbstractArray)
+    error("Linear Constraints defined in terms of a general array are not implemented (YET!)")
+end
+
+function (C::LinearConstraint{<:AbstractMatrix})(X::AbstractArray)
+    A = C.linear_operator
+    b = C.bias
+    X .-= A' * ( (A*A') \ (A*X .- b) )
+end

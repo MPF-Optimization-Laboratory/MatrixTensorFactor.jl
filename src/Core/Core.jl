@@ -55,6 +55,8 @@ export Entrywise, IntervalConstraint
 export nonnegative!, binary!, binaryproject
 export l1norm, l2norm, linftynorm
 
+export LinearConstraint
+
 include("./stats.jl")
 export AbstractStat
 export DisplayDecomposition, EuclidianLipschitz, EuclidianStepSize, FactorNorms, GradientNorm, GradientNNCone
