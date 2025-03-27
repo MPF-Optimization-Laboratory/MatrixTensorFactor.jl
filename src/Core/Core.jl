@@ -81,6 +81,7 @@ include("./factorize.jl")
 export factorize
 
 include("./multiscale.jl")
-export coarsen
+export multiscale_factorize
+export coarsen, interpolate, linear_smooth
 
 end # module Core

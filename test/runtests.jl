@@ -526,6 +526,8 @@ end
 end
 
 @testset "MultiScale" begin
+    @testset "coarsen" begin
+
     Y = randn(12, 12, 12)
 
     @test coarsen(Y, 1) == Y
@@ -533,6 +535,34 @@ end
     @test coarsen(Y, 3; dims=2) == Y[:, begin:3:end, :]
     @test coarsen(Y, 4; dims=(1, 3)) == Y[begin:4:end, :, begin:4:end]
     @test coarsen(Y, 12) == Y[begin, begin, begin]
+    end
+
+    @testset "interpolate" begin
+    Y = collect(reshape(1:6, 2, 3))
+
+    @test interpolate(Y, 2) == [1 1 3 3 5; 1 1 3 3 5; 2 2 4 4 6]
+    @test interpolate(Y, 3; dims=2) == [1 1 1 3 3 3 5; 2 2 2 4 4 4 6]
+    @test interpolate(Y, 1) == Y
+
+    @test interpolate(Y, 2; degree=1) == [1.0 2.0 3.0 4.0 5.0; 1.5 2.5 3.5 4.5 5.5; 2.0 3.0 4.0 5.0 6.0]
+    @test interpolate(Y, 2; dims=1, degree=1) == [1.0 3.0 5.0; 1.5 3.5 5.5; 2.0 4.0 6.0]
+
+    Y = collect(reshape(1:24, 2, 4, 3))
+
+    @test interpolate(Y, 3; dims=(1,3)) == [1 3 5 7; 1 3 5 7; 1 3 5 7; 2 4 6 8;;; 1 3 5 7; 1 3 5 7; 1 3 5 7; 2 4 6 8;;; 1 3 5 7; 1 3 5 7; 1 3 5 7; 2 4 6 8;;; 9 11 13 15; 9 11 13 15; 9 11 13 15; 10 12 14 16;;; 9 11 13 15; 9 11 13 15; 9 11 13 15; 10 12 14 16;;; 9 11 13 15; 9 11 13 15; 9 11 13 15; 10 12 14 16;;; 17 19 21 23; 17 19 21 23; 17 19 21 23; 18 20 22 24]
+    @test interpolate(Y, 2; dims=2, degree=1) == [1.0 2.0 3.0 4.0 5.0 6.0 7.0; 2.0 3.0 4.0 5.0 6.0 7.0 8.0;;; 9.0 10.0 11.0 12.0 13.0 14.0 15.0; 10.0 11.0 12.0 13.0 14.0 15.0 16.0;;; 17.0 18.0 19.0 20.0 21.0 22.0 23.0; 18.0 19.0 20.0 21.0 22.0 23.0 24.0]
+    end
+
+    @testset "multiscale_factorize" begin
+
+    Y_decomp = Tucker1((17,33,33),1) #size is 1 plus a power of 2
+    Y = array(Y_decomp)
+
+    decomposition, stats, kwargs = multiscale_factorize(Y; model=Tucker1, rank=1)
+
+    check_slice = 1:10
+    @test isapprox(decomposition[check_slice], Y[check_slice]; rtol=0.01) # should be within 1% error
+    end
 end
 
 end

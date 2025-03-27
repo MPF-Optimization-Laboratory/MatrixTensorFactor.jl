@@ -71,7 +71,8 @@ export smart_insert!, smart_interlase!, group_by_factor
 export factorize
 
 #include("./multiscale.jl")
-export coarsen
+export multiscale_factorize
+export coarsen, interpolate, linear_smooth
 
 # Legacy code
 include("./MatrixTensorFactor/MatrixTensorFactor.jl")
