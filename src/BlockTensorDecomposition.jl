@@ -74,7 +74,7 @@ export factorize
 
 #include("./multiscale.jl")
 export multiscale_factorize
-export coarsen, interpolate, linear_smooth
+export coarsen, interpolate, linear_smooth, scale_constraint
 
 # Legacy code
 include("./MatrixTensorFactor/MatrixTensorFactor.jl")
