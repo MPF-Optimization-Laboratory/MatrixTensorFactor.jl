@@ -384,5 +384,5 @@ end
 function (C::LinearConstraint{<:AbstractMatrix})(X::AbstractArray)
     A = C.linear_operator
     b = C.bias
-    X .-= A' * ( (A*A') \ (A*X .- b) )
+    X .-= A' * ( (A*A') \ (A*X .- b) ) # Projects X onto the subspace AX=b
 end
