@@ -433,6 +433,10 @@ end
 
 abstract type ConstraintUpdate <: AbstractUpdate end
 
+function getconstraint(C::AbstractConstraint)
+    error("Getter for constraints of type $(typeof(C)) is not implemented.")
+end
+
 """
     ConstraintUpdate(n, constraint)
 
@@ -472,6 +476,7 @@ struct GenericConstraintUpdate <: ConstraintUpdate
 end
 
 check(U::GenericConstraintUpdate, D::AbstractDecomposition) = check(U.constraint, factor(D, U.n))
+getconstraint(U::GenericConstraintUpdate) = U.constraint
 
 function (U::GenericConstraintUpdate)(x::T; kwargs...) where T
     n = U.n
@@ -490,6 +495,7 @@ struct Projection <: ConstraintUpdate
 end
 
 check(P::Projection, D::AbstractDecomposition) = check(P.proj, factor(D, P.n))
+getconstraint(U::Projection) = U.proj
 
 function (U::Projection)(x::T; kwargs...) where T
     n = U.n
@@ -499,12 +505,28 @@ function (U::Projection)(x::T; kwargs...) where T
     U.proj(factor(x, n))
 end
 
+function Base.getproperty(U::Projection, sym::Symbol)
+    if sym === :whats_normalized
+        proj = U.proj
+        whats_normalized = try
+            proj.whats_normalized
+        catch # in the event proj is just an entrywise for example
+            identityslice
+        end
+        return whats_normalized
+    else # fallback to other fields
+        return getfield(U, sym)
+    end
+end
+
 NNProjection(n) = Projection(n, nonnegative!)
 
 struct SafeNNProjection <: ConstraintUpdate
     n::Integer
     backup::ProjectedNormalization
 end
+
+getconstraint(_::SafeNNProjection) = nonnegative! #U.backup
 
 function (U::SafeNNProjection)(x::T; kwargs...) where T
     n = U.n
@@ -526,7 +548,15 @@ function (U::SafeNNProjection)(x::T; kwargs...) where T
     check(U, x) || error("Something went wrong with SafeNNProjection using the backup projection: $(U.backup)")
 end
 
-check(S::SafeNNProjection, D::AbstractDecomposition) = check(nonnegative!, factor(D, S.n)) && all(!iszero, S.backup.whats_normalized(factor(D, S.n)))
+check(S::SafeNNProjection, D::AbstractDecomposition) = check(nonnegative!, factor(D, S.n)) && all(!iszero, S.whats_normalized(factor(D, S.n)))
+
+function Base.getproperty(U::SafeNNProjection, sym::Symbol)
+    if sym === :whats_normalized
+        return U.backup.whats_normalized # SafeNNProjection inherits the same "whats_normalized" as its backup
+    else # fallback to other fields
+        return getfield(U, sym)
+    end
+end
 
 """
     Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
@@ -555,6 +585,14 @@ struct Rescale{T<:Union{Nothing,Missing,Function}} <: ConstraintUpdate
 end
 
 check(S::Rescale, D::AbstractDecomposition) = check(S.scale, factor(D, S.n))
+getconstraint(U::Rescale) = U.scale
+function Base.getproperty(U::Rescale, sym::Symbol)
+    if sym === :whats_normalized
+        return U.scale.whats_normalized # Rescale inherits the same "whats_normalized" as its ScaledNormalization
+    else # fallback to other fields
+        return getfield(U, sym)
+    end
+end
 
 function (U::Rescale{<:Function})(x; kwargs...)
     # TODO possible have information about what gets rescaled with the `ScaledNormalization`.
@@ -675,6 +713,7 @@ end
 
 # Wrappers to allow multiple args, or a tuple input
 BlockedUpdate(x::Tuple) = BlockedUpdate(x...)
+BlockedUpdate(x::BlockedUpdate) = x # Wraps in a vector # TODO see if the better behaviour is just to return x
 BlockedUpdate(x...) = BlockedUpdate(vcat(x...))
 
 function Base.getproperty(U::BlockedUpdate, sym::Symbol)

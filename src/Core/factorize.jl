@@ -124,6 +124,11 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :model) do
 		isnothing(kwargs[:decomposition]) ? Tucker1 : typeof(kwargs[:decomposition])
 	end
+
+	# Ensure the model is valid and decomposition type matches the model (or is unspecified)
+	@assert kwargs[:model] <: AbstractDecomposition
+	@assert typeof(kwargs[:decomposition]) <: Union{Nothing, kwargs[:model]}
+
 	get!(kwargs, :rank) do # Can also be a tuple. For example, Tucker rank could be (1, 2, 3) for an order 3 array Y
 		isnothing(kwargs[:decomposition]) ? 1 : rankof(kwargs[:decomposition])
 	end
@@ -295,7 +300,7 @@ function make_update!(decomposition, Y; momentum, constraints, constrain_init, g
 		if !all(C -> check(C, decomposition), expanded_constraints!)
 			indexes = findall(C -> !check(C, decomposition), expanded_constraints!)
 			if constrain_init
-				error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function")
+				error("decomposition failed to be constrained. Check the constraint(s) $(expanded_constraints![indexes]) operation or the checking function. The full list of constraints is $(expanded_constraints!).")
 			else
 				@warn "Initial decomposition does not satisfy the following constraints: $(expanded_constraints![indexes]). This may be ok if later iterations satisfy the constraints"
 			end

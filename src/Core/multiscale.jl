@@ -147,7 +147,13 @@ function multiscale_factorize(Y; kwargs...)
     # Factorize Y at the coarsest scale
     Yₛ = coarsen(Y, coarsest_scale; dims=continuous_dims, kwargs...)
 
-    constraints, kwargs = scaled_constraints(Yₛ, coarsest_scale; kwargs...)
+    get!(kwargs, :constraints, nothing)
+
+    original_constraints = kwargs[:constraints]
+
+    constraints, kwargs = scale_constraints(Yₛ, coarsest_scale; continuous_dims, kwargs...)
+
+    @info "Factorizing at scale $coarsest_scale..."
     decomposition, stats, _ = factorize(Yₛ; kwargs...)
 
     # Factorize Y at progressively finer scales
@@ -160,8 +166,11 @@ function multiscale_factorize(Y; kwargs...)
 
         Yₛ = coarsen(Y, scale; dims=continuous_dims, kwargs...)
 
-        constraints, kwargs = scale_constraints(Yₛ; kwargs...)
+        # Reset constraints so they can be properly scaled
+        kwargs[:constraints] = original_constraints
+        constraints, kwargs = scale_constraints(Yₛ, scale; continuous_dims, kwargs...)
 
+        @info "Factorizing at scale $scale..."
         decomposition, stats, _ = factorize(Yₛ; kwargs...)
     end
     return decomposition, stats, kwargs
@@ -174,20 +183,24 @@ const IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING = [
 ]
 
 """
-    scaled_constraints(Y, scale; kwargs...)
+    scale_constraints(Y, scale; kwargs...)
 
 Scales any constraints that need to be modified to use at a coarser scale.
 """
-function scaled_constraints(Y, scale; kwargs...)
-    continuous_dims = kwargs[:continuous_dims]
-    S = log2(scale) # TODO Don't assume the scale is a power of 2
+function scale_constraints(Y, scale; continuous_dims, kwargs...)
+
+    kwargs = Dict{Symbol,Any}(kwargs)
+
+    kwargs[:continuous_dims] = continuous_dims
+    S = log2(scale) + 1 # TODO Don't assume the scale is a power of 2
+    # we want to map scales -> S where 1 -> 1, 2 -> 2, 4 -> 3, 8 -> 4, 16 -> 5 etc.
 
     decomposition, constraints = expand_decomposition_constraints(Y, kwargs)
 
-    if typeof(decomposition) in IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING
-        constraints = BlockedUpdate([scale_constraint(; continuous_dims, constraint, S, decomposition) for constraint in constraints])
+    if any(x-> typeof(decomposition) <: x, IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING)
+        constraints = BlockedUpdate([scale_decomposition_constraint(continuous_dims, constraint, S, decomposition) for constraint in constraints])
     else
-        @warning "Not sure how to appropriately scale constraints for a decomposition of type $decomposition. Leaving constraints alone."
+        @warn "Not sure how to appropriately scale constraints for a decomposition of type $decomposition. Leaving constraints alone."
     end
     kwargs[:constraints] = constraints
 
@@ -195,7 +208,7 @@ function scaled_constraints(Y, scale; kwargs...)
 end
 
 """Use the same initialization as factorize() to get the expanded set of constraints"""
-function expand_constraints(Y, kwargs)
+function expand_decomposition_constraints(Y, kwargs)
     kwargs_copy = deepcopy(kwargs) # Don't mess up anything since the following functions mutate kwargs
     kwargs_copy = default_kwargs(Y; kwargs_copy...) # TODO Is there some way to clean this up?
     decomposition, kwargs_copy = initialize_decomposition(Y; kwargs_copy...)
@@ -216,9 +229,9 @@ end
 Idea is that external dimensions (I₁, I₂, ...) that are continuous dimensions need to be
 scaled, but internal dimensions (R₁, R₂, ...) or non-continuous dimensions don't.
 """
-function scale_constraint(; continuous_dims, constraint, scale, decomposition::CPDecomposition)
+function scale_decomposition_constraint(continuous_dims, constraint, scale, decomposition::CPDecomposition)
     if typeof(constraint) <: BlockedUpdate # cannot easily make this a separate method because we need this for any type of decomposition. TODO can this be cleaned up?
-        BlockedUpdate([scale_constraint(; continuous_dims, c, scale, decomposition) for c in constraint])
+        return BlockedUpdate([scale_decomposition_constraint(continuous_dims, c, scale, decomposition) for c in constraint])
     end
 
     n = constraint.n
@@ -246,10 +259,12 @@ end
 # TODO use constraint.whats_normalized(decomposition).slicemap to get a tuple ex. (Colon(), 1, Colon()) to figure out which dimensions are being sliced over.
 # Count how many of the non sliced (number of colons) dimensions are continuous to get n_continuous_dims
 
-function scale_constraint(; continuous_dims, constraint, scale, decomposition::Tucker1)
+function scale_decomposition_constraint(continuous_dims, constraint, scale, decomposition::Tucker1)
     if typeof(constraint) <: BlockedUpdate # cannot easily make this a separate method because we need this for any type of decomposition. TODO can this be cleaned up?
-        BlockedUpdate([scale_constraint(; continuous_dims, c, scale, decomposition) for c in constraint])
+        return BlockedUpdate([scale_decomposition_constraint(continuous_dims, c, scale, decomposition) for c in constraint])
     end
+
+    # typeof(constraint) <: ConstraintUpdate || error("Expected a ConstraintUpdate type but got a constraint with type $(typeof(constraint))")
 
     n = constraint.n
 
@@ -262,9 +277,11 @@ function scale_constraint(; continuous_dims, constraint, scale, decomposition::T
     slicemap = whats_constrained(factor(decomposition, n)).slicemap
 
     if n == 0 # Constraint on the core
-        sliced_dims = findall(slicemap[2:end] .== Colon())
+        sliced_dims = findall(slicemap[2:end] .== Colon()) .+ 1 # since we've removed the first entry slicemap[1], we need to shift the dimension labels back to what they are in slicemap
+        # e.x., if a tensor of size (10, 33, 33) has continuous dimensions 2 and 3, and we slice over the 2nd and 3rd dimension
+        # we get the slice map (1, Colon(), Colon()). After removing the first entry, we see slicemap[2:end] == (Colon(), Colon()), so findall(slicemap[2:end] .== Colon()) gives us [1, 2], not [2, 3].
+        # note this is safe to empty lists since adding .+ 1 will keep it empty
         n_continuous_dims = count(d -> d in continuous_dims, sliced_dims) # how many continuous dimensions the constraint applies over
-
         if n_continuous_dims ≥ 1
             return scale_constraint(constraint, scale, n_continuous_dims)
         else
@@ -272,7 +289,7 @@ function scale_constraint(; continuous_dims, constraint, scale, decomposition::T
         end
 
     elseif n == 1 # Constraint on the matrix
-        if 1 in continuous_dims & slicemap[1] == Colon() # constraints apply over the first dimension
+        if (1 in continuous_dims) && (slicemap[1] == Colon()) # constraints apply over the first dimension
             n_continuous_dims = 1
             return scale_constraint(constraint, scale, n_continuous_dims)
         else # No need to scale the constraint
@@ -283,9 +300,9 @@ function scale_constraint(; continuous_dims, constraint, scale, decomposition::T
     end
 end
 
-function scale_constraint(; continuous_dims, constraint, scale, decomposition::Tucker)
+function scale_decomposition_constraint(continuous_dims, constraint, scale, decomposition::Tucker)
     if typeof(constraint) <: BlockedUpdate # cannot easily make this a separate method because we need this for any type of decomposition. TODO can this be cleaned up?
-        BlockedUpdate([scale_constraint(; continuous_dims, c, scale, decomposition) for c in constraint])
+        return BlockedUpdate([scale_decomposition_constraint(continuous_dims, c, scale, decomposition) for c in constraint])
     end
 
     n = constraint.n
@@ -322,6 +339,48 @@ const SCALEABLE_CONSTRAINTS = [
 const FIXED_CONSTRAINTS = [
     Entrywise,
 ]
+
+# Unpacks the constraint update and scales the internal AbstractConstraint
+function scale_constraint(constraint::ConstraintUpdate, scale, n_continuous_dims)
+    n = constraint.n
+
+    # Convert the ConstraintUpdate to an AbstractConstraint
+    constraint = getconstraint(constraint)::AbstractConstraint
+
+    # Scale the constraint
+    constraint = scale_constraint(constraint, scale, n_continuous_dims)
+
+    # Convert back to a ConstraintUpdate
+    constraint = ConstraintUpdate(n, constraint)
+    return constraint
+end
+# Unpacks the constraint update and scales the internal AbstractConstraint
+function scale_constraint(constraint::Rescale, scale, n_continuous_dims)
+    n = constraint.n
+    whats_rescaled = constraint.whats_rescaled
+
+    # Convert the ConstraintUpdate to an AbstractConstraint
+    constraint = getconstraint(constraint)::AbstractConstraint
+
+    # Scale the constraint
+    constraint = scale_constraint(constraint, scale, n_continuous_dims)
+
+    # Convert back to a ConstraintUpdate
+    constraint = Rescale(n, constraint, whats_rescaled)
+    return constraint
+end
+# SafeNNProjection also needs a special translator
+function scale_constraint(constraint::SafeNNProjection, scale, n_continuous_dims)
+    n = constraint.n
+    backup = constraint.backup
+
+    # Scale the constraint
+    constraint = scale_constraint(backup, scale, n_continuous_dims)
+
+    # Convert back to a ConstraintUpdate
+    constraint = SafeNNProjection(n, constraint)
+    return constraint
+end
 
 """
     scale_constraint(constraint::AbstractConstraint, scale, n_continuous_dims)
@@ -362,6 +421,10 @@ end
 function scale_constraint(constraint::ProjectedNormalization, scale, n_continuous_dims)
     @warn "Scaling ProjectedNormalization constraints is not implemented (YET!) Leaving the constraint $constraint alone."
     return constraint
+end
+
+function scale_constraint(constraint::ComposedConstraint, scale, n_continuous_dims)
+    return scale_constraint(constraint.outer, scale, n_continuous_dims) ∘ scale_constraint(constraint.inner, scale, n_continuous_dims)
 end
 
 """

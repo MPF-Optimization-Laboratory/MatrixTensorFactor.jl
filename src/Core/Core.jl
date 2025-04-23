@@ -22,7 +22,7 @@ export ×₁, nmp, nmode_product, mtt, slicewise_dot, tuckerproduct, cpproduct
 
 # Low level types and interface
 include("./decomposition.jl")
-export array, contractions, core, eachfactorindex, factor, factors, frozen, isfrozen, matrix_factor, matrix_factors, rankof
+export array, contractions, core, eachfactorindex, factor, factors, frozen, isfrozen, matrix_factor, matrix_factors, nfactors, rankof
 export AbstractDecomposition
 export GenericDecomposition, SingletonDecomposition
 export AbstractTucker, Tucker, Tucker1, CPDecomposition
@@ -74,7 +74,7 @@ export Projection, NNProjection, SafeNNProjection, Rescale
 
 export BlockedUpdate
 export updates
-export smart_insert!, smart_interlase!, group_by_factor
+export getconstraint, smart_insert!, smart_interlase!, group_by_factor
 
 #export block_gradient_decent, nn_block_gradient_decent, scale_nn_block_gradient_decent, proj_nn_block_gradient_decent
 
