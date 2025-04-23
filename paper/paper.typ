@@ -294,6 +294,8 @@
 #import "@preview/fontawesome:0.1.0": *
 #let theorem = thmbox("theorem", "Theorem", base_level: 1)
 #let corollary = thmbox("corollary", "Corollary", base_level: 1)
+#let proposition = thmbox("proposition", "Proposition", base_level: 1)
+#let lemma = thmbox("lemma", "Lemma", base_level: 1)
 
 #show: doc => article(
   title: [BlockTensorDecompositions.jl: A Unified Constrained Tensor Decomposition Julia Package],
@@ -1802,6 +1804,33 @@ l2scale_average12slices! = ScaledNormalization(l2norm;
     scale=(A -> size(A, 2)))
 ```
 
+Basic linear constrains `AX=B` are also implemented in the following manner. This constraint projects a factor `X` onto the affine space defined by `AX=B` for a linear operator or matrix `A` and bias `B`.
+
+```julia
+struct LinearConstraint{T <: Union{Function, AbstractArray}} <: AbstractConstraint
+    linear_operator::T
+    bias::AbstractArray
+end
+
+check(C::LinearConstraint{Function}, X::AbstractArray) = C.linear_operator(X) ≈ C.bias
+check(C::LinearConstraint{<:AbstractArray}, X::AbstractArray) = C.linear_operator * X ≈ C.bias
+
+# TODO implement linear constraint given an operator
+function (C::LinearConstraint{Function})(X::AbstractArray)
+    error("Linear Constraints defined in terms of an operator are not implemented (YET!)")
+end
+
+function (C::LinearConstraint{<:AbstractArray})(X::AbstractArray)
+    error("Linear Constraints defined in terms of a general array are not implemented (YET!)")
+end
+
+function (C::LinearConstraint{<:AbstractMatrix})(X::AbstractArray)
+    A = C.linear_operator
+    b = C.bias
+    X .-= A' * ( (A*A') \ (A*X .- b) ) # Projects X onto the subspace AX=b
+end
+```
+
 Constraints can also be composed. This is #emph[not] the same as the intersection of constraints. This is only a handy way to apply multiple constraints in series, but there is no clever logic that interprets the constraints and combines them into a single constraint.
 
 ```julia
@@ -2883,52 +2912,696 @@ The aim is to fit the product of the factors $⟦A_0^s \; A_1^s , dots.h , A_N^s
 
 ```julia
 function multiscale_factorize(Y; kwargs...)
-    scales, kwargs = initialize_scales(Y, kwargs)
+    continuous_dims, kwargs = initialize_continuous_dims(Y; kwargs...)
+    scales, kwargs = initialize_scales(Y; kwargs...)
     coarsest_scale, finer_scales... = scales
 
     # Factorize Y at the coarsest scale
-    Yₛ = coarsen(Y, coarsest_scale; kwargs...)
-    decomposition, stats, kwargs = factorize(Yₛ; kwargs...)
+    Yₛ = coarsen(Y, coarsest_scale; dims=continuous_dims, kwargs...)
+
+    constraints, kwargs = scale_constraints(Yₛ, coarsest_scale; kwargs...)
+    decomposition, stats, _ = factorize(Yₛ; kwargs...)
 
     # Factorize Y at progressively finer scales
     for scale in finer_scales
         # Use an interpolated version of the coarse factorization
-        # as the initialization
-        decomposition = interpolate(decomposition, scale; kwargs...)
+        # as the initialization.
+        decomposition = interpolate(decomposition, 2; dims=continuous_dims, kwargs...)
         kwargs[:decomposition] = decomposition
 
-        Yₛ = coarsen(Y, scale; kwargs...)
-        decomposition, stats, kwargs = factorize(Yₛ; kwargs...)
+        Yₛ = coarsen(Y, scale; dims=continuous_dims, kwargs...)
+
+        constraints, kwargs = scale_constraints(Yₛ, scale; kwargs...)
+
+        decomposition, stats, _ = factorize(Yₛ; kwargs...)
     end
     return decomposition, stats, kwargs
 end
 ```
 
+=== Coarsening and Interpolating
+<coarsening-and-interpolating>
 Straightforward subsampled coarsening and constant interpolating can be used for `coarsen` and `interpolate`, but more sophisticated methods can be used in principle. Since the final solve of `factorize` is on the original sized problem, the choice of coarsening and interpolating only influences the initialization used at this finest scale. Bellow are examples of the basic coarsening and interpolation methods.
 
 ```julia
-function coarsen(Y, scale; dims=1:ndims(A), kwargs...)
-    N = ndims(A)
+coarsen(Y::AbstractArray, scale::Integer; dims=1:ndims(Y), kwargs...) =
+    Y[(d in dims ? axis[begin:scale:end] : axis for (d, axis) in enumerate(axes(Y)))...]
 
-    slice = join((d in dims ? "begin:scale:end" : "begin:end" for d in 1:N), ",")
+function interpolate(Y, scale; dims=1:ndims(Y), kwargs...)
+    Y = repeat(Y; inner=(d in dims ? scale : 1 for d in 1:ndims(Y)))
 
-    Y_coarsened = eval(Meta.parse("Y[$(slice)]"))
-
-    return Y_coarsened
-    # Y[(d in dims ? (begin:scale:end) : (begin:end) for d in 1:N)...] does not work since it treats end as length(Y), not the length of just that corresponding dimension
+    # Chop the last slice of repeated dimensions
+    # since we only interpolate between the values
+    return Y[(d in dims ? axis[begin:end-scale+1] : axis for (d, axis) in enumerate(axes(Y)))...]
 end
 ```
+
+To apply a linear interpolation, we can first perform the constant interpolation and smooth out the result. The following code averages neighbouring values along the continuous dimensions specified. Since this is applied after the constant interpolation, every even indexed value becomes the average of its neighbours, and every odd indexed value remains fixed.
+
+```julia
+function linear_smooth!(Y, dims)
+    all_dims = 1:ndims(Y)
+    for d in dims
+        axis = axes(Y, d)
+        Y1 = @view Y[(i==d ? axis[begin+1:end-1] : (:) for i in all_dims)...]
+        Y2 = @view Y[(i==d ? axis[begin+2:end] : (:) for i in all_dims)...]
+
+        @. Y1 = 0.5 * (Y1 + Y2)
+    end
+    return Y
+end
+```
+
+When interpolating an array that is an `AbstractDecomposition`, we can interpolate the factors directly instead of the combined array.
+
+```julia
+function interpolate(CPD::CPDecomposition, scale; dims=1:ndims(CPD), kwargs...)
+    interpolated_matrix_factors = (d in dims ? interpolate(A, scale; dims=1, kwargs...) : A for (d, A) in enumerate(matrix_factors(CPD)))
+    return CPDecomposition(Tuple(interpolated_matrix_factors))
+end
+
+function interpolate(T::Tucker1, scale; dims=1:ndims(T), kwargs...)
+    core_dims = setdiff(dims, 1) # Want all dimensions except possibly the first
+    interpolated_core = interpolate(core(T), scale; dims=core_dims, kwargs...)
+
+    matrix = matrix_factor(T, 1)
+
+    interpolated_matrix = 1 in dims ? interpolate(matrix, scale; dims=1, kwargs) : matrix
+    return Tucker1((interpolated_core, interpolated_matrix))
+end
+
+function interpolate(T::Tucker, scale; dims=1:ndims(T), kwargs...)
+    interpolated_matrix_factors = (d in dims ? interpolate(A, scale; dims=1, kwargs...) : A for (d, A) in enumerate(matrix_factors(T)))
+    # Core is not interpolated
+    return Tucker(Tuple(core(T), interpolated_matrix_factors...))
+end
+```
+
+== Constraints with Multi-scale
+<constraints-with-multi-scale>
+Some constraints like `Entrywise` constrains can be used as-is at any scale, but other constraints like normalizations and linear constraints require some more thought. The main strategy is to modify constraints along continuous dimensions. Given a constraint on a factor, and the number of continuous dimensions it constrains, we can construct a modified constraint by scaling the full sized constraint appropriately.
+
+For a $p$-norm constraint where some part of a factor $X_i$ needs to be normalized to $lr(bar.v.double X_i bar.v.double)_p = C$, we require the coarsened parts of the factor $overline(X)_i$ to have norm $lr(bar.v.double X_i bar.v.double)_p = (C \/ s)^(1 \/ p)$ where $s$ is the scale of the coarsening. For example, a scale of $3$ would mean we only take every $3$ entries of $X_i$.
+
+For linear constraints `AX=B`, we construct a new constraint that coarsens $A$, and scales the bias $B$ by the scale. For example, if $x$ is a vector that represents a continuous function that is constrained to the affine space $A x = b$, we treat the rows of the matrix $A$ as also being continuous functions that are inner product-ed with $x$ and can be coarsened in a similar manner to $x$. This means a `LinearConstraint(A, b)` gets scaled to the constraint `LinearConstraint(A[:, begin:scale:end], b ./ scale)`.
+
+In all the constraints, the scale will need to be applied in each continuous dimension, so we implement this as `scale^n_continuous_dims`. The full implementation of `scale_constraint` is shown below.
+
+```julia
+function scale_constraint(constraint::AbstractConstraint, scale, n_continuous_dims)
+    @warn "Unsure how to scale constraints of type $(typeof(constraint)). Leaving the constraint $constraint alone."
+    return constraint
+end
+
+# Constraints that are fixed like entrywise constraints do not need to be scaled
+function scale_constraint(constraint::Union{FIXED_CONSTRAINTS...}, scale, n_continuous_dims)
+    return constraint
+end
+
+# TODO handle LinearConstraint{<:AbstractArray} or LinearConstraint{Function}
+function scale_constraint(constraint::LinearConstraint{<:AbstractMatrix}, scale, n_continuous_dims)
+    A = constraint.linear_operator
+    b = constraint.bias
+    return LinearConstraint(A[:, begin:scale:end], b ./ scale^n_continuous_dims)
+end
+
+function scale_constraint(constraint::ScaledNormalization{<:Union{Real,AbstractArray{<:Real}}}, scale, n_continuous_dims)
+    norm = constraint.norm
+    F = constraint.whats_normalized
+    S = constraint.scale
+    return ScaledNormalization(norm, F, S ./ scale^n_continuous_dims)
+end
+
+function scale_constraint(constraint::ScaledNormalization{<:Function}, scale, n_continuous_dims)
+    norm = constraint.norm
+    F = constraint.whats_normalized
+    S = constraint.scale
+    return ScaledNormalization(norm, F, (x -> x ./ scale^n_continuous_dims) ∘ S)
+end
+
+# TODO scale a projected normalization
+function scale_constraint(constraint::ProjectedNormalization, scale, n_continuous_dims)
+    @warn "Scaling ProjectedNormalization constraints is not implemented (YET!) Leaving the constraint $constraint alone."
+    return constraint
+end
+```
+
+We justify scaling constraints in this way with the following propositions and observations.
+
+#theorem("Constraint Proposition Assumptions")[
+In the following proposition, we assume $x in bb(R)^I$ represents an evenly-spaced discretization of an $L_f$-Lipschitz function $f : [l , u] arrow.r bb(R)$ on a finite interval $t in [l , u]$ with entries
+
+$ x [i] = f (t [i]) , $
+
+where
+
+$ t [i] = l + (i - 1) Delta t = l + (i - 1) frac(u - l, I - 1) . $
+
+We will use $overline(x) in bb(R)^(⌊ (I + 1) \/ 2 ⌋)$ to represent the subvector made by removing every other entry of $x in bb(R)^I$ where
+
+$ overline(x) = (x [1] , x [3] , x [5] , dots.h , x [⌊ I ⌋_o]) . $
+
+We use the shorthand
+
+$ ⌊ I ⌋_o = 2 ⌊frac(I + 1, 2)⌋ - 1 $
+
+to round $I$ down to the nearest odd integer.
+
+] <thm-rem-constraint-assumptions>
+#proposition("Linear Constraint Scaling")[
+Let the assumption in @thm-rem-constraint-assumptions hold. Let $a in bb(R)^I$ be a discretization of an $L_g$-Lipschitz function $g : [l , u] arrow.r bb(R)$.
+
+If $lr(angle.l a , x angle.r) = b$, then for even $I$,
+
+$ abs(⟨overline(a) , overline(x)⟩ - b \/ 2) lt.eq max (lr(bar.v.double f bar.v.double)_oo , lr(bar.v.double g bar.v.double)_oo) I / (I - 1) frac((L_f + L_g) (u - l), 4) $
+
+and for odd $I$,
+
+TODO check formatting $ abs(2 norm(overline(x))_1 - frac(I + 1, I) lr(bar.v.double x bar.v.double)_1) & = abs(2 norm(overline(x))_1 - lr(bar.v.double x bar.v.double)_1 - lr(bar.v.double x bar.v.double)_1 / I)\
+ & = abs(2 sum_(i med upright("odd")) lr(|x_i) - sum_(i = 1)^I abs(x_i) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) + sum_(i med upright("odd")) abs(x_i) - (sum_(i med upright("odd")) abs(x_i) + sum_(i med upright("even")) abs(x_i)) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) - sum_(i med upright("even")) abs(x_i) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & = abs(sum_(j = 1)^((I - 1) \/ 2) lr(|x_(2 j - 1)) + abs(x_I) - sum_(j = 1)^((I - 1) \/ 2) abs(x_(2 j)) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & lt.eq sum_(j = 1)^((I - 1) \/ 2) abs(lr(|x_(2 j - 1)) - abs(x_(2 j))|) + abs(lr(|x_I) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & lt.eq sum_(j = 1)^((I - 1) \/ 2) abs(x_(2 j - 1) - x_(2 j)) + 1 / I abs(I lr(|x_I) - lr(bar.v.double x bar.v.double)_1|)\
+ & lt.eq sum_(j = 1)^((I - 1) \/ 2) C + 1 / I abs(sum_(i = 1)^I (lr(|x_I) - abs(x_i))|)\
+ & lt.eq C frac(I - 1, 2) + 1 / I sum_(i = 1)^I abs(lr(|x_I) - abs(x_i)|)\
+ & lt.eq C frac(I - 1, 2) + 1 / I sum_(i = 1)^I abs(x_I - x_i)\
+ & lt.eq C frac(I - 1, 2) + 1 / I sum_(i = 1)^I C (I - i) med upright("(Apply Lipschitz recursively)")\
+ & = C frac(I - 1, 2) + 1 / I frac(C I (I - 1), 2)\
+ & = frac(L (u - l), 2) + frac(L (u - l), 2)\
+ & = L (u - l) . $
+
+#block[
+#emph[Proof]. See @sec-linear-constraint-scaling-proof.
+
+]
+] <prp-linear-constraint-scaling>
+@prp-linear-constraint-scaling can be extended to a bound on the $L_1$ distance between $overline(A) overline(x)$ and $b \/ 2$ where $A x = b$ and $overline(A) = A [: , b e g i n : 2 : e n d]$ is the submatrix with every other column removed. TODO add corollary.
+
+We also have a similar proposition for a $1$-norm constraint.
+
+#proposition("$L_1$-norm Constraint Scaling")[
+Let the assumption in @thm-rem-constraint-assumptions hold.
+
+If $lr(bar.v.double x bar.v.double)_1 = b$, then for even $I$,
+
+$ abs(norm(overline(x))_1 - b \/ 2) lt.eq I / (I - 1) frac(L (u - l), 4) $
+
+and for odd $I$,
+
+$ abs(norm(overline(x))_1 - frac(I + 1, I) b / 2) lt.eq frac(L (u - l), 2) . $
+
+#block[
+#emph[Proof]. See @sec-l1-norm-constraint-scaling-proof.
+
+]
+] <prp-l1-norm-constraint-scaling>
+Importantly, for normalized vectors $z = x \/ lr(bar.v.double x bar.v.double)_1$, the error bound in @prp-l1-norm-constraint-scaling (for even $I$) becomes
+
+$ abs(norm(overline(z))_1 - 1 \/ 2) lt.eq I / (I - 1) frac(L (u - l), 4 b) . $
+
+As the number of points get large, $I arrow.r oo$, a finer discretization will have more points and have a $1$-norm becoming unbounded $b arrow.r oo$. This means the error bound goes to zero and $norm(overline(z))_1 arrow.r 1 \/ 2$.#footnote[This also holds for odd $I$.]
 
 == Convergence of a Multi-scale Method
 <convergence-of-a-multi-scale-method>
 - show the multi-scale method has tighter bounds than regular gradient descent for lipschitz data
 - this assumes no constraints
 
+As implemented, both the regular and multi-scale approaches execute many iterations at the finest scale. The multi-scale method uses its coarsened iterations to warm start the fine iteration. So we should expect the multi-scale method to converge. We make this explicit with the following lemmas and theorems. The first subsection (@sec-analysis-lemmas) shows general functional and convex analysis facts about Lipschitz, smooth, and strongly convex functions, and what happens when you linearly interpolate Lipschitz functions. The next subsection (@sec-resolved-multiscale) shows convergence for the multi-scale method when we resolve the problem along the entire new discretization at each scale. And the final subsection (@sec-freezed-multiscale) looks at what happens when you freeze previously computed points so you only need to solve the problem at the interpolated points for each scale.
+
+=== Definitions
+<definitions>
+#definition()[
+A differentiable function $f : bb(R)^I arrow.r bb(R)$ is $S$-smooth when $nabla f$ is $S$-Lipschitz,
+
+$ lr(bar.v.double nabla f (x) - nabla f (y) bar.v.double)_2 lt.eq S lr(bar.v.double x - y bar.v.double)_2 . $
+
+] <def-smooth-function>
+#definition()[
+A function $f : bb(R)^I arrow.r bb(R)$ is $mu$-strongly convex when $g (x) = f (x) - mu / 2 lr(bar.v.double x bar.v.double)_2^2$ is convex.
+
+When $f$ is differentiable, $f$ is $mu$-strongly convex when
+
+$ f (y) gt.eq f (x) + ⟨nabla f (x) , y - x⟩ + mu / 2 norm(x - y)_2^2 $
+
+for all $x , y in bb(R)^I$.
+
+] <def-strongly-convex-function>
+#definition()[
+One step of projected gradient descent for an $S$-smooth and $mu$-strongly convex function $cal(L) : bb(R)^I arrow.r bb(R)$, a constraint set $cal(C) subset.eq V$, at an iterate $x^k$ is the update,
+
+$ x^(k + 1) arrow.l P_(cal(C)) (x^k - 1 / S nabla cal(L) (x^k)) $
+
+where $P_(cal(C)) : bb(R)^I arrow.r cal(C)$ is the (Euclidean) projection operator onto $cal(C)$.
+
+] <def-projected-gradient-decent>
+#proposition("Descent Lemma")[
+In the projected gradient descent setting with an $S$-smooth and $mu$-strongly convex function (@def-projected-gradient-decent), we can bound the distance to the unique minimizer $x^(\*) in cal(C)$ in terms of the initial point $x^0 in bb(R)^I$,
+
+$ norm(x^t - x^(\*))_2 lt.eq (1 - c)^t norm(x^0 - x^(\*))_2 $
+
+with #emph[condition number] $c = mu \/ S$.
+
+] <prp-descent-lemma>
+TODO cite this.
+
+The vector space $bb(R)^I$ in @def-strongly-convex-function, @def-smooth-function, and @def-projected-gradient-decent can be extended to tensor spaces $bb(R)^(I_1 times dots.h.c times I_N)$ with the Frobenius inner product $lr(angle.l X , Y angle.r)_F$ and norm $lr(bar.v.double dot.op bar.v.double)_F$ more generally.
+
+=== Functional Analysis Lemmas
+<sec-analysis-lemmas>
+Before we can analyze the convergence of a multi-scaled method, we first need a handle on how linear interpolations play with discretized Lipschitz functions. To simplify the analysis of multi-scaled methods, we look at solving the general problem
+
+$ min_(x in cal(C)) cal(L) (x) := sum_(i in [I]) ell_i (x [i]) $
+
+using projected gradient descent
+
+$ x arrow.l P_(cal(C)) (x - 1 / L nabla cal(L) (x)) $
+
+where the samples $x [i]$ come from some $L_f$-Lipschitz function $f : bb(R) arrow.r bb(R)$
+
+$ x [i] = f (t_i) $
+
+on an interval $t in [a , b]$ that has been evenly discretized $t_(i + 1) - t_i = Delta t$ for all $i in [I]$.
+
+We assume the loss functions $ell_i$ over each entry $x [i]$ are $S$-smooth and $mu$-strongly convex. A natural example of such a function $cal(L)$ would be a least-squares loss
+
+$ cal(L) (x) = 1 / 2 norm(x - y)_2^2 = sum_(i in [I]) 1 / 2 (x [i] - y [i])^2 = sum_(i in [I]) ell_i (x [i]) . $
+
+The following lemmas explain that the smoothness and strong convexity of the functions $ell_i$ carry over to the full loss $cal(L)$.
+
+#lemma()[
+If $ell_i : bb(R) arrow.r bb(R)$ are each $S$-smooth, then $cal(L) : bb(R)^I arrow.r bb(R)$ is $S$-smooth.
+
+#block[
+#emph[Proof]. First note that $(nabla cal(L) (x))_i = frac(partial, partial x [i]) cal(L) (x) = frac(partial, partial x [i]) sum_(j = 1)^I ell_i (x [j]) = sum_(j = 1)^I frac(partial, partial x [i]) ell_i (x [j]) = frac(partial, partial x [i]) ell_i (x [i]) = ell_i^(') (x [i])$ since $cal(L)$ is separable in each coordinate. This gives us, $ norm(nabla cal(L) (x) - nabla cal(L) (y))_2^2 & = sum_(i = 1)^I (nabla cal(L) (x) - nabla cal(L) (y)) [i]^2\
+ & = sum_(i = 1)^I (ell_i^(') (x [i]) - ell_i^(') (x [i]))^2\
+ & lt.eq sum_(i = 1)^I S^2 (x [i] - y [i])^2\
+ & = S^2 norm(x - y)_2^2 . $
+
+Taking square roots completes the proof.
+
+]
+] <lem-smooth-component-functions>
+#lemma()[
+If $ell_i : bb(R) arrow.r bb(R)$ are all $m$ strongly convex, then $cal(L) : bb(R)^I arrow.r bb(R)$ is $m$ strongly convex (under the $2$-norm in $bb(R)^I$).
+
+#block[
+#emph[Proof]. Consider $ cal(L) (x) - m / 2 lr(bar.v.double x bar.v.double)_2^2 & = sum_(i = 1)^I ell_i (x [i]) - m / 2 sum_(i = 1)^I x [i]^2\
+ & = sum_(i = 1)^I (ell_i (x [i]) - m / 2 x [i]^2) . $
+
+The function $g (x [i]) = ell_i (x [i]) - m / 2 x [i]^2$ is convex because each function $ell_i (x [i])$ is $m$ strongly convex. The sum of convex functions is also convex, so $cal(L) (x) - m / 2 lr(bar.v.double x bar.v.double)_2^2$ is convex.
+
+]
+] <lem-strongly-convex-component-functions>
+These conditions can be relaxed to include larger sets of function like quasi-strongly convex functions @necoara_linear_2019, but the general proof approach remains the same. We do require the separability of $cal(L)$ so it can make sense to solve the problem over coarser discretizations.
+
+Now we discuss how Lipschitz functions play with discretizations and linear interpolations.
+
+#lemma("Lipschitz Function Interpolation")[
+Let $f : bb(R)^n arrow.r bb(R)$, $a , b in bb(R)^n$, $t in [0 , 1]$. Suppose $f$ is $L$-Lipshtiz. Then the error between the function at a point on the line segment between $a$ and $b$, and the linear interpolation is $ abs((t f (a) + (1 - t) f (b)) - f (t a + (1 - t) b)) lt.eq 2 L t (1 - t) norm(a - b)_2 . $
+
+] <lem-lipschitz-interpolation>
+Using the bound on the linear interpolation of a Lipschitz function repeatedly, for centre point interpolation ($t = 1 \/ 2$ in @lem-lipschitz-interpolation), we can bound the error between an exact discretization of a function at a fine scale ($Y [j] = f (X [j])$) and a linear interpolation ($hat(Y)$) coming from a coarser discretization ($y [k] = f (x [k])$).
+
+#lemma("Exact Interpolation")[
+Given $K$ uniformly space points $x [k]$ on $[a , b]$, (nearly) double them to get $J = 2 K - 1$ uniformly spaced points $X [j]$ on $[a , b]$. Let $y [k] = f (x [k])$ for some $L$-Lipshitz function $f : bb(R) arrow.r bb(R)$, and linearly interpolate the function values
+
+$ hat(Y) [j] = cases(delim: "{", y [frac(j + 1, 2)] & upright("if ") j upright(" is odd"), 1 / 2 (y [j / 2] + y [j / 2 + 1]) & upright("if ") j upright(" is even")) med , $
+
+where the true values are given by $Y [j] = f (X [j])$. Then the difference between the interpolated $hat(Y)$ and exact values $Y$ is bounded by $ norm(hat(Y) - Y)_2 lt.eq frac(L, 2 sqrt(K - 1)) norm(a - b)_2 . $
+
+] <lem-exact-interpolation>
+We also have an inexact version when we interpolate not from an exact coarse discretization ($y [k] = f (x [k])$), but from an approximate coarse discretization ($tilde(y) [k] = f (x [k]) + delta_k$).
+
+#lemma("Inexact Interpolation")[
+Given a linear interpolation $hat(tilde(Y))$ of an inexact discretization $tilde(y) [k] = f (x [k]) + delta_k$ of a function $f$ as described in @lem-exact-interpolation, where the interpolation is defined as
+
+$ hat(tilde(Y)) [j] & = cases(delim: "{", tilde(y) [frac(j + 1, 2)] & upright("if ") j upright(" is odd"), 1 / 2 (tilde(y) [j / 2] + tilde(y) [j / 2 + 1]) & upright("if ") j upright(" is even")) , $
+
+we have the error bound between the interpolated inexact discretization $hat(tilde(Y))$ and the exact discretization of the function $Y$,
+
+$ norm(hat(tilde(Y)) - Y)_2 & lt.eq norm(hat(tilde(Y)) - hat(Y))_2 + norm(hat(Y) - Y)_2\
+ & lt.eq sqrt(2) norm(tilde(y) - y) + frac(L, 2 sqrt(K - 1)) norm(a - b)_2 . $
+
+#block[
+#emph[Proof]. See @sec-inexact-interpolation-proof.
+
+]
+] <lem-inexact-interpolation>
+This makes sense in the following way: the error in our interpolation of approximate points, is bounded by two errors. The first comes from the fact that we interpolated using approximated values $tilde(y)$ in place of the true values $y$, and the second comes from using a linear interpolation $hat(Y)$ in place of the exact values $Y$.
+
+=== Re-solved Multi-scale
+<sec-resolved-multiscale>
+LEFT OFF HERE
+
+We use the following general approach to show convergence.
+
+Given some initial guess $x_S^0$ at the coarsest scale, we use the decent lemma (@prp-descent-lemma) to bound the error between our iterate $x_S^(K_S)$ after $K_S$ iterations, and the solution $x_S^(\*)$ at the scale $S$. We can linearly interpolate our point $hat(x)_S^(K_S)$ and use it to initialize another round of projected gradient descent $x_(S - 1)^0 = hat(x)_S^(K_S)$ at the slightly finer scale. We can link the error between our iterate $x_S^(K_S)$ and the solution $x_S^(\*)$ at scale $S$ with the initial error between an iterate at the finer scale $x_(S - 1)^0$ and the solution $x_(S - 1)^(\*)$ at this scale using the inexact interpolation lemma (@lem-inexact-interpolation). We perform $K_s$ iterations at each scale $s = S , S - 1 , dots.h , 2 , 1$ to get an error bound between our iterate at the finest scale $x_1^K ""_1$ the solution at this scale $x_1^(\*)$ in terms of the initial error at the coarsest scale $x_S^0$.
+
+We present the main descent theorem here, and leave the rest of the details in the appendix.
+
+#theorem("Re-solved Multi-scale Descent Error")[
+Let $c$ be the condition number of the loss function $cal(L)$, $L_f$ be the Lipschitz constant for the underlying continuous function $f$, and $S$ be the coarsest scale. For the setting described in @sec-analysis-lemmas, we have the following error bound on the fixed multi-scaled method. $  & norm(x_1^0 - x_1^(\*))_2\
+ & lt.eq sqrt(2^(S - 1)) (1 - c)^(sum_(s = 1)^S K_s) norm(x_S^0 - x_S^(\*))_2 + frac(L_f abs(a - b), 2 sqrt(2^(S + 1))) sum_(s = 1)^(S - 1) 2^s (1 - c)^(sum_(t = 1)^s K_t) $
+
+#block[
+#emph[Proof]. See @sec-resolved-multiscale-descent-error-proof
+
+]
+] <thm-resolved-multiscale-descent-error>
+=== Freezed Multi-scale
+<sec-freezed-multiscale>
+We take a nearly identical approach to the re-solved multi-scale method as described in @sec-resolved-multiscale, but we instead freeze the entries of our interpolation $hat(x)_s^(K_s)$ that correspond to the same points as the prior iteration $x_s^(K_s)$. The projected gradient update will only act on the interpolated and unfrozen values which we will call $x_((s))^k$.
+
+TODO can I just introduce this notation in the proofs so that the main paper is cleaner?
+
+To be clear let us look at an example where the finest scale has $2^3 + 1 = 9$ points. After performing $K_3$ iterations at the coarsest scale $S = 3$ with a total of three points, and slightly finer scale $S = 2$ with five points (but only two unfrozen points), the full vector at the finest scale would be
+
+$  & x_1^k =\
+ & (x_((3))^(K_3) [1] , x_((1))^k [1] , x_((2))^(K_2) [1] , x_((1))^k [2] , x_((3))^(K_3) [2] , x_((1))^k [3] , x_((2))^(K_2) [2] , x_((1))^k [4] , x_((3))^(K_3) [3]) $
+
+where the vector of free variables is
+
+$  & x_((1))^k = (x_((1))^k [1] , x_((1))^k [2] , x_((1))^k [3] , x_((1))^k [4]) . $
+
+#strong[Summary of notation]
+
+- $hat(x)$ is some approximation of $x$
+- $x_((s))$ is a vector of just the free variables at scale $s$
+- $x_s$ is a vector of the free and fixed variables
+- $x^k$ is the $k$th iteration
+- $K_s$ is the number of iterations performed at scale $s$
+- $e = hat(x) - x^(\*)$ is the error
+- have $e_((s)) , e_s , e^k$ similarly.
+  - Example, $e_1^2 = x_1^2 - x_1^(\*)$ is the error between our iterates at the finest scale $s = 1$ and the true values $x_1^(\*)$ after $2$ iterations
+
+We present the main descent theorem here, and leave the rest of the details in the appendix.
+
+#theorem("Freezed Multi-scale Descent Error")[
+Let $c$ be the condition number of the loss function $cal(L)$. For the setting described in @sec-analysis-lemmas, we have the following error bound on the freezed multi-scaled method.
+
+$ norm(e_1^(K_1)) & lt.eq norm(e_S^0) (1 - c)^(K_S) product_(s = 1)^(S - 1) (1 + (1 - c)^(K_s))\
+ & #h(2em) + med L_f / 2 abs(b - a) sum_(s = 1)^(S - 1) 1 / sqrt(2^(S - s)) (1 - c)^(K_s) product_(j = 1)^(s - 1) (1 + (1 - c)^(K_j)) . $
+
+If we use the same number of iterations $K_s = K$ at each scale, this reduces to the closed form upper bound $ norm(e_1^(K_1)) & lt.eq norm(e_S^0) d (K) (1 + d (K))^(S - 1)\
+ & #h(2em) + med L_f / 2 abs(b - a) frac(d (K) (sqrt(2^S) (d (K) + 1)^S - sqrt(2) (d (K) + 1)), sqrt(2^S) (d (K) + 1) (sqrt(2) d (K) + sqrt(2) - 1)) $
+
+where $d (K) = (1 - c)^K$ is a small number between $0 < d (K) < 1$.
+
+#block[
+#emph[Proof]. See @sec-freezed-multiscale-descent-error-proof.
+
+]
+] <thm-freezed-multiscale-descent-error>
+We summarize the convergence with @cor-multiscale-convergence that sends the number of iterations to infinity.
+
+#corollary("Multiscale Convergence")[
+As the total number of iterations grows $sum_(s = 1)^S K_s arrow.r oo$ (in the case of re-solve multi-scale in @thm-resolved-multiscale-descent-error) or the number of iterations at each scale $K_s arrow.r oo$ (in the case of freezed multi-scale in @thm-freezed-multiscale-descent-error), the final error goes to $0$, $lr(bar.v.double e_1^(K_1) bar.v.double)_2 arrow.r 0$, and we converge to the solution $x_1^(K_1) arrow.r x_1^(\*)$ at the finest scale.
+
+] <cor-multiscale-convergence>
+== Comparison With Projected Gradient Descent
+<comparison-with-projected-gradient-descent>
+From @prp-descent-lemma, projected gradient descent with a generic initialization on the fine grid gives us the following iterate convergence
+
+$ norm(x_1^K - x_1^(\*)) lt.eq (1 - c)^K norm(x_1^0 - x_1^(\*)) . $
+
+We can use this in combination with an expected initial error to get an expected number of iterations needed until we have converged to a desired tolerance. This is make precise by @thm-expected-pgd-convergence.
+
+#theorem("Expected Projected Gradience Descent Convergence")[
+Assume the problem is either scaled or shifted so that the solution is normalized $norm(x_1^(\*))_2 = 1$ or centred $norm(x_1^(\*))_2 = 0$ where $x_1^(\*) in bb(R)^I$. Choose an initialization $x_1^0 in bb(R)^I$ with i.i.d. standard normal entries $(x_1^0)_i tilde.op cal(N) (0 , 1)$. Then the expected initial error is $ bb(E) norm(x_1^0 - x_1^(\*))_2 = sqrt(I + 1) . $
+
+And, as the number of points grows $I arrow.r oo$, if we iterate projected gradient descent $K$ times where $ K gt.eq frac(log (1 \/ epsilon.alt) + log (I - 1) \/ 2, - log (1 - c)) , $
+
+the expected error is less than $epsilon.alt$,
+
+$ bb(E) norm(x_1^0 - x_1^(\*))_2 lt.eq epsilon.alt . $
+
+#block[
+#emph[Proof]. See @sec-expected-pgd-convergence-proof.
+
+]
+] <thm-expected-pgd-convergence>
+This is contrasted with the expected initial and final error for re-solved multi-scaled descent (@thm-expected-resolved-convergence) and freezed multi-scaled descent (@thm-expected-freezed-convergence).
+
+#theorem("Expected Re-solved Multi-scale Convergence")[
+Assume the same setting as in @thm-expected-pgd-convergence, but instead using re-solved multi-scaled descent method starting with a scale $s_0$. Let the number of points at the finest scale be $I = 2^S + 1$. Then we have the expected initial error
+
+$ bb(E) norm(x_(s_0)^0 - x_(s_0)^(\*))_2 = sqrt(2^(S - s_0 + 1) + 2) . $
+
+Performing $K_s$ iterations at each scale gives us the expected final error
+
+$  & bb(E) norm(x_1^(K_1) - x_1^(\*))_2\
+ & lt.eq (1 - c)^(K_1) sqrt(2^(S + 1)) ((1 - c)^(sum_(s = 2)^S K_s) + frac(L abs(a - b), 2 dot.op 2^S) + frac(L abs(a - b), 2 dot.op 2) sum_(s = 2)^(S - 1) (1 - c)^(sum_(t = 2)^s K_t) / 2^(S - s)) . $
+
+#block[
+#emph[Proof]. See @sec-expected-resolved-convergence-proof.
+
+]
+] <thm-expected-resolved-convergence>
+It is not as straightforward to get the required number of iterations to achieve a desired level of accuracy. Additionally, this would not be a fair comparison with projected gradient descent since we expect an iteration at a coarse scale $S$ to be cheaper (less time and fewer floating point operations) than an iteration at the finest scale $s = 1$. For this reason, we need to cost an iteration of projected gradient descent at a scale $s$ in terms of the size of the problem at that scale.
+
+#lemma("Cost of Projected Gradient Descent vs Multi-scale")[
+Suppose the total cost of regular descent is given by $ C_(upright("GD")) = C_1 K $
+
+where $C_1$ is the cost of performing one iteration at the finest scale $s = 1$.
+
+The total cost of multi-scale descent is $ C_(upright("MS")) = sum_(s = 1)^S C_s K_s $
+
+similarly.
+
+If we assume the cost of projected gradient scales at least in the size of the problem ($C_1 = Omega (I)$, i.e.~$C_1 gt.eq C I$ for some $C gt.eq 0$), then the cost of projected gradient descent at scale $s$ is $ C_s gt.eq frac(2^(S - s + 1) + 1, 2^(S - s) + 1) C_(s + 1) gt.eq 3 / 2 C_(s + 1) , $
+
+which gives the total cost of multi-scale descent at most
+
+$ C_(upright("MS")) lt.eq C_1 sum_(s = 1)^S (2 / 3)^(s - 1) K_s . $
+
+#block[
+#emph[Proof]. See @sec-cost-of-gd-vs-ms-proof.
+
+]
+] <lem-cost-of-gd-vs-ms>
+We can use this to select a plan for the number of iterations at each scale $K_s$ that will be cheaper than projected gradient descent, yet still give the same upper bound on the expected final error.
+
+#corollary("Sufficient Conditions for Re-solved Multi-scale to be Cheaper")[
+Assume the problem is well conditioned with a condition number at least $c gt.eq 0.3$, and the finest scale problem is discretized with at least $I gt.eq 33 = 2^(4 + 1) + 1$ points. Then performing re-solved multi-scale with one iteration $K_s = 1$ at each scale except the finest scale where we iterate $K_1 = K - 3$ times, yields a tighter upper bound on the expected final error with a cheaper cost, than performing projected gradient descent with $K$ iterations.
+
+#block[
+#emph[Proof]. See @sec-resolved-cost-proof.
+
+]
+We can play a similar game for the freezed multi-scale approach.
+
+] <cor-resolved-cost>
+#theorem("Expected Freezed Multi-scale Convergence")[
+Assumed the same setting as @thm-expected-pgd-convergence, but instead using the freezed multi-scale approach starting at the coarsest scale $S$, where the finest scale has $I = 2^S + 1$ many points. Then the expected initial error is two,
+
+$ bb(E) norm(x_(s_0)^0 - x_(s_0)^(\*))_2 = 2 . $
+
+Performing the same number of iterations $K_s = K$ at each scale gives us the expected final error
+
+$  & bb(E) norm(x_1^K - x_1^(\*))_2\
+ & lt.eq d (K) (2 (1 + d (K))^(S - 1) + L_f / 2 abs(b - a) frac((sqrt(2^S) (d (K) + 1)^S - sqrt(2) (d (K) + 1)), sqrt(2^S) (d (K) + 1) (sqrt(2) d (K) + sqrt(2) - 1))) $
+
+where $d (K) = (1 - c)^K$, $c$ is the condition number for the problem, and the underlying continuous function $f$ is $L_f$ Lipschitz on the interval $[a , b]$.
+
+#block[
+#emph[Proof]. See @sec-expected-freezed-convergence-proof.
+
+]
+] <thm-expected-freezed-convergence>
+To better analyze when the bound for freezed multi-scale descent (@thm-expected-freezed-convergence) is small than for regular projected gradient descent (@thm-expected-pgd-convergence), we will look at the case when we have many iterations. This lets us approximate $d (K) approx 0$ since we know $d (K) arrow.r 0$ as $K arrow.r oo$.
+
+#corollary("Sufficient Conditions for Freezed Multi-scale to be Cheaper")[
+Assume the finest scale has at least $I gt.eq 2^S + 1$ many points where $S$ is at least
+
+$ S > log_2 ((frac(L_f / 2 abs(b - a) + 1 \/ 2, (sqrt(2) - 1)) + 2)^2 - 2) . $
+
+Then performing freezed multi-scale with $K_s = ⌈ K \/ 3 ⌉ - 1$ iterations at each scale starting with a scale $s = S$, yields a tighter upper bound on the expected final error with a cheaper cost, than performing projected gradient descent with $K$ iterations.
+
+#block[
+#emph[Proof]. See @sec-freezed-cost-proof.
+
+]
+] <cor-freezed-cost>
+== Benchmarks
+<benchmarks>
+=== Synthetic Data
+<synthetic-data>
+TODO see multiscalesynthetic3d.jl
+
+For a synthetic test, we generate 3 source distributions. Each distribution is a 3 dimensional product distribution of some standard continuous distributions.
+
+```julia
+using Distributions
+
+source1a = Normal(4, 1)
+source1b = Uniform(-7, 2)
+source1c = Uniform(-1, 1)
+
+source2a = Normal(0, 3)
+source2b = Uniform(-2, 2)
+source2c = Exponential(2)
+
+source3a = Exponential(1)
+source3b = Normal(0, 1)
+source3c = Normal(0, 3)
+
+source1 = product_distribution([source1a, source1b, source1c])
+source2 = product_distribution([source2a, source2b, source2c])
+source3 = product_distribution([source3a, source3b, source3c])
+
+sources = (source1, source2, source3)
+```
+
+We generate the following $5 times 3$ mixing matrix
+
+```julia
+p1 = [0, 0.4, 0.6]
+p2 = [0.3, 0.3, 0.4]
+p3 = [0.8, 0.2, 0]
+p4 = [0.2, 0.7, 0.1]
+p5 = [0.6, 0.1, 0.3]
+
+C_true = hcat(p1,p2,p3,p4,p5)'
+```
+
+and use it to construct $5$ mixture distributions.
+
+```julia
+distribution1 = MixtureModel([sources...], p1)
+distribution2 = MixtureModel([sources...], p2)
+distribution3 = MixtureModel([sources...], p3)
+distribution4 = MixtureModel([sources...], p4)
+distribution5 = MixtureModel([sources...], p5)
+distributions = [distribution1, distribution2, distribution3, distribution4, distribution5]
+```
+
+These are discretized into $65 times 65 times 65$ sample tensors, and stacked into a $5 times 65 times 65 times 65$. We normalize the $1$-slices so that they sum to one.
+
+```julia
+sinks = [pdf.((d,), xyz) for d in distributions]
+Y = cat(sinks...; dims=4)
+# reorder so the first dimension indexes mixtures rather than the final dimension
+Y = permutedims(Y, (4,1,2,3))
+Y_slices = eachslice(Y, dims=1)
+correction = sum.(Y_slices) # normalize slices to 1
+Y_slices ./= correction
+```
+
+Because these are large tensors, we only test a single shot decomposition (after they have been compiled). This gives us the following.
+
+```julia
+# Run once to compile functions
+factorize(Y; options...);
+multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
+```
+
+```julia
+# Time the functions
+@time decomposition, stats_data, kwargs = factorize(Y; options...);
+```
+
+```shell
+11.828295 seconds (214.97 k allocations: 15.197 GiB, 32.42% gc time, 0.00% compilation time)
+```
+
+```julia
+@time decomposition, stats_data, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
+```
+
+```shell
+2.335374 seconds (201.33 k allocations: 2.905 GiB, 25.26% gc time, 0.00% compilation time)
+```
+
+We can see that `multiscale_factorize` is roughly five times as fast and uses about a fifth of the memory in this example.
+
+=== Real Data
+<real-data>
+We use the same sedimentary data and Tucker-$1$ model as described in @graham_tracing_2025 to factorize a tensor containing mixtures of estimated densities. We discretize the densities with $K = 2^10 + 1 = 1025$ points to obtain an input tensor $Y in bb(R)_(+)^(20 times 7 times 1025)$ and normalize the depth fibres so that $sum_(k in [K]) Y [i , j , k] = 1$ for all $i in [20]$ and $j in [7]$.
+
+We run the multi-scale factorization algorithm
+
+```julia
+multiscale_factorize(Y; continuous_dims=3, options...)
+```
+
+with the following options.
+
+```julia
+options = (
+    rank=3,
+    momentum=false,
+    do_subblock_updates=false,
+    model=Tucker1,
+    tolerance=(0.12),
+    converged=(RelativeError), # relative error ≤ 12%
+    constrain_init=true,
+    constraints=[l1scale_average12slices! ∘ nonnegative!, nnonnegative!],
+    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError],
+    maxiter=200
+)
+```
+
+We use the same convergence criteria at each scale and iterate until the relative error between the input $Y$ and our model $X$ is at most $12 %$, or until $200$ iterations have passed. We use $12 %$ because this is roughly the error Graham et. al.~observe in their final factorization @graham_tracing_2025. The third dimension is specified as continuous since each depth fibre $Y [i , j , :]$ is a discretized continuous probability density function.
+
+This is compared to the regular factorization algorithm
+
+```julia
+factorize(Y; options...)
+```
+
+using the Julia package `BenchmarkingTools`. This runs the algorithm as many times as it can within a default time window. Note that a new random initialization is generated for each run. After running the following,
+
+```julia
+using BenchmarkingTools
+
+# Run each function once so they compile
+factorize(Y; options...);
+multiscale_factorize(Y; continuous_dims=3,options...);
+
+benchmark1 = @benchmark factorize(Y; options...)
+display(benchmark1)
+
+benchmark2 = @benchmark multiscale_factorize(Y; continuous_dims=3,options...)
+display(benchmark2)
+```
+
+we observe the two benchmarks. For `factorize`, we have
+
+```julia
+BenchmarkTools.Trial: 22 samples with 1 evaluation per sample.
+Range (min … max):  103.648 ms … 541.438 ms  ┊ GC (min … max): 13.87% … 14.20%
+Time  (median):     191.769 ms               ┊ GC (median):    15.00%
+Time  (mean ± σ):   227.315 ms ± 130.666 ms  ┊ GC (mean ± σ):  15.04% ±  1.79%
+
+▃▃     █    ▃    ▃
+██▇▁▇▁▁█▁▁▇▇█▇▁▁▁█▁▁▁▇▁▁▇▁▁▁▁▁▁▁▁▁▁▇▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▇▁▇▁▁▁▁▇ ▁
+104 ms           Histogram: frequency by time          541 ms <
+
+Memory estimate: 201.53 MiB, allocs estimate: 78879.
+```
+
+and for `multiscale_factorize`, we observe the following.
+
+```julia
+BenchmarkTools.Trial: 59 samples with 1 evaluation per sample.
+Range (min … max):  63.974 ms … 147.756 ms  ┊ GC (min … max):  0.00% … 22.20%
+Time  (median):     81.719 ms               ┊ GC (median):    13.13%
+Time  (mean ± σ):   85.094 ms ±  13.163 ms  ┊ GC (mean ± σ):  12.13% ±  5.42%
+
+            ▁█  ▁ ▁      ▁
+▆▁▁▁▁▁▁▁▆▁▄▆▇██▆▇█▇█▄▆▄▄▄▆█▁▁▁▄▁▄▄▁▄▁▁▄▄▁▁▁▁▁▁▄▁▁▁▁▁▁▁▁▁▁▁▁▄ ▁
+64 ms           Histogram: frequency by time          125 ms <
+
+Memory estimate: 84.93 MiB, allocs estimate: 634376.
+```
+
+By every metric, the multi-scale approach is faster and uses less memory than the regular factorize approach. Looking at the median time and memory estimate, it is roughly twice as fast, and uses about half as much memory in the case of this problem. These wall clock times include a nontrivial amount of garbage collection (GC) so it means there could be design improvements such as using more preallocated arrays to reduce memory usage. But these improvements would speed up both `factorize` and `multiscale_factorize`. Without these improvements, we can see that `multiscale_factorize` is less likely to use garbage collection since more computations are occurring on smaller arrays.
+
 = Conclusion
 <conclusion>
-- all-in-one package
-- provide a playground to invent new decompositions
-- like auto-diff for factorizations
+The BlockTensorDecomposition.jl Julia provides a new all-in-one package for performing constrained tensor factorizations, and a playground for designing new decompositions and custom constraints. Careful design elements were engineered to balance flexibility and efficiency. By creating this package, new advancements like enforcing constraints through scaling rather than projection, and performing optimization over multiple scales were mathematically examined and numerically tested. These novel ideas are worth investigating further to see their applicability to continuous optimization beyond tensor factorization.
 
 = Appendix
 <appendix>
@@ -2987,7 +3660,321 @@ supplement: "Table",
 <tbl-blockupdate-randomization>
 
 
+== Constraint Rescaling Proofs
+<constraint-rescaling-proofs>
+In the following proofs, we have an $L_f$-Lipschitz function $f : [l , u] arrow.r bb(R)$ that is discretized according to
 
+$ x [i] = f (t [i]) , $
+
+where
+
+$ t [i] = l + (i - 1) Delta t = l + (i - 1) frac(u - l, I - 1) . $
+
+See @thm-rem-constraint-assumptions.
+
+This ensures neighboring entries of $x$ are close together. Specifically, we have
+
+$ abs(x_i - x_(i + 1)) = abs(f (t_i) - f (t_(i + 1))) lt.eq L_f abs(t_i - t_(i + 1)) = L_f frac(u - l, I - 1) := C_x . $
+
+=== Linear Constraint Scaling
+<sec-linear-constraint-scaling-proof>
+#block[
+#emph[Proof]. First, assume an even number of points $I$. $ abs(2 ⟨overline(a) , overline(x)⟩ - b) & = abs(2 sum_(i med upright("odd")) a_i x_i - sum_(i = 1)^I a_i x_i)\
+ & = abs(sum_(i med upright("odd")) a_i x_i - sum_(i med upright("even")) a_i x_i)\
+ & = abs(sum_(i med upright("odd")) a_i x_i - sum_(i med upright("odd")) a_(i + 1) x_(i + 1))\
+ & lt.eq sum_(i med upright("odd")) abs(a_i x_i - a_(i + 1) x_(i + 1))\
+ & = sum_(i med upright("odd")) abs(a_i x_i - a_(i + 1) x_i + a_(i + 1) x_i - a_(i + 1) x_(i + 1))\
+ & lt.eq sum_(i med upright("odd")) (abs(a_i x_i - a_(i + 1) x_i) + abs(a_(i + 1) x_i - a_(i + 1) x_(i + 1)))\
+ & = sum_(i med upright("odd")) (abs(x_i) abs(a_i - a_(i + 1)) + abs(a_(i + 1)) abs(x_i - x_(i + 1)))\
+ & lt.eq max (lr(bar.v.double a bar.v.double)_oo , lr(bar.v.double x bar.v.double)_oo) sum_(i med upright("odd")) (abs(a_i - a_(i + 1)) + abs(x_i - x_(i + 1)))\
+ & lt.eq max (lr(bar.v.double a bar.v.double)_oo , lr(bar.v.double x bar.v.double)_oo) sum_(i med upright("odd")) (C_a + C_x)\
+ & = max (lr(bar.v.double a bar.v.double)_oo , lr(bar.v.double x bar.v.double)_oo) (C_a + C_x) I / 2\
+ & = max (lr(bar.v.double a bar.v.double)_oo , lr(bar.v.double x bar.v.double)_oo) frac(I (L_g + L_f) (u - l), 2 (I - 1))\
+ & lt.eq max (lr(bar.v.double g bar.v.double)_oo , lr(bar.v.double f bar.v.double)_oo) frac(I (L_g + L_f) (u - l), 2 (I - 1)) $
+
+]
+=== $L_1$ norm Constraint
+<sec-l1-norm-constraint-scaling-proof>
+#block[
+#emph[Proof]. For $I$ even, $ abs(2 norm(overline(x)) - lr(bar.v.double x bar.v.double)_1) & = abs(2 sum_(i med upright("odd")) lr(|x_i) - sum_(i = 1)^I abs(x_i)|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) + sum_(i med upright("odd")) abs(x_i) - (sum_(i med upright("odd")) abs(x_i) + sum_(i med upright("even")) abs(x_i))|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) - sum_(i med upright("even")) abs(x_i)|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) - sum_(i med upright("odd")) abs(x_(i + 1))|)\
+ & lt.eq sum_(i med upright("odd")) abs(lr(|x_i) - abs(x_(i + 1))|)\
+ & lt.eq sum_(i med upright("odd")) abs(x_i - x_(i + 1))\
+ & lt.eq sum_(i med upright("odd")) C\
+ & = C I / 2\
+ & = frac(I L (u - l), 2 (I - 1)) . $
+
+For $I$ odd, we have $ abs(2 norm(overline(x)) - frac(I + 1, I) lr(bar.v.double x bar.v.double)_1) & = abs(2 norm(overline(x)) - lr(bar.v.double x bar.v.double)_1 - lr(bar.v.double x bar.v.double)_1 / I)\
+ & = abs(2 sum_(i med upright("odd")) lr(|x_i) - sum_(i = 1)^I abs(x_i) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) + sum_(i med upright("odd")) abs(x_i) - (sum_(i med upright("odd")) abs(x_i) + sum_(i med upright("even")) abs(x_i)) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & = abs(sum_(i med upright("odd")) lr(|x_i) - sum_(i med upright("even")) abs(x_i) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & = abs(sum_(j = 1)^((I - 1) \/ 2) lr(|x_(2 j - 1)) + abs(x_I) - sum_(j = 1)^((I - 1) \/ 2) abs(x_(2 j)) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & lt.eq sum_(j = 1)^((I - 1) \/ 2) abs(lr(|x_(2 j - 1)) - abs(x_(2 j))|) + abs(lr(|x_I) - lr(bar.v.double x bar.v.double)_1 / I|)\
+ & lt.eq sum_(j = 1)^((I - 1) \/ 2) abs(x_(2 j - 1) - x_(2 j)) + 1 / I abs(I lr(|x_I) - lr(bar.v.double x bar.v.double)_1|)\
+ & lt.eq sum_(j = 1)^((I - 1) \/ 2) C + 1 / I abs(sum_(i = 1)^I (lr(|x_I) - abs(x_i))|)\
+ & lt.eq C frac(I - 1, 2) + 1 / I sum_(i = 1)^I abs(lr(|x_I) - abs(x_i)|)\
+ & lt.eq C frac(I - 1, 2) + 1 / I sum_(i = 1)^I abs(x_I - x_i)\
+ & lt.eq C frac(I - 1, 2) + 1 / I sum_(i = 1)^I C (I - i) med upright("(Apply Lipschitz recursively)")\
+ & = C frac(I - 1, 2) + 1 / I frac(C I (I - 1), 2)\
+ & = frac(L (u - l), 2) + frac(L (u - l), 2)\
+ & = L (u - l) . $
+
+]
+== Multi-scale Convergence Proofs
+<multi-scale-convergence-proofs>
+=== Inexact Interpolation Error Proof
+<sec-inexact-interpolation-proof>
+Proof of @lem-inexact-interpolation.
+
+#emph[Proof]. We let the inexact values be $tilde(y) [k] = y [k] + delta_k$, and we interpolate the inexact values to get $hat(tilde(Y))$: $ hat(tilde(Y)) [j] & = cases(delim: "{", tilde(y) [frac(j + 1, 2)] & upright("if ") j upright(" is odd"), 1 / 2 (tilde(y) [j / 2] + tilde(y) [j / 2 + 1]) & upright("if ") j upright(" is even"))\
+ & = cases(delim: "{", y [frac(j + 1, 2)] + delta_(frac(j + 1, 2)) & upright("if ") j upright(" is odd"), 1 / 2 (y [j / 2] + y [j / 2 + 1]) + 1 / 2 (delta_(j / 2) + delta_(j / 2 + 1)) & upright("if ") j upright(" is even")) . $
+
+So for odd $j$, $ abs(hat(tilde(Y)) [j] - hat(Y) [j]) = abs(delta_(frac(j + 1, 2))) := e [j] , $
+
+and even $j$, $ abs(hat(tilde(Y)) [j] - hat(Y) [j]) = 1 / 2 abs(delta_(j / 2) + delta_(j / 2 + 1)) := e [j] . $
+
+So we have $ norm(hat(tilde(Y)) - hat(Y)) = sqrt(sum_(j in [J]) abs(hat(tilde(Y)) [j] - hat(Y) [j])^2) = sqrt(sum_(j in [J]) abs(e [j])^2) = lr(bar.v.double e bar.v.double) $
+
+We would like some bound on $lr(bar.v.double e bar.v.double)$ in terms of the closeness of $y$ and $tilde(y)$ (that is, in terms of $delta$).
+
+$ lr(bar.v.double e bar.v.double)^2 & = sum_(j med upright("odd")) abs(e [j])^2 + sum_(j med upright("even")) abs(e [j])^2\
+ & = sum_(j med upright("odd")) abs(delta_(frac(j + 1, 2)))^2 + sum_(j med upright("even")) abs(1 / 2 (delta_(j / 2) + delta_(j / 2 + 1)))^2\
+ & = sum_(k = 1)^K abs(delta_k)^2 + 1 / 4 sum_(k = 1)^(K - 1) (delta_k + delta_(k + 1))^2\
+ & = norm(delta)^2 + 1 / 4 sum_(k = 1)^(K - 1) (delta_k^2 + delta_(k + 1)^2 + 2 delta_k delta_(k + 1))\
+ & = norm(delta)^2 + 1 / 4 (sum_(k = 1)^(K - 1) delta_k^2 + sum_(k = 1)^(K - 1) delta_(k + 1)^2 + 2 sum_(k = 1)^(K - 1) delta_k delta_(k + 1))\
+ & lt.eq norm(delta)^2 + 1 / 4 (sum_(k = 1)^K delta_k^2 + sum_(k = 0)^(K - 1) delta_(k + 1)^2 + 2 sum_(k = 1)^(K - 1) delta_k delta_(k + 1))\
+ & = norm(delta)^2 + 1 / 4 (norm(delta)^2 + norm(delta)^2 + 2 sum_(k = 1)^(K - 1) delta_k delta_(k + 1))\
+ & = 3 / 2 norm(delta)^2 + 1 / 2 sum_(k = 1)^(K - 1) delta_k delta_(k + 1)\
+ & lt.eq 3 / 2 norm(delta)^2 + 1 / 2 sqrt(sum_(k = 1)^(K - 1) delta_k^2) sqrt(sum_(k = 1)^(K - 1) delta_(k + 1)^2) quad upright("(Cauchy–Schwarz)")\
+ & lt.eq 3 / 2 norm(delta)^2 + 1 / 2 sqrt(sum_(k = 1)^K delta_k^2) sqrt(sum_(k = 0)^(K - 1) delta_(k + 1)^2)\
+ & = 3 / 2 norm(delta)^2 + 1 / 2 norm(delta) norm(delta)\
+ & = 2 norm(delta)^2 $
+
+Therefore, $ lr(bar.v.double e bar.v.double) lt.eq sqrt(2) norm(delta) $
+
+or substituting our notation, $ norm(hat(tilde(Y)) - hat(Y)) lt.eq sqrt(2) norm(tilde(y) - y) . $
+
+This is saying that the error in our fine grid $(Y)$ is bounded by a factor of $sqrt(2)$ of the error in the coarse grid $(y)$ when we double the number of points.
+
+Now we can use the triangle inequality to bound the difference between the interpolated approximate values $hat(tilde(Y))$ and the true values on the finer grid $Y$: $ norm(hat(tilde(Y)) - Y) & lt.eq norm(hat(tilde(Y)) - hat(Y)) + norm(hat(Y) - Y)\
+ & lt.eq sqrt(2) norm(tilde(y) - y) + frac(L, 2 sqrt(K - 1)) norm(a - b)_2 . $
+
+END OF PROOF
+
+=== Re-solved Multi-scale Descent Error Proof
+<sec-resolved-multiscale-descent-error-proof>
+Proof of @thm-resolved-multiscale-descent-error.
+
+Using the lemmas in @sec-analysis-lemmas, we showed $ norm(hat(tilde(Y)) - Y) lt.eq sqrt(2) norm(tilde(y) - y) + frac(L abs(a - b), 2 sqrt(K - 1)) . $ Note the $L$ is the Lipchitz constant of the continuous function $f$, not the smoothness of the objective $cal(L)$ above, and the $K$ is the number of points in the discretization, not the number of iterations. Translating this into our notation for the multi-scaled descent, we have $ norm(x_(s / 2)^0 - x_(s / 2)^(\*)) = norm(hat(x)_s^(K_s) - x_(s / 2)^(\*)) lt.eq sqrt(2) norm(x_s^(K_s) - x_s^(\*)) + frac(L abs(a - b), 2 sqrt(2^(S - s + 1))) . $ Note that at scale $s$, we have $2^(S - s + 1) + 1$ many points in our discretization, where we have $2^S + 1$ many points in our finest scale, and the discretization is over the interval $a lt.eq t lt.eq b$ for an $L$ Lipschitz function $f$.
+
+Combining this with our convergence for gradient descent gives us the inequality $ norm(x_(s / 2)^0 - x_(s / 2)^(\*)) & lt.eq sqrt(2) norm(x_s^(K_s) - x_s^(\*)) + frac(L abs(a - b), 2 sqrt(2^(S - s + 1)))\
+ & lt.eq sqrt(2) (1 - c)^(K_s) norm(x_s^0 - x_s^(\*)) + frac(L abs(a - b), 2 sqrt(2^(S - s + 1))) $ I noticed I am using $s$ in two different ways here. Originally, $s$ was supposed to be the number of points we skip, as in "only keep every $s$ points in our discretization". This is meant to start at some large power of $2$ and keep halving until we hit $1$. But the $s$ in $2^(S - s + 1)$ counts what scale we are at and starts at $S$ and decreasing by $1$ until we hit $1$. The second definition makes more sense so we will go with that from now on. This means our descent lemma looks like $ norm(x_(s - 1)^0 - x_(s - 1)^(\*)) & lt.eq sqrt(2) (1 - c)^(K_s) norm(x_s^0 - x_s^(\*)) + frac(L abs(a - b), 2 sqrt(2^(S - s + 1))) . $ Or writing it in terms of $s + 1$: $ norm(x_s^0 - x_s^(\*)) & lt.eq sqrt(2) (1 - c)^(K_(s + 1)) norm(x_(s + 1)^0 - x_(s + 1)^(\*)) + sqrt(2^s) frac(L abs(a - b), 2 sqrt(2^S)) . $ Let $e_s = norm(x_s^0 - x_s^(\*))$ and $C = frac(L abs(a - b), 2 sqrt(2^(S + 1)))$ to clean up notation
+
+$ e_s & lt.eq sqrt(2) (1 - c)^(K_(s + 1)) e_(s + 1) + sqrt(2^(s + 1)) C . $ Now we recurse! Starting from the last initial error at the finest scale $e_1$, we want to write this in terms of the first initial error at the largest scale $e_S$. $ e_1 & lt.eq sqrt(2) (1 - c)^(K_2) e_2 + sqrt(2^2) C\
+ & lt.eq sqrt(2) (1 - c)^(K_2) (sqrt(2) (1 - c)^(K_3) e_3 + sqrt(2^3) C) + sqrt(2^2) C\
+ & = sqrt(2) (1 - c)^(K_2) sqrt(2) (1 - c)^(K_3) e_3 + sqrt(2) (1 - c)^(K_2) sqrt(2^3) C + sqrt(2^2) C\
+ & = sqrt(2)^2 (1 - c)^(K_2 + K_3) e_3 + sqrt(2) (1 - c)^(K_2) sqrt(2^3) C + sqrt(2^2) C $ Before going further, we actually want to run gradient descent with the starting point $x_1^0$ (the $x$ inside $e_1$), so we should really be writing $  & norm(x_1^(K_1) - x_1^(\*))\
+ & lt.eq (1 - c)^(K_1) norm(x_1^0 - x_1^(\*))\
+ & = (1 - c)^(K_1) e_1\
+ & lt.eq (1 - c)^(K_1) (sqrt(2) (1 - c)^(K_2) e_2 + sqrt(2^2) C)\
+ & = sqrt(2) (1 - c)^(K_1 + K_2) e_2 + (1 - c)^(K_1) sqrt(2^2) C\
+ & lt.eq sqrt(2) (1 - c)^(K_1 + K_2) (sqrt(2) (1 - c)^(K_3) e_3 + sqrt(2^3) C) + (1 - c)^(K_1) sqrt(2^2) C\
+ & = sqrt(2)^2 (1 - c)^(K_1 + K_2 + K_3) e_3 + sqrt(2) (1 - c)^(K_1 + K_2) sqrt(2^3) C + (1 - c)^(K_1) sqrt(2^2) C\
+ & lt.eq sqrt(2)^2 (1 - c)^(K_1 + K_2 + K_3) (sqrt(2) (1 - c)^(K_4) e_4 + sqrt(2^4) C) + sqrt(2) (1 - c)^(K_1 + K_2) sqrt(2^3) C + (1 - c)^(K_1) sqrt(2^2) C\
+ & = sqrt(2)^3 (1 - c)^(K_1 + K_2 + K_3 + K_4) e_4 + sqrt(2)^2 (1 - c)^(K_1 + K_2 + K_3) sqrt(2^4) C + sqrt(2) (1 - c)^(K_1 + K_2) sqrt(2^3) C + (1 - c)^(K_1) sqrt(2^2) C\
+ & med med dots.v\
+ & lt.eq sqrt(2)^(S - 1) (1 - c)^(sum_(s = 1)^S K_s) e_S + sum_(s = 1)^(S - 1) sqrt(2)^(s - 1) (1 - c)^(sum_(t = 1)^s K_t) sqrt(2^(s + 1)) C\
+ & = sqrt(2^(S - 1)) (1 - c)^(sum_(s = 1)^S K_s) e_S + C sum_(s = 1)^(S - 1) 2^s (1 - c)^(sum_(t = 1)^s K_t) . $
+
+=== Freezed Multi-scale Descent Error Proof
+<sec-freezed-multiscale-descent-error-proof>
+Proof of @thm-freezed-multiscale-descent-error.
+
+Using the work below, we have $ norm(e_((s))^0) lt.eq frac(L abs(b - a), 2 sqrt(2^(S - s))) + norm(e_(s + 1)^(K_(s + 1))) . $ Putting this back into the GD inequality gets us $ norm(e_((s))^(K_s)) lt.eq (1 - c)^(K_s) (frac(L abs(b - a), 2 sqrt(2^(S - s))) + norm(e_(s + 1)^(K_(s + 1)))) . $ And finally, we get the recursion relation $ norm(e_s^(K_s))^2 & lt.eq (1 - c)^(2 K_s) (frac(L abs(b - a), 2 sqrt(2^(S - s))) + norm(e_(s + 1)^(K_(s + 1))))^2 + norm(e_(s + 1)^(K_(s + 1)))^2 $ We will use big $C = L / 2 abs(b - a)$ to clean up a bit. Note little $c = mu / L_(nabla ell)$ is the ratio of strongly convex to smoothness of the loss function $ell$. $ norm(e_s^(K_s))^2 & lt.eq (1 - c)^(2 K_s) (C / sqrt(2^(S - s)) + norm(e_(s + 1)^(K_(s + 1))))^2 + norm(e_(s + 1)^(K_(s + 1)))^2 $ Or the looser bound by removing the squares $ norm(e_s^(K_s)) & lt.eq (1 - c)^(K_s) (C / sqrt(2^(S - s)) + norm(e_(s + 1)^(K_(s + 1)))) + norm(e_(s + 1)^(K_(s + 1)))\
+ & = (1 + (1 - c)^(K_s)) norm(e_(s + 1)^(K_(s + 1))) + C (1 - c)^(K_s) 1 / sqrt(2^(S - s)) $
+
+- we have true points $x$ which are true sample values of an $L$ Lipschitz function
+- we have an approximation of $x$, given by $hat(x)$
+- then we have a linear interpolation of $hat(x)$ given by $hat(X)$. These are ONLY the in-between points
+- the true values at the in-between points are $Y$
+- the linear interpolation of the true points is $X$
+- the respective errors are $e$ and $E$
+- want to bound $E$ by $e$
+- suppose we have $M = 2^(S - s) + 1$ points at the coarse scale for $x$, for some positive integer $s$ (this is the scale $s + 1$, the previous scale)
+- we will have $N = 2^(S - s) = M - 1$ in-between points at the finer grid for $X$
+  - Note, this gives $2^(S - s + 1) + 1$ may points at the current scale $s$
+
+We have $ hat(x)_i - x_i = e_i $ and the linear interpolation (only the in-between points) is $ hat(X)_j = 1 / 2 (hat(x)_j + hat(x)_(j + 1)) $ Note there is one fewer point. Similarly, with the interpolation of the true values $ X_j = 1 / 2 (x_j + x_(j + 1)) $ The error is defined as $ E_j = hat(X)_j - Y_j . $ This is what we want to bound. We also have the difference between the interpolation of the approximate and interpolation of the true values $ hat(X)_j - X_j = 1 / 2 (e_j + e_(j + 1)) := delta_j $
+
+There is also the difference between the true values at the in-between points $Y$ and the interpolation of the true points $X$. $ X_j - Y_j $ We have $ norm(E) = norm(hat(X) - Y) lt.eq norm(X - Y) + norm(hat(X) - X) = norm(X - Y) + norm(delta) $ Now $ norm(X - Y)^2 & = sum_(j = 1)^N (X_j - Y_j)^2\
+ & lt.eq sum_(j = 1)^N (L / 2 Delta_j)^2\
+ & lt.eq N (L / 2 Delta_j)^2 $ where $Delta_i$ is the (input) space between the $i$ and $i + 1$ points. For $M$ equally spaced points on (and including the boundary) the interval $[a , b]$, $ Delta_j = frac(b - a, M - 1) = frac(b - a, N) $ So we have $ norm(X - Y) lt.eq sqrt(N) L / 2 frac(b - a, N) = frac(L abs(b - a), 2 sqrt(N)) . $ Now we look at the second term $delta$. $ norm(delta)^2 & = sum_(j = 1)^N delta_j^2\
+ & = sum_(j = 1)^N 1 / 2^2 (e_j + e_(j + 1))^2\
+ & = 1 / 4 sum_(j = 1)^N (e_j^2 + e_(j + 1)^2 + 2 e_j e_(j + 1))\
+ & = 1 / 4 (sum_(j = 1)^N e_j^2 + sum_(j = 1)^N e_(j + 1)^2 + 2 sum_(j = 1)^N e_j e_(j + 1))\
+ & lt.eq 1 / 4 (sum_(j = 1)^N e_j^2 + sum_(j = 1)^N e_(j + 1)^2 + 2 sqrt(sum_(j = 1)^N e_j^2) sqrt(sum_(j = 1)^N e_(j + 1)^2))\
+ & lt.eq 1 / 4 (sum_(i = 1)^M e_i^2 + sum_(i = 1)^M e_j^2 + 2 sqrt(sum_(i = 1)^M e_i^2) sqrt(sum_(i = 1)^M e_i^2))\
+ & = 1 / 4 (norm(e)^2 + norm(e)^2 + 2 norm(e) norm(e))\
+ & = 1 / 4 (4 norm(e)^2)\
+ & = lr(bar.v.double e bar.v.double)^2\
+ $
+
+So finally, we have $ norm(E) & lt.eq frac(L abs(b - a), 2 sqrt(N)) + lr(bar.v.double e bar.v.double) . $ This is the same thing as we got in the previous attempt, but without the factor of $sqrt(2)$.
+
+We have the relation $ norm(e_s^(K_s)) & lt.eq (1 + (1 - c)^(K_s)) norm(e_(s + 1)^(K_(s + 1))) + C (1 - c)^(K_s) 1 / sqrt(2^(S - s)) $ for every $s = 1 , dots.h , S$. So let’s expand this. $ norm(e_1^(K_1)) & lt.eq (1 + (1 - c)^(K_1)) norm(e_2^(K_2)) + C (1 - c)^(K_1) 1 / sqrt(2^(S - 1))\
+ & lt.eq (1 + (1 - c)^(K_1)) ((1 + (1 - c)^(K_2)) norm(e_3^(K_3)) + C (1 - c)^(K_2) 1 / sqrt(2^(S - 2))) + C (1 - c)^(K_1) 1 / sqrt(2^(S - 1))\
+ & = (1 + (1 - c)^(K_1)) (1 + (1 - c)^(K_2)) norm(e_3^(K_3))\
+ & #h(2em) + med C (1 + (1 - c)^(K_1)) (1 - c)^(K_2) 1 / sqrt(2^(S - 2)) + C (1 - c)^(K_1) 1 / sqrt(2^(S - 1))\
+ & lt.eq (1 + (1 - c)^(K_1)) (1 + (1 - c)^(K_2)) ((1 + (1 - c)^(K_3)) norm(e_4^(K_4)) + C (1 - c)^(K_3) 1 / sqrt(2^(S - 3)))\
+ & #h(2em) + med C (1 + (1 - c)^(K_1)) (1 - c)^(K_2) 1 / sqrt(2^(S - 2)) + C (1 - c)^(K_1) 1 / sqrt(2^(S - 1))\
+ & = (1 + (1 - c)^(K_1)) (1 + (1 - c)^(K_2)) (1 + (1 - c)^(K_3)) norm(e_4^(K_4))\
+ & #h(2em) + med C (1 + (1 - c)^(K_1)) (1 + (1 - c)^(K_2)) (1 - c)^(K_3) 1 / sqrt(2^(S - 3))\
+ & #h(2em) + med C (1 + (1 - c)^(K_1)) (1 - c)^(K_2) 1 / sqrt(2^(S - 2)) + C (1 - c)^(K_1) 1 / sqrt(2^(S - 1)) $ So the general formula goes to $ norm(e_1^(K_1)) & lt.eq norm(e_S^(K_S)) product_(s = 1)^(S - 1) (1 + (1 - c)^(K_s)) + C sum_(s = 1)^(S - 1) 1 / sqrt(2^(S - s)) (1 - c)^(K_s) product_(j = 1)^(s - 1) (1 + (1 - c)^(K_j)) . $ After adding the GD on the coarsest scale, we get $ norm(e_1^(K_1)) & lt.eq norm(e_S^0) (1 - c)^(K_S) product_(s = 1)^(S - 1) (1 + (1 - c)^(K_s)) + C sum_(s = 1)^(S - 1) 1 / sqrt(2^(S - s)) (1 - c)^(K_s) product_(j = 1)^(s - 1) (1 + (1 - c)^(K_j)) . $
+
+This gives us the first upper bound for any plan of iterations $K_s$. If we now assume each scale uses the name number of iterations $K_s = K$ we get the following.
+
+$ norm(e_1^(K_1)) & lt.eq norm(e_S^0) (1 - c)^K (1 + (1 - c)^K)^(S - 1) + C sum_(s = 1)^(S - 1) 1 / sqrt(2^(S - s)) (1 - c)^K (1 + (1 - c)^K)^(s - 1) . $
+
+Via wolfram alpha, we have
+
+$  & sum_(s = 1)^(S - 1) ((1 - c)^K ((1 - c)^K + 1)^(s - 1)) 1 / sqrt(2^(S - s))\
+ & = frac((1 - c)^K (sqrt(2^S) ((1 - c)^K + 1)^S - sqrt(2) ((1 - c)^K + 1)), sqrt(2^S) ((1 - c)^K + 1) (sqrt(2) (1 - c)^K + sqrt(2) - 1)) $
+
+Setting $d (K) = (1 - c)^K$ gives the final upper bound in the theorem.
+
+=== Expected Projected Gradient Descent Convergence Proof
+<sec-expected-pgd-convergence-proof>
+Proof of @thm-expected-pgd-convergence.
+
+#strong[Case 1:] $lr(bar.v.double x_1^(\*) bar.v.double)_2 = 1$.
+
+Without loss of generality, assume (by symmetry) that $(x_1^(\*))_I = 1$ and $(x_1^(\*))_i = 0$ (fix a point on the sphere at the pole) so that $x_1^(\*) = e_I$ (the unit vector! Not the error!). Note that this is not a realistic solution since we already assume the solution comes from a continuous function but we’ll use this to illustrate how a warm start from these interpolations can do better than a random start.
+
+$ bb(E)_(g_i tilde.op cal(N)) norm(g - e_I)_2^2 & = bb(E)_(g_i tilde.op cal(N)) [sum_(i = 1)^I (g_i - (e_I)_i)^2]\
+ & = bb(E)_(g_i tilde.op cal(N)) [sum_(i = 1)^(I - 1) (g_i - 0)^2 + (g_i - 1)^2]\
+ & = sum_(i = 1)^(I - 1) bb(E)_(g_i tilde.op cal(N)) [g_i^2] + bb(E)_(g_i tilde.op cal(N)) [(g_i - 1)^2]\
+ & = sum_(i = 1)^(I - 1) 1 + bb(E)_(g_i tilde.op cal(N)) [g_i^2 - 2 g_i + 1]\
+ & = I - 1 + (1) - 2 (0) + 1\
+ & = I + 1 . $
+
+With some Gaussian concentration, we can square root both sides.
+
+#strong[Case 2:] $lr(bar.v.double x_1^(\*) bar.v.double)_2 = 0$.
+
+Assume the solution is centred so that $x_1^(\*) = 0 in bb(R)^I$. Here, we have the well-known result $ bb(E) [norm(x_1^0 - x_1^(\*))] = bb(E) [norm(g - 0)] = sqrt(I) . $
+
+So either way, our initial error for a scaled or centred problem goes like $tilde.op sqrt(I)$. Since the number of points we have is $I$ is one plus a power of two $I = 2^S + 1$, we #emph[expect] (that is, with high probability) the following convergence $ norm(x_1^K - x_1^(\*)) lt.eq (1 - c)^K sqrt(2^S + 2) . $
+
+So to ensure $norm(x_1^K - x_1^(\*)) lt.eq epsilon.alt$, we need $ (1 - c)^K sqrt(2^S + 2) & lt.eq epsilon.alt\
+sqrt(2^S + 2) / epsilon.alt & lt.eq (1 - c)^(- K)\
+log (sqrt(2^S + 2) / epsilon.alt) & lt.eq K log ((1 - c)^(- 1))\
+frac(log (sqrt(2^S + 2) / epsilon.alt), - log (1 - c)) & lt.eq K\
+frac(1 / 2 log (2^S + 2) + log (1 \/ epsilon.alt), - log (1 - c)) & lt.eq K . $
+
+For large $S$, this is approximately $ frac(log (1 \/ epsilon.alt) + S / 2 log (2), - log (1 - c)) lt.eq K . $
+
+=== Expected Resolved Multi-scale Descent Convergence Proof
+<sec-expected-resolved-convergence-proof>
+Proof of @thm-expected-resolved-convergence.
+
+First we need to have a handle on how close we are to our coarsest discretization at scale $s = s_0$. The coarsest we could go would be when $s_0 = S$ which would result in $2^(S - s_0 + 1) + 1 = 3$ points total at $t = a , 1 / 2 (a + b)$, and $b$.
+
+For the centred problem, $x_(s_0)^(\*) = 0 in bb(R)^(2^(S - s_0 + 1) + 1)$, so we would expect a Gaussian initialization to have an initial error of $ bb(E) [norm(x_(s_0)^0 - x_(s_0)^(\*))] = sqrt(2^(S - s_0 + 1) + 1) . $ If we used the scaled problem, it is a bit tricker to consider what happens when we only include $2^(S - s_0 + 1) + 1$ many points, out of the total $2^S + 1$ possible points.
+
+We will actually work out a bound of $sqrt(2^(S - s_0 + 1) + 2)$ by considering the "smoothest" case where $(x_1^(\*))_i = 1 / sqrt(2^S + 1)$ (normalized perfectly to a diagonal), and the "roughest" case where $x_1^(\*) = e_(2^S + 1) in bb(R)^(2^S + 1)$ was aligned to the pole. After discretization, the smooth case still has all the same entries, but there are just less of them ($2^(S - s_0 + 1) + 1$ many). In the rough case, we stay aligned to a pole $x_(s_0)^(\*) = e_(2^(S - s_0 + 1) + 1) in bb(R)^(2^(S - s_0 + 1) + 1)$ since the last entry stays at a one, and the rest are still zero. We use a standard normal initialization of $g in bb(R)^(2^(S - s_0 + 1) + 1)$ in the smaller space. This is identical to choosing the same initialization on the finer grid, and dropping our the coordinates that we skip. So this really is a fair comparison to the regular gradient descent! In the smooth case, $ bb(E) [norm(x_(s_0)^0 - x_(s_0)^(\*))^2] & = sum_(i = 1)^(2^(S - s_0 + 1) + 1) bb(E) (g_i - 1 / sqrt(2^S + 1))^2\
+ & = sum_(i = 1)^(2^(S - s_0 + 1) + 1) (bb(E) [g_i^2] - 2 1 / sqrt(2^S + 1) bb(E) [g_i] + frac(1, 2^S + 1) bb(E) [1])\
+ & = sum_(i = 1)^(2^(S - s_0 + 1) + 1) (1 - 0 + frac(1, 2^S + 1))\
+ & = (2^(S - s_0 + 1) + 1) (1 + frac(1, 2^S + 1))\
+ & = (2^(S - s_0 + 1) + 1) (frac(2^S + 2, 2^S + 1)) . $ In the rough case $ bb(E) [norm(x_(s_0)^0 - x_(s_0)^(\*))^2] & = sum_(i = 1)^(2^(S - s_0 + 1) + 1 - 1) bb(E) (g_i - 0)^2 + bb(E) (g_(2^(S - s_0 + 1) + 1) - 1)^2\
+ & = 2^(S - s_0 + 1) + 2 . $ For $2^(S - s_0 + 1) gt.eq 3$ (which is the case), $2^(S - s_0 + 1) + 2 > (2^(S - s_0 + 1) + 1) (frac(2^S + 2, 2^S + 1))$ (in fact, it is bigger by $1$ asymptotically as $S$ grows large).
+
+So we are justified in using $sqrt(2^(S - s_0 + 1) + 2)$ as our #emph[expected] bound on $norm(x_(s_0)^0 - x_(s_0)^(\*))$.
+
+This means our descent is $  & norm(x_1^(K_1) - x_1^(\*))\
+ & lt.eq sqrt(2^(S - 1)) (1 - c)^(sum_(s = 1)^S K_s) e_S + C sum_(s = 1)^(S - 1) 2^s (1 - c)^(sum_(t = 1)^s K_t)\
+ & lt.eq sqrt(2^(S - 1)) (1 - c)^(sum_(s = 1)^S K_s) sqrt(2^(S - S + 1) + 2) + C sum_(s = 1)^(S - 1) 2^s (1 - c)^(sum_(t = 1)^s K_t)\
+ & = sqrt(2^(S + 1)) (1 - c)^(sum_(s = 1)^S K_s) + C sum_(s = 1)^(S - 1) 2^s (1 - c)^(sum_(t = 1)^s K_t)\
+ & = (1 - c)^(K_1) (sqrt(2^(S + 1)) (1 - c)^(sum_(s = 2)^S K_s) + 2 C + C sum_(s = 2)^(S - 1) 2^s (1 - c)^(sum_(t = 2)^s K_t))\
+ & = (1 - c)^(K_1) (sqrt(2^(S + 1)) (1 - c)^(sum_(s = 2)^S K_s) + 2 frac(L abs(a - b), 2 sqrt(2^(S + 1))) + frac(L abs(a - b), 2 sqrt(2^(S + 1))) sum_(s = 2)^(S - 1) 2^s (1 - c)^(sum_(t = 2)^s K_t))\
+ & = (1 - c)^(K_1) sqrt(2^(S + 1)) ((1 - c)^(sum_(s = 2)^S K_s) + frac(L abs(a - b), 2 dot.op 2^S) + frac(L abs(a - b), 2 dot.op 2) sum_(s = 2)^(S - 1) (1 - c)^(sum_(t = 2)^s K_t) / 2^(S - s)) . $
+
+=== Cost of Projected Gradient Descent vs Multi-scale Proof
+<sec-cost-of-gd-vs-ms-proof>
+Proof of @lem-cost-of-gd-vs-ms.
+
+The total cost of regular descent is given by $ C_(upright("GD")) = C_1 K . $ For multiscale, it is $ C_(upright("MS")) = sum_(s = 1)^S C_s K_s . $ It is reasonable to assume that $ C_s gt.eq 3 / 2 C_(s + 1) $ since one has to compute $2^(S - s + 1) + 1$ entries of $x_s$ at scale $s$. If it is a fixed cost $C$ to compute an entry of $x$, then we have $ C_s = C (2^(S - s + 1) + 1) . $ So $ C_s / C_(s + 1) = frac(2^(S - s + 1) + 1, 2^(S - (s + 1) + 1) + 1) = frac(2^(S - s + 1) + 1, 2^(S - s) + 1) gt.eq 3 / 2 $ since the function $frac(2^(x + 1) + 1, 2^x + 1)$ (for nonnegative $x$) is minimized at $x = 0$, where $x = S - s gt.eq 0$. This gives us the chain, $ C_1 gt.eq 3 / 2 C_2 gt.eq (3 / 2)^2 C_3 gt.eq dots.h gt.eq (3 / 2)^(S - 1) C_S $ or $ C_S lt.eq (2 / 3) C_(S - 1) lt.eq dots.h lt.eq (2 / 3)^(S - 2) C_2 lt.eq (2 / 3)^(S - 1) C_1 . $
+
+This means $ C_(upright("MS")) = sum_(s = 1)^S C_s K_s lt.eq C_1 sum_(s = 1)^S (2 / 3)^(s - 1) K_s . $
+
+=== Re-solved Multi-scale Descent Cost Proof
+<sec-resolved-cost-proof>
+Proof of @cor-resolved-cost.
+
+What we need to ensure, for multi-scale to be cheaper, with our mild assumption on cost at each scale, is $ C_(upright("MS")) = sum_(s = 1)^S C_s K_s lt.eq C_1 sum_(s = 1)^S (2 / 3)^(s - 1) K_s lt.eq C_1 K . $
+
+To leave the most budget left for $K_1$, we can make all other $K_s = 1$ which gives $ C_1 sum_(s = 1)^S (2 / 3)^(s - 1) K_s = C_1 (K_1 + sum_(s = 2)^S (2 / 3)^(s - 1)) = C_1 (K_1 + 3 (1 - (2 / 3)^S med)) $
+
+And we can upper bound by considering what happens when we increase the number of scales $S arrow.r oo$ (as in the total number of points $I arrow.r oo$). $ C_(upright("MS")) < C_1 (K_1 + 3) $
+
+So interestingly, we can set $K_1 = K - 3$, and the rest of the scales $K_s = 1$ and still be cheaper!
+
+TODO By hand I’ve shown that for this setup to give a better accuracy, it does not matter what $K$ is (as long at it is $4$ or bigger). There is just a minimum scale $S$ that is needed. And for well conditioned problems $0.3 lt.eq c lt.eq 1$, a scale bigger than $4$ will do the trick. (Note it is not quite $0.3$, it can be made slightly lower)
+
+=== Expected Freezed Multi-scale Descent Convergence Proof
+<sec-expected-freezed-convergence-proof>
+Proof of @thm-expected-freezed-convergence.
+
+For multi-scale, we start out with only $I = 2^(S - s_0 + 1) + 1$ points. Taking the largest scale we can $s_0 = S$, we have an initial error bound of $sqrt(2 + 2) = 2$ giving us the expected error bound
+
+$ norm(e_1^(K_1)) & lt.eq 2 d (K) (1 + d (K))^(S - 1) + C frac(d (K) (sqrt(2^S) (d (K) + 1)^S - sqrt(2) (d (K) + 1)), sqrt(2^S) (d (K) + 1) (sqrt(2) d (K) + sqrt(2) - 1)) $
+
+for $C = L / 2 abs(b - a)$ (see @thm-expected-pgd-convergence).
+
+If we factor out a $d (K)$, we get $ norm(e_1^(K_1)) & lt.eq d (K) (2 (1 + d (K))^(S - 1) + C frac((sqrt(2^S) (d (K) + 1)^S - sqrt(2) (d (K) + 1)), sqrt(2^S) (d (K) + 1) (sqrt(2) d (K) + sqrt(2) - 1))) . $
+
+=== Freezed Multi-scale Descent Cost Proof
+<sec-freezed-cost-proof>
+Proof of @cor-freezed-cost.
+
+Recall our expected regular descent error have the bound $ norm(x_1^K - x_1^(\*)) lt.eq (1 - c)^K sqrt(2^S + 2) . $
+
+From @thm-expected-freezed-convergence, we have the expected error bound for freezed multi-scale
+
+$ norm(e_1^(K_1)) & lt.eq d (K) (2 (1 + d (K))^(S - 1) + C frac((sqrt(2^S) (d (K) + 1)^S - sqrt(2) (d (K) + 1)), sqrt(2^S) (d (K) + 1) (sqrt(2) d (K) + sqrt(2) - 1))) , $
+
+so need the thing in the bracket to be less than $sqrt(2^S + 2)$.
+
+In the limit as $K arrow.r oo$, we have that $d (K) arrow.r 0$. So for a very small $d (K)$, we get the bracket expression to be $ 2 + C frac((sqrt(2^S) - sqrt(2)), sqrt(2^S) (sqrt(2) - 1)) . $
+
+After simplifying we get $ 2 + C frac((sqrt(2)^(S - 1) - 1), sqrt(2)^(S - 1) (sqrt(2) - 1)) . $
+
+What $S$ do we need for multi scale to be more accurate? $ 2 + C frac((sqrt(2)^(S - 1) - 1), sqrt(2)^(S - 1) (sqrt(2) - 1)) & < sqrt(2^S + 2)\
+C & < (sqrt(2^S + 2) - 2) frac(sqrt(2)^(S - 1) (sqrt(2) - 1), (sqrt(2)^(S - 1) - 1))\
+C & < (sqrt(2) - 1) (sqrt(2^S + 2) - 2) sqrt(2)^(S - 1) / (sqrt(2)^(S - 1) - 1) $
+
+The first factor is less than one $sqrt(2) - 1 < 1$, and the last factor is basically $1$ when $S > 6$ so let’s use that $ C & < (sqrt(2^S + 2) - 2)\
+(C / (sqrt(2) - 1) + 2)^2 - 2 & < 2^S\
+log_2 ((C / (sqrt(2) - 1) + 2)^2 - 2) & < S $
+
+note because of our approximation, if the above is #emph[not] satisfied, #emph[then] GD is more accurate. This is not an iff condition.
+
+There are a number of ways to modify it so that it becomes "if this condition holds, then multiscale is better". You could replace $C$ with $C + 0.5$ as a simple one.
+
+As a simple case, if $C = 1 / 2$ (the function is 1-Lipschitz on $[0 , 1]$), then a scale of $S = 2$ or higher is already better for multi scale.
+
+The above work shows that multi-scale will give a tighter expected final error bound, but we need to make sure multi-scale is cheaper.
+
+Reusing the work shown in @sec-cost-of-gd-vs-ms-proof, if we assume each scale has the same number of iterations $K_s = K'$, then we get $ C_(upright("MS")) lt.eq C_1 K' sum_(s = 1)^S (2 / 3)^(s - 1) = C_1 K' 3 (1 - (2 / 3)^S) lt.eq 3 C_1 K' . $
+
+So if we make sure $K' < K / 3$, where $K$ is the number of iterations we perform with regular projected gradient descent, then $ C_(upright("MS")) < C_(G D) . $
+
+The largest integer less than $K / 3$ would be $⌈ K / 3 ⌉ - 1$.
+
+TODO : Note I think the argument can be tightened to get something like $K' < frac(K, 2 + delta)$ for a small delta, but this idea should be fine.
+
+The way the expected error upper bound works for the freezed multi-scale, the condition on the number of scales needed $S$ is enough to ensure that multi-scale gives a better error bound, assuming we take both methods to large enough iterations $K$.
 
  
   
