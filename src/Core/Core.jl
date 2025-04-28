@@ -34,6 +34,7 @@ export L2
 
 include("./factormatching.jl")
 export match_cols!, match_rows!, match_slices!
+export match_factors!
 
 include("./constraint.jl")
 export AbstractConstraint

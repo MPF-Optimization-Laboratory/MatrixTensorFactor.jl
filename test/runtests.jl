@@ -360,6 +360,21 @@ end
 
 end
 
+@testset "Matching" begin
+    @testset "match_factors!" begin
+        T = Tucker1((5,4,6), 3)
+        B, A = factors(T)
+        A_noisy = A + 0.01*randn(size(A))
+        B_noisy = B + 0.01*randn(size(B))
+        order = [2, 3, 1]
+        B_noisy .= @view B_noisy[order, :, :]
+        A_noisy .= @view A_noisy[:, order]
+        T_noisy = Tucker1((B_noisy,A_noisy))
+        order_found = match_factors!(T_noisy, T)
+        @test order_found == invperm(order) # Should find the inverse permutation
+    end
+end
+
 @testset "BlockUpdates" begin
     G1 = CPDecomposition((3,3,3), 2)
     G2 = deepcopy(G1)

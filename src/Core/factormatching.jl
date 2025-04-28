@@ -1,9 +1,20 @@
 """
     match_slices!(X, Y; dims, dist=L2)
 
-Mutates X so the order-`dims` slices best match the slices of Y.
+Reorders the order-`dims` slices of X to best match the slices of Y.
 """
-function match_slices!(X::AbstractArray, Y::AbstractArray; dims, dist=L2)
+function match_slices!(X::AbstractArray, Y::AbstractArray; dims, kwargs...)
+    ordering = _find_ordering(X, Y; dims, kwargs...)
+
+    # Permute slice of X
+    reslice = Any[(:) for _ in 1:ndims(X)]
+    reslice[dims] = ordering
+    X .= @view X[reslice...]
+
+    return ordering
+end
+
+function _find_ordering(X, Y; dims, dist=L2())
     size(X) == size(Y) || ArgumentError("Shape of X, $(size(X)) does not match shape of Y, $(size(Y))")
 
     n_slices = size(X, dims)
@@ -43,11 +54,6 @@ function match_slices!(X::AbstractArray, Y::AbstractArray; dims, dist=L2)
         ordering = map(x->x[1], pairings) # Ordering is given by the first index (Xi)
     end
 
-    # Permute slice of X
-    reslice = Any[(:) for _ in 1:ndims(X)]
-    reslice[dims] = ordering
-    X .= @view X[reslice...]
-
     return ordering
 end
 
@@ -64,3 +70,49 @@ match_rows!(X::AbstractMatrix, Y::AbstractMatrix; kwargs...) = match_slices!(X, 
 `match_slices!` along the second dimension.
 """
 match_cols!(X::AbstractMatrix, Y::AbstractMatrix; kwargs...) = match_slices!(X, Y; dims=2, kwargs...)
+
+"""
+    match_factors!(X::T, Y::T; dist=L2) where {T <: AbstractDecomposition}
+
+Reorders the rank-1 terms of X to best match the slices of Y.
+
+This is currently implemented for Tucker1 and CPDecomposition.
+
+See [`match_slices!`](@ref).
+"""
+match_factors!(X::T, Y::T; kwargs...) where {T <: AbstractDecomposition} = _match_factors!(X, Y; kwargs...)
+# Structured like this so we immediately check that X and Y have the same type
+
+# Catch for decomposition types that are not implemented
+_match_factors!(X, Y; kwargs...) = error("Factor matching with decompositions of type $(typeof(X)) is not implemented.")
+
+function _match_factors!(X::Tucker1, Y::Tucker1; kwargs...)
+    X_stack = stack(eachrank1term(X))
+    Y_stack = stack(eachrank1term(Y))
+    ordering = _find_ordering(X_stack, Y_stack; kwargs..., dims=ndims(X)+1) # note dims is last so that if dims is (incorrectly) passed to match_factors!, it is ignored
+
+    B, A = factors(X)
+
+    # Permute slices of B
+    reslice = Any[(:) for _ in 1:ndims(B)]
+    reslice[1] = ordering
+    B .= @view B[reslice...]
+
+    # Permute cols of A
+    A .= @view A[:, ordering]
+
+    return ordering
+end
+
+function _match_factors!(X::CPDecomposition, Y::CPDecomposition; kwargs...)
+    X_stack = stack(eachrank1term(X))
+    Y_stack = stack(eachrank1term(Y))
+    ordering = _find_ordering(X_stack, Y_stack; kwargs..., dims=ndims(X)+1) # note dims is last so that if dims is (incorrectly) passed to match_factors!, it is ignored
+
+    # Permute cols of each factor A
+    for A in factors(X)
+        A .= @view A[:, ordering]
+    end
+
+    return ordering
+end
