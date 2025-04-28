@@ -6,7 +6,8 @@ using .Core
 
 # Basic functionality
 #include("./utils.jl")
-export SuperDiagonal, abs_randn, all_recursive, eachfibre, getnotindex, geomean, identityslice, interlace, multifoldl, norm2, proj_one_hot, projsplx, proj_one_hot!, projsplx!
+export SuperDiagonal, abs_randn, all_recursive, eachfibre, getnotindex, geomean, identityslice, interlace, multifoldl, norm2, proj_one_hot, projsplx, proj_one_hot!, projsplx!, reshape_ndims
+
 #include("./tensorproducts.jl")
 export ×₁, nmp, nmode_product, mtt, slicewise_dot, tuckerproduct, cpproduct
 

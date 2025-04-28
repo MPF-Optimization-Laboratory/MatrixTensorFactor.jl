@@ -74,6 +74,17 @@ const VERBOSE = true
             @test eachfibre(A; n=2) == eachslice(A; dims=(1,3))
             @test eachfibre(A; n=3) == eachslice(A; dims=(1,2))
         end
+
+        @testset "reshape_ndims" begin
+            a = [1, 2, 3]
+
+            @test reshape_ndims(a, 2) == [1 2 3]
+            @test reshape_ndims(a, 3) == [1;;; 2;;; 3]
+
+            A = reshape(collect(1:12), 2,2,3)
+
+            @test reshape_ndims(A, 2) == [1 3 5 7 9 11; 2 4 6 8 10 12]
+        end
     end
 
     @testset "Products" begin

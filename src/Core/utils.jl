@@ -350,3 +350,71 @@ Calculates a diagonal matrix with entries that are the Euclidean norm of each co
 Shorthand for `Diagonal(norm.(eachcol(X)))`.
 """
 Diagonal_col_norm(X) = Diagonal(norm.(eachcol(X)))
+
+"""
+    reshape_ndims(x, n)
+
+Reshapes `x` to a higher order array with `n` dimensions.
+
+When n > ndims(x), extra dimensions are prepended. Otherwise, trailing dimensions are collapsed.
+
+Example
+=======
+julia> x = [1, 2, 3]
+3-element Vector{Int64}:
+ 1
+ 2
+ 3
+
+julia> reshape_ndims(x, 1)
+3-element Vector{Int64}:
+ 1
+ 2
+ 3
+
+julia> reshape_ndims(x, 2)
+1×3 Matrix{Int64}:
+ 1  2  3
+
+julia> reshape_ndims(x, 3)
+1×1×3 Array{Int64, 3}:
+[:, :, 1] =
+ 1
+
+[:, :, 2] =
+ 2
+
+[:, :, 3] =
+ 3
+
+julia> A = reshape(collect(1:12), 2,2,3)
+2×2×3 Array{Int64, 3}:
+[:, :, 1] =
+ 1  3
+ 2  4
+
+[:, :, 2] =
+ 5  7
+ 6  8
+
+[:, :, 3] =
+  9  11
+ 10  12
+
+julia> reshape_ndims(A, 2)
+2×6 Matrix{Int64}:
+ 1  3  5  7   9  11
+ 2  4  6  8  10  12
+
+Credit: https://discourse.julialang.org/t/outer-product-broadcast/103731/7
+"""
+function reshape_ndims(x::AbstractArray, n)
+    if ndims(x) == n
+        return x
+    elseif ndims(x) < n
+        return reshape(x, ntuple(_->1, n-1)..., :)
+    else
+        Is = size(x)
+        return reshape(x, Is[1:n-1]..., prod(Is[n:end]))
+    end
+end
