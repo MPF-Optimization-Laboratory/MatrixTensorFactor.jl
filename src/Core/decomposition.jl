@@ -257,6 +257,7 @@ function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tupl
     Tucker1((core, matrix_factor), frozen)
 end
 
+
 # AbstractTucker interface
 core(T::AbstractTucker) = factors(T)[begin]
 matrix_factors(T::AbstractTucker) = factors(T)[begin+1:end]
@@ -264,6 +265,20 @@ matrix_factor(T::AbstractTucker, n::Integer) = matrix_factors(T)[n]
 isfrozen(T::AbstractTucker, n::Integer) = frozen(T)[n+1]
 # This way, the 1st matrix factor in a CPDecomposition is factors(T)[1]
 # and the 1st matrix factor in a Tucker is factors(T)[2]
+
+"""
+    eachrank1term(T::AbstractTucker)
+
+Creates a generator for each rank 1 term of a Tucker decomposition.
+"""
+eachrank1term(T::AbstractTucker) = error("eachrank1term is not yet implemented for AbstractTuckers of type $(typeof(T))")
+
+"""
+    eachrank1term(T::Tucker1)
+
+The (Tucker-1) rank-1 tensors Tr[i1, ..., iN] = A[i1,r] * B[r, i2, ..., iN] for each r = 1, ..., rankof(T).
+"""
+eachrank1term(T::Tucker1) = (Ar .* reshape_ndims(Br, ndims(T)) for (Br, Ar) in zip(eachslice(core(T); dims=1), eachcol(matrix_factor(T, 1))))
 
 # AbstractDecomposition Interface
 array(T::AbstractTucker) = multifoldl(contractions(T), factors(T))
@@ -345,6 +360,13 @@ isfrozen(CPD::CPDecomposition, n::Integer) = n == 0 ? true : frozen(CPD)[n] # si
 # AbstractTucker Interface
 matrix_factors(CPD::CPDecomposition) = factors(CPD)
 core(CPD::CPDecomposition{T, N}) where {T, N} = identity_tensor(T, rankof(CPD), N) #SuperDiagonal(ones(eltype(CPD), rankof(CPD)), ndims(CPD))
+
+"""
+    eachrank1term(T::CPDecomposition)
+
+The (CP) rank-1 tensors Tr[i1, ..., iN] = A1[i1, r] * ... * AN[iN, r]  for each r = 1, ..., rankof(T).
+"""
+eachrank1term(CPD::CPDecomposition) = (reduce(.*, reshape_ndims(col, i) for (i, col) in enumerate(cols)) for cols in zip((map(eachcol, factors(CPD)))...))
 
 # Efficient size and indexing for CPDecomposition
 Base.size(CPD::CPDecomposition) = map(x -> size(x, 1), factors(CPD))

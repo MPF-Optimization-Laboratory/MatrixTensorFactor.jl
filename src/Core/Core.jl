@@ -23,7 +23,7 @@ export ×₁, nmp, nmode_product, mtt, slicewise_dot, tuckerproduct, cpproduct
 
 # Low level types and interface
 include("./decomposition.jl")
-export array, contractions, core, eachfactorindex, factor, factors, frozen, isfrozen, matrix_factor, matrix_factors, nfactors, rankof
+export array, contractions, core, eachfactorindex, eachrank1term, factor, factors, frozen, isfrozen, matrix_factor, matrix_factors, nfactors, rankof
 export AbstractDecomposition
 export GenericDecomposition, SingletonDecomposition
 export AbstractTucker, Tucker, Tucker1, CPDecomposition
