@@ -84,6 +84,10 @@ const VERBOSE = true
             A = reshape(collect(1:12), 2,2,3)
 
             @test reshape_ndims(A, 2) == [1 3 5 7 9 11; 2 4 6 8 10 12]
+
+            A = reshape(collect(1:6), 2,3)
+
+            @test reshape_ndims(A, 3) == [1 2;;; 3 4;;; 5 6]
         end
     end
 

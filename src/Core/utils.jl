@@ -412,7 +412,8 @@ function reshape_ndims(x::AbstractArray, n)
     if ndims(x) == n
         return x
     elseif ndims(x) < n
-        return reshape(x, ntuple(_->1, n-1)..., :)
+        Is = size(x)
+        return reshape(x, ntuple(_->1, n - ndims(x))..., Is...)
     else
         Is = size(x)
         return reshape(x, Is[1:n-1]..., prod(Is[n:end]))
