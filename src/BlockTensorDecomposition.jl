@@ -21,6 +21,9 @@ export AbstractTucker, Tucker, Tucker1, CPDecomposition
 export AbstractObjective
 export L2
 
+#include("./factormatching.jl")
+export match_cols!, match_rows!, match_slices!
+
 #include("./constraint.jl")
 export AbstractConstraint
 export check
