@@ -1,12 +1,33 @@
 """
-	factorize(Y; rank=1, model=Tucker1, kwargs...)
+	factorize(Y; rank=nothing, model=Tucker1, kwargs...)
 
 Factorizes `Y` according to the decomposition `model`.
 
 See [`default_kwargs`](@ref) for the default keywords.
 """
-factorize(Y; kwargs...) =
-	_factorize(Y; (default_kwargs(Y; kwargs...))...)
+function factorize(Y; kwargs...)
+	kwargs = isempty(kwargs) ? Dict{Symbol,Any}() : Dict{Symbol,Any}(kwargs)
+
+	# Auto detect rank when an initial decomposition and rank are not given
+	# Do not mutate kwargs as to not confuse rank_detect_factorize
+	decomposition = get(kwargs, :decomposition, nothing)
+	rank = get(kwargs, :rank, nothing)
+	if isnothing(decomposition) && isnothing(rank)
+		return rank_detect_factorize(Y; kwargs...)
+	end
+
+	# Auto factorize at multiple scales when continuous_dims is given
+	# Do not mutate kwargs as to not confuse multiscale_factorize
+	# We differentiate
+	# continuous_dims==nothing: do not use multiscale_factorize
+	# continuous_dims==missing: guess if there are continuous dims, and use multiscale_factorize if any are found TODO implement this
+	continuous_dims = get(kwargs, :continuous_dims, missing)
+	if !ismissing(continuous_dims) && !isnothing(continuous_dims)
+		multiscale_factorize(Y; kwargs...)
+	end
+
+	return _factorize(Y; (default_kwargs(Y; kwargs...))...)
+end
 
 """
 Inner level function once keyword arguments are set
@@ -81,10 +102,11 @@ Handles all keywords and options, and sets defaults if not provided.
 ## Initialization
 - `decomposition`: `nothing`. Can provide a custom initialized AbstractDecomposition. Note this exact decomposition is mutated.
 - `model`: `Tucker1`, but overridden by the type of AbstractDecomposition if given `decomposition`
-- `rank`: `1`, but overridden by the rank of AbstractDecomposition if given `decomposition`
+- `rank`: `nothing`, but overridden by the rank of AbstractDecomposition if given `decomposition`. Automatically calls `rank_detect_factorize` if both `rank` & `decomposition` are not provided.
 - `init`: `abs_randn` for nonnegative inputs `Y`, `randn` otherwise
-- `constrain_init`: `true`. Ensures the initalization satifies all given `constraints`. Defaults to `false` if given `decomposition`
+- `constrain_init`: `true`. Ensures the initialization satisfies all given `constraints`. Defaults to `false` if given `decomposition`
 - `freeze`: the default frozen factors of the `model`
+- `continuous_dims`: `missing`. Dimensions of `Y` that come from discretizations of continuous data. If provided, `multiscale_factorize` is called and can speed up factorization. If `continuous_dims==nothing`, factorization will only happen at one scale. In the future, if `continuous_dims==missing`,`factorize` may guess if there are continuous dimensions.
 
 ## Updates
 - `objective`: `L2()`. Objective to minimize
@@ -130,7 +152,7 @@ function default_kwargs(Y; kwargs...)
 	@assert typeof(kwargs[:decomposition]) <: Union{Nothing, kwargs[:model]}
 
 	get!(kwargs, :rank) do # Can also be a tuple. For example, Tucker rank could be (1, 2, 3) for an order 3 array Y
-		isnothing(kwargs[:decomposition]) ? 1 : rankof(kwargs[:decomposition])
+		isnothing(kwargs[:decomposition]) ? error("`rank_detect_factorize` should be called if no initial decomposition nor the rank is provided.") : rankof(kwargs[:decomposition])
 	end
 	get!(kwargs, :init) do
 		isnonnegative(Y) ? abs_randn : randn
@@ -138,6 +160,9 @@ function default_kwargs(Y; kwargs...)
 	get!(kwargs, :constrain_init, isnothing(kwargs[:decomposition]))
 	# get!(kwargs, :freeze) # This default is handled by the model constructor
 							# freeze=(...) can still be provided to override the default
+	# get!(kwargs, :continuous_dims) do
+	# 	error()
+	# end
 
 	# Update
 	get!(kwargs, :objective, L2()) # TODO handle arbitrary functions but constructing CustomObjective type

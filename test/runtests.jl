@@ -564,7 +564,7 @@ end
     @test coarsen(Y, 2) == Y[begin:2:end, begin:2:end, begin:2:end]
     @test coarsen(Y, 3; dims=2) == Y[:, begin:3:end, :]
     @test coarsen(Y, 4; dims=(1, 3)) == Y[begin:4:end, :, begin:4:end]
-    @test coarsen(Y, 12) == Y[begin, begin, begin]
+    @test coarsen(Y, 12) == Y[begin:begin, begin:begin, begin:begin]
     end
 
     @testset "interpolate" begin
@@ -585,7 +585,7 @@ end
 
     @testset "multiscale_factorize" begin
 
-    Y_decomp = Tucker1((17,33,33),1) #size is 1 plus a power of 2
+    Y_decomp = Tucker1((17,33,33), 1) #size is 1 plus a power of 2
     Y = array(Y_decomp)
 
     decomposition, stats, kwargs = multiscale_factorize(Y; model=Tucker1, rank=1)
@@ -593,6 +593,13 @@ end
     check_slice = 1:10
     @test isapprox(decomposition[check_slice], Y[check_slice]; rtol=0.01) # should be within 1% error
     end
+end
+
+@testset "RankDetection" begin
+    T = Tucker1((10, 10, 10), 3)
+    Y = array(T)
+    decomposition, stats, kwargs, final_rel_errors = rank_detect_factorize(Y; model=Tucker1)
+    @test kwargs[:rank] == 3
 end
 
 end

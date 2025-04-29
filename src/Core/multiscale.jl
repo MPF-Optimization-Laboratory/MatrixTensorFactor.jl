@@ -154,7 +154,7 @@ function multiscale_factorize(Y; kwargs...)
     constraints, kwargs = scale_constraints(Yₛ, coarsest_scale; continuous_dims, kwargs...)
 
     @info "Factorizing at scale $coarsest_scale..."
-    decomposition, stats, _ = factorize(Yₛ; kwargs...)
+    decomposition, stats, _ = _factorize(Yₛ; default_kwargs(Yₛ; kwargs...)...) # calling the internal factorize so we don't get stuck in a loop calling factorize() <-> multiscale_factorize()
 
     # Factorize Y at progressively finer scales
     for scale in finer_scales
@@ -171,7 +171,7 @@ function multiscale_factorize(Y; kwargs...)
         constraints, kwargs = scale_constraints(Yₛ, scale; continuous_dims, kwargs...)
 
         @info "Factorizing at scale $scale..."
-        decomposition, stats, _ = factorize(Yₛ; kwargs...)
+        decomposition, stats, _ = _factorize(Yₛ; default_kwargs(Yₛ; kwargs...)...) # calling the internal factorize so we don't get stuck in a loop calling factorize() <-> multiscale_factorize()
     end
     return decomposition, stats, kwargs
 end
@@ -197,10 +197,12 @@ function scale_constraints(Y, scale; continuous_dims, kwargs...)
 
     decomposition, constraints = expand_decomposition_constraints(Y, kwargs)
 
-    if any(x-> typeof(decomposition) <: x, IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING)
-        constraints = BlockedUpdate([scale_decomposition_constraint(continuous_dims, constraint, S, decomposition) for constraint in constraints])
-    else
-        @warn "Not sure how to appropriately scale constraints for a decomposition of type $decomposition. Leaving constraints alone."
+    if !isnothing(constraints)
+        if any(x-> typeof(decomposition) <: x, IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING)
+            constraints = BlockedUpdate([scale_decomposition_constraint(continuous_dims, constraint, S, decomposition) for constraint in constraints])
+        else
+            @warn "Not sure how to appropriately scale constraints for a decomposition of type $decomposition. Leaving constraints alone."
+        end
     end
     kwargs[:constraints] = constraints
 

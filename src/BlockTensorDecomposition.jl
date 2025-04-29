@@ -8,6 +8,9 @@ using .Core
 #include("./utils.jl")
 export SuperDiagonal, abs_randn, all_recursive, eachfibre, getnotindex, geomean, identityslice, interlace, multifoldl, norm2, proj_one_hot, projsplx, proj_one_hot!, projsplx!, reshape_ndims
 
+#include("./curvaturetools.jl")
+export d_dx, d2_dx2, curvature, standard_curvature
+
 #include("./tensorproducts.jl")
 export ×₁, nmp, nmode_product, mtt, slicewise_dot, tuckerproduct, cpproduct
 
@@ -81,12 +84,15 @@ export factorize
 export multiscale_factorize
 export coarsen, interpolate, linear_smooth, scale_constraint
 
+#include("./rankdetection.jl")
+export rank_detect_factorize
+export possible_ranks
+
 # Legacy code
 include("./MatrixTensorFactor/MatrixTensorFactor.jl")
 using .MatrixTensorFactor
 
 export nnmtf, nnmtf_proxgrad_online # Functions
-export d_dx, d2_dx2, curvature, standard_curvature # Approximations
 
 export IMPLIMENTED_OPTIONS, IMPLIMENTED_NORMALIZATIONS, IMPLIMENTED_METRICS
 export IMPLIMENTED_PROJECTIONS, IMPLIMENTED_CRITERIA, IMPLIMENTED_STEPSIZES # implimented options
