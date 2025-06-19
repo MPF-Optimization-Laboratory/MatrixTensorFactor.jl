@@ -313,7 +313,7 @@ $$
 
 :::
 
-For a tensor input $A$ of order $N$, the Hessian tensor $\nabla^2 f(A)$ is of order $2N$.
+For a tensor input $A$ of order $N$, the Hessian tensor $\nabla^2 f(A)$ is of order $2N$. This contrasts the Hessian *matrix* constructed by vectorizing the function $f$'s input [@magnus_matrix_2019, Ch. 10].
 
 See @sec-hessian-from-gradient for how this definition can be reproduced by performing two gradients $\nabla^2 f = \nabla(\nabla f)$.
 
@@ -651,7 +651,7 @@ getindex(CPD::CPDecomposition, I::Vararg{Int}) =
   sum(reduce(.*, (@view f[i,:]) for (f,i) in zip(factors(CPD), I)))
 ```
 
-## Tensor rank
+## Tensor rank {#sec-tensor-rank}
 - tensor rank
 - constrained rank (nonnegative etc.)
 
@@ -678,6 +678,8 @@ $$
 
 :::
 
+By convention, we say the zero tensor $Y=0$ has rank $0$.
+
 For the Tucker and Tucker-$n$ decompositions, we instead call a particular factorization **a** rank-$(R_1,\dots,R_N)$ Tucker factorization or **a** rank-$(R_1,\dots,R_n)$ Tucker-$n$ factorization, rather than **the** CP- or Tucker-$1$-rank of a tensor or **the** rank of a matrix.
 
 One reason CP and Tucker-$1$ only need a single rank $R$ can be explained by considering the case when the order of the tensor $N=2$ (matrices). The two factorizations become equivalent and are equal to low-rank $R$ matrix factorization $Y=AB$. In fact, Tucker-$1$ is always equivalent to a low-rank matrix factorization, if you consider a flattening of the tensor to arrange the entries as a matrix.
@@ -691,7 +693,7 @@ $$
 
 More restrictive constraints increase the rank of the tensor since there is less freedom in selecting the factors.
 
-Most tensor decomposition algorithms require the rank as input [CITE] since calculating the rank of the tensor can be NP-hard in general [@vavasis_complexity_2010]. For applications where the rank is not known a priori, a common strategy is to attempt a decomposition for a variety of ranks, and select the model with smallest rank that still achieves good fit between the factorization and the original tensor.
+Most tensor decomposition algorithms require the rank as input [CITE] since calculating the rank of the tensor can be NP-hard in general [@vavasis_complexity_2010]. For applications where the rank is not known a priori, a common strategy is to attempt a decomposition for a variety of ranks, and select the model with smallest rank that still achieves good fit between the factorization and the original tensor. See section @sec-estimating-tensor-rank for an implementation of this strategy.
 
 # Computing Decompositions
 - Given a data tensor and a model, how do we fit the model?
@@ -1091,6 +1093,221 @@ function make_lipschitz(T::CPDecomposition, n::Integer, Y::AbstractArray; object
     else
         error("No $(n)th factor in CPDecomposition")
     end
+end
+```
+
+### Estimating Tensor Rank {#sec-estimating-tensor-rank}
+
+In many applications, the rank of the input tensor $Y$ may not be known. In the case of CP and Tucker-1 decompositions, there are known bounds on the rank.
+
+::: {#lem-tensor-rank-bounds}
+
+Given a tensor $Y\in\mathbb{R}^{I_1\times \dots \times I_N}$, we have the following bounds on the Tucker-1 and CP rank [@kolda_TensorDecompositionsApplications_2009, Sec. 3.1].
+
+$$
+0 \leq \text{rank}_\text{CP} (Y) \leq \min_n\prod_{m\neq n} I_m = \min(I_2\cdots I_N, I_1 I_3 \cdots I_N, \dots, I_1 \cdots I_{N-1}),
+$$
+
+and
+$$
+0 \leq \text{rank}_\text{Tucker-1} (Y) \leq \min\left(I_1, \prod_{n=2}^N I_n\right) = \min(I_1, I_2\cdots I_N) .
+$$
+
+We have a rank of $0$ if and only if $Y=0$ is the zero tensor.
+:::
+
+Both of these bounds are natural extensions of the typical matrix rank bounds. For a matrix $Y\in\mathbb{R}^{I\times J}$, we know
+
+$$
+0 \leq \text{rank}(Y) \leq \min(I, J).
+$$
+
+In the case that we try to factorize a matrix $Y$ at a rank $R \geq \text{rank}(Y)$, we should still be able to achieve a final objective of zero $0=\frac{1}{2} \left\lVert A^*B^* - Y \right\rVert_F^2$, and at any rank $R < \text{rank}(Y)$, the objective is positive and decreasing. This fact extends to CP and Tucker-1 decompositions. So a naive strategy for finding the rank of a tensor $Y$, would be first check if it is rank zero, and then try factorizing $Y$ at incrementally larger ranks these two types of decompositions until the final objective hits zero.
+
+This approach has two problems. With real work data, the input tensor is often a noisy version of a low rank tensor $Y = Y_{\text{clean}} + Z$. Noise is often full rank and would cause the input tensor $Y$ to be the maximum rank [@vershynin_HighDimensionalProbability_2018]. Secondly, even if we had a perfectly low rank tensor $Y$, our algorithm at best converges to the optimal solution in the limit. So any finite stopping point has a positive objective.
+
+A simple fix would be to extend the concept of numerical rank (also called $\epsilon$-rank) to tensors.[^numerical-rank-proofs] This serves as an approximation for the rank where taking $\epsilon \rightarrow 0^+$ would return the usual definition of the rank.
+
+[^numerical-rank-proofs]: See <https://mpf-optimization-laboratory.github.io/opt-blog/posts/epsilon-rank/> for an in-depth discussion on this topic. TODO move some proofs to this document.
+
+::: {#def-epsilon-rank}
+The $\epsilon$-rank [@golubRosetakDocumentRank1977] of a matrix $A$ is the smallest rank obtainable by an $\epsilon$-perturbation of the matrix $A+E$:
+$$
+\mathrm{rank}_{\epsilon}(A)=\min_{\left\lVert E \right\rVert\leq \epsilon}\mathrm{rank}(A+E).
+$$ {#eq-epsilon-rank}
+
+:::
+
+Here we use $\left\lVert E \right\rVert=\max_{\lVert v \rVert_2=1}\left\lVert Ev \right\rVert_{2}$ to denote the the operator norm.
+
+This definition is *stable* in the sense that adding a small amount of noise to a matrix does not effect the $\epsilon$-rank. This is unlike the traditional rank where adding noise to a low rank matrix can turn it into a full rank matrix, even for an "$\epsilon$" amount of noise. This is clear from @prp-singular-values which also offers a practical method for computing $\mathrm{rank}_{\epsilon}(A)$.
+
+::: {#prp-singular-values}
+# Singular Value Characterization
+
+The $\epsilon$-rank of $A$ is equal to the number of singular values of $A$ strictly bigger than $\epsilon$.
+:::
+
+The following new result, @thm-rank-recovery, shows that we can use the $\epsilon$-rank to compute the true rank of a matrix under some additive noise $B$ with the right choice of $\epsilon$.
+
+::: {#thm-rank-recovery}
+# Rank recovery
+
+Let $A,B\in\mathbb{R}^{m\times n}$ where $\left\lVert B \right\rVert_{2} < \sigma_r / 2$. Then,
+$$
+\mathrm{rank}_{\epsilon}(A+B)=\mathrm{rank}(A)=r
+$$
+
+for all $\epsilon$ between $\left\lVert B \right\rVert_{2} \leq \epsilon < \sigma_{r}/2.$ Here, we list the singular values of $A$ in non-increasing order: $\sigma_1\geq \dots \geq \sigma_r > \sigma_{r+1}=\dots=\sigma_{\min(m,n)}=0$.
+:::
+
+Note there are no assumptions on the noise $B$. It could be fixed, or come from any distribution. In the special case that you know the distribution $B$ comes from, you could use that information to estimate an appropriate choice of $\epsilon$. @cor-gaussian-rank-recovery gives the case where $B=Z$ is standard Gaussian noise.
+
+::: {#cor-gaussian-rank-recovery}
+# Rank Recovery with Gaussian Noise
+
+Let $Z\in\mathbb{R}^{m\times n}$ be a Gaussian matrix with standard normal entries $Z_{ij}\sim\mathcal{N}(0,1)$ and $\sigma_{r}$ be the largest nonzero singular value of $A\in\mathbb{R}^{m\times n}$. If $\sigma_{r}>2(\sqrt{ m }+\sqrt{ n })$, then for $(\sqrt{ m }+\sqrt{ n } +t) \leq \epsilon <\sigma_{r}/2$, $$\mathrm{rank}_{\epsilon}(A+Z)=\mathrm{rank}(A)$$ with high probability at least $1-2\exp(-ct^2)$ for some constant $0<c\in\mathbb{R}$.
+:::
+
+Extending these results to constrained tensors factorization should be possible, but there presents multiple ways we could approach the problem. In the case of identifying rank for a signal decomposition, we are interested the smallest sum of sources under constraints on the allowed sources. For nonnegative sources, the well studied nonnegative rank [@gillis_nonnegative_2020] is most appropriate:
+
+$$
+\mathrm{rank}_+(X)= \min \left\{R \in \mathbb{Z}_{+} \middle| \exists A,B\geq 0 \text{ s.t. } X[i,j] = \sum_{r=1}^R A[i,r]B[r,j]\right\}.
+$$ {#eq-nonnegative-rank}
+
+Unfortunately, computing this is NP hard in general [@gillis_nonnegative_2020; @vavasis_complexity_2010; @gillis_geometric_2012]. This means extending the $\epsilon$-rank to something like an $\epsilon$-nonnegative-rank may not be practically computable.
+
+Even in the unconstrained case, we have only kicked the problem down the road and must estimate a suitable $\epsilon$ to extract the rank.
+
+There are a number of proposed solutions to this problem that all follow the general principle of Occam's razor of selecting the model with the smallest rank that still achieves a reasonable fit with the data. For automated rank selection, there are many criteria used to balance simplicity with accuracy. The following is a non exhaustive list of methods used in practice in roughly chronological order:
+
+- Akaike [@akaike_new_1974; @burnham_model_1998] and Bayesian [@schwarz_estimating_1978; @neath_bayesian_2012] Information Criterion
+- Numerical rank [@golubRosetakDocumentRank1977] and in combination with polynomial filtering [@ubaru_fast_2016]
+- Matrix perturbation theory [@ratsimalahelo_rank_2001]
+- Consensus clustering and cophenetic correlation coefficient [@monti_consensus_2003;@brunet_metagenes_2004]
+- Point of maximum curvature of the approximation error as a function of the rank [@satopaa_finding_2011]
+- Cross validation [@austin_tensor_2014]
+- "SCREE" plot and segmented linear regression [@saylor_CharacterizingSedimentSources_2019, Sec. 3.2]
+- Minimum description length [@fu_model_2019]
+- Concordance [@fogel_rank_2023]
+- And hypothesis testing [@cai_rank_2023].
+
+The number of ways to estimate rank---and lack of consensus on when to use each method---is best summarized by Fu et. al. [@fu_model_2019]:
+
+> "Even though the selection of rank is very important, in most studies on [non-negative tensor factorization] the value of R is simply determined by trial and error or specialists' insights, and there does not exist a good way to determine R automatically."
+
+We take an approach similar to Satopaa [@satopaa_finding_2011], Saylor [@saylor_CharacterizingSedimentSources_2019, Sec. 3.2], and Graham [@graham_tracing_2025]. We first factorize the tensor at every possible rank (as given by the bounds in @lem-tensor-rank-bounds), and then look at the function that takes as input a rank $r$, and output the final relative error between the reconstructed decomposition at that rank $X_r^*$ and the input tensor $Y$,
+
+$$
+f(r) = \left\lVert X_r^* - Y \right\rVert_F / \left\lVert Y \right\rVert_F.
+$$
+
+We select the "knee" or "elbow" of this function by finding the point of maximum curvature $\kappa_f(r)$ with finite differences,
+
+$$
+\hat{R} = \arg\,\max_r \kappa_f(r) := \frac{f''(r)}{(1+ (f'(x))^2)^{3/2}}.
+$$
+
+Since scaling the function $f$ would influence the curvature, we standardize the function by scaling it to the $[0, 1]^2$ box. The following is the specific implementation of the rank finding algorithm, and method for calculating the standard curvature.
+
+Since the maximum rank could be very large, we also include an option `online_rank_estimation` which stops looking are larger ranks if the standard curvature has noticeably dropped, implying a local maximum.
+
+```julia
+function rank_detect_factorize(Y; online_rank_estimation=false, rank=nothing, model=Tucker1, kwargs...)
+    if isnothing(rank)
+        # Initialize output and final error lists
+        all_outputs = []
+        final_rel_errors = Float64[]
+
+        # Make sure RelativeError is part of the stats keyword argument
+        kwargs = isempty(kwargs) ? Dict{Symbol,Any}() : Dict{Symbol,Any}(kwargs)
+        get!(kwargs, :stats) do # If stats is not given, populate stats with RelativeError
+            [Iteration, RelativeError, ObjectiveValue, isnonnegative(Y) ? GradientNNCone : GradientNorm]
+        end
+        if RelativeError ∉ kwargs[:stats] # If stats was given, make sure RelativeError is in the list stats
+            kwargs[:stats] = [RelativeError, kwargs[:stats]...] # not using pushfirst! since kwargs[:stats] could be a Tuple
+        end
+        kwargs[:model] = model # add the model back into kwargs
+
+        for rank in possible_ranks(Y, model)
+            @info "Trying rank=$rank..."
+
+            kwargs[:rank] = rank # add the rank into kwargs
+
+            output = factorize(Y; kwargs...) # safe to call factorize (rather than _factorize) since both factorize and rank_detect_factorize have checks to see if the keyword `rank` is provided
+            push!(all_outputs, output)
+            _, stats, _ = output
+
+            final_rel_error = stats[end, :RelativeError]
+            push!(final_rel_errors, final_rel_error)
+            @info "Final relative error = $final_rel_error"
+
+            if (online_rank_estimation == true) && length(final_rel_errors) >= 3 # Need at least 3 points to evaluate curvature
+                curvatures = standard_curvature(final_rel_errors)
+                if curvatures[end] ≈ maximum(curvatures) # want the last curvature to be significantly smaller than the max
+                    continue
+                else
+                    # we must have curvature[end] < maximum(curvature) so we can now return
+                    R = argmax(curvatures)
+                    @info "Optimal rank found: $R"
+                    return ((all_outputs[R])..., final_rel_errors)
+                end
+            end
+        end
+
+        # Return if online_rank_estimation == false, or a clear rank was not found
+        R = argmax(standard_curvature(final_rel_errors))
+        @info "Optimal rank found: $R"
+        return ((all_outputs[R])..., final_rel_errors)
+    else
+        return factorize(Y; rank, model, kwargs...)
+    end
+end
+```
+
+```julia
+"""
+Approximate first derivative with finite elements. Assumes y[i] = y(x_i) are samples with unit spaced inputs x_{i+1} - x_i = 1.
+"""
+function d_dx(y::AbstractVector{<:Real})
+    d = similar(y)
+    each_i = eachindex(y)
+
+    # centred estimate
+    for i in each_i[begin+1:end-1]
+        d[i] = (-y[i-1] + y[i+1])/2
+    end
+
+    # three point forward/backward estimate
+    i = each_i[begin+1]
+    d[begin] = (-3*y[i-1] + 4*y[i] - y[i+1])/2
+
+    i = each_i[end-1]
+    d[end] = (y[i-1] - 4*y[i] + 3*y[i+1])/2
+    return d
+end
+
+function d2_dx2(y::AbstractVector{<:Real})
+    d = similar(y)
+
+    for i in eachindex(y)[begin+1:end-1]
+        d[i] = y[i-1] - 2*y[i] + y[i+1]
+    end
+
+    # Assume the same second derivative at the end points
+    d[begin] = d[begin+1]
+    d[end] = d[end-1]
+    return d
+end
+
+function standard_curvature(y::AbstractVector{<:Real}; kwargs...)
+    # An interval 0:10 has length(0:10) = 11, but measure 10-0 = 10
+    # hence the length(y) - 1
+    Δx = 1 / (length(y) - 1)
+    y_max = maximum(y)
+    dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
+    dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
+    return @. dy2_dx2 / (1 + dy_dx^2)^1.5
 end
 ```
 
