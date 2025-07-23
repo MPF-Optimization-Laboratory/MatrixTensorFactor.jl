@@ -12,6 +12,10 @@ using BlockTensorDecomposition
 using Plots
 using PlotlyJS
 
+fact = BlockTensorDecomposition.factorize
+
+show_plots = false
+
 J = 65 # Number of samples in the x dimension
 K = 65 # Number of samples in the y dimension
 L = 65 # Number of samples in the z dimension
@@ -60,6 +64,8 @@ for (j, x) in enumerate(x)
     end
 end
 
+if show_plots
+
 # Plot the true sources
 XXX, YYY, ZZZ = mgrid(x, y, z)
 source1_density = pdf.((source1,), xyz)
@@ -83,6 +89,8 @@ end
 plot3d(source1_density)
 plot3d(source2_density)
 plot3d(source3_density)
+
+end
 
 #heatmap(x,y,pdf.((source1,), xyz)) |> display
 
@@ -144,28 +152,75 @@ nonnegativeB! = ConstraintUpdate(0, nonnegative!)
 nonnegativeA! = ConstraintUpdate(1, nonnegative!)
 #[l1scale_1slices! ∘ nonnegative!, nonnegative!]
 
+"""
+    AvgRelativeError(; norm, kwargs...)
+
+Takes the average of the entry-wise relative error
+"""
+struct AvgRelativeError{T<:Function} <: AbstractStat
+    norm::T
+end
+AvgRelativeError(; norm, kwargs...) = AvgRelativeError(norm)
+(S::AvgRelativeError)(X, Y, _, _, _) = mean(@. (X - Y) / Y)
+
+rank = length(sources) # 3 sources
+
+initialization = Tucker1(size(Y), rank; init=abs_randn)
+B_init, A_init = factors(initialization)
+l1scale_rows!(A_init)
+l1scale_1slices!(B_init)
+
+B_init_scaled = coarsen(B_init, 64; dims=[2, 3, 4])
+l1scale_1slices!(B_init_scaled)
+
+initialization_multiscale = Tucker1((B_init_scaled, A_init))
+
+
 options = (
-    rank=3,
-    momentum=true,
+    rank=rank,
+    momentum=false,
     model=Tucker1,
-    tolerance=(1e-5),
-    converged=(GradientNNCone),
+    #tolerance=(1e-5),
+    #converged=(GradientNNCone),
+    tolerance=(0.01),
+    converged=(RelativeError),
     do_subblock_updates=false,
     constrain_init=true,
     constraints=[scaleB_rescaleA!, nonnegativeA!],
-    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError],
+    stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms], #AvgRelativeError
     maxiter=200
 )
 
 # First pass to compile
-@time decomposition, stats_data, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
+t = @timed decomposition, stats_data_multi, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], decomposition=initialization_multiscale, options...);
 
-@time decomposition, stats_data, kwargs = factorize(Y; options...);
+t = @timed decomposition, stats_data_regular, kwargs = fact(Y; options...);
 
 # Second pass to time
-@time decomposition, stats_data, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
+t = @timed decomposition, stats_data_multi, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
+total_time = t.time
 
-@time decomposition, stats_data, kwargs = factorize(Y; options...);
+all_times = [x[2] for x in stats_data_multi]
+all_errors = [x[1][:, :AvgRelativeError] for x in stats_data_multi]
+overhead = total_time - sum(all_times)
+
+t = @timed decomposition, stats_data_regular, kwargs = fact(Y; options...);
+regular_time = t.time
+regular_errors = stats_data_regular[:,:AvgRelativeError]
+
+p = Plots.plot(;xlabel="time (s)", ylabel="relative error", yaxis=:log10)
+t_start = 0
+avg_overhead_per_scale = overhead / (length(stats_data_multi))
+for (time, errors) in zip(all_times, all_errors)
+    t_end = t_start + avg_overhead_per_scale + time
+    ts = range(t_start, t_end; length=length(errors))
+    Plots.plot!(ts, errors)
+    t_start = t_end
+end
+display(p)
+
+ts = range(0, regular_time; length=length(regular_errors))
+Plots.plot!(ts, regular_errors)
 
 #using BenchmarkTools
 
@@ -223,6 +278,7 @@ options = (
 
 # F ./= Δx * Δy * Δz # Rescale factors
 
+if show_plots
 # Plot learned factors
 Plots.heatmap(C, yflip=true, title="Learned Coefficients", clims=(0,1)) |> display
 Plots.heatmap(C_true, yflip=true, title="True Coefficients", clims=(0,1)) |> display # possibly permuted order
@@ -240,6 +296,7 @@ end
 
 plot3d(F[2, :, :, :])
 
+end
 # #plot3d(Y[3, :, :, :])
 
 # # Plot convergence

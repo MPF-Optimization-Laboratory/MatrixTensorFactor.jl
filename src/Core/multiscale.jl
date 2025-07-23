@@ -154,7 +154,9 @@ function multiscale_factorize(Y; kwargs...)
     constraints, kwargs = scale_constraints(Yₛ, coarsest_scale; continuous_dims, kwargs...)
 
     @info "Factorizing at scale $coarsest_scale..."
-    decomposition, stats, _ = _factorize(Yₛ; default_kwargs(Yₛ; kwargs...)...) # calling the internal factorize so we don't get stuck in a loop calling factorize() <-> multiscale_factorize()
+    t = @timed decomposition, stats, _ = _factorize(Yₛ; default_kwargs(Yₛ; kwargs...)...) # calling the internal factorize so we don't get stuck in a loop calling factorize() <-> multiscale_factorize()
+    all_stats = Tuple{DataFrame, Float64}[]
+    push!(all_stats, (stats, t.time))
 
     # Factorize Y at progressively finer scales
     for scale in finer_scales
@@ -171,9 +173,10 @@ function multiscale_factorize(Y; kwargs...)
         constraints, kwargs = scale_constraints(Yₛ, scale; continuous_dims, kwargs...)
 
         @info "Factorizing at scale $scale..."
-        decomposition, stats, _ = _factorize(Yₛ; default_kwargs(Yₛ; kwargs...)...) # calling the internal factorize so we don't get stuck in a loop calling factorize() <-> multiscale_factorize()
+        t = @timed decomposition, stats, _ = _factorize(Yₛ; default_kwargs(Yₛ; kwargs...)...) # calling the internal factorize so we don't get stuck in a loop calling factorize() <-> multiscale_factorize()
+        push!(all_stats, (stats, t.time))
     end
-    return decomposition, stats, kwargs
+    return decomposition, all_stats, kwargs
 end
 
 const IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING = [
