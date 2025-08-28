@@ -35,7 +35,7 @@ function rank_detect_factorize(Y; online_rank_estimation=false, rank=nothing, mo
             @info "Final relative error = $final_rel_error"
 
             if (online_rank_estimation == true) && length(final_rel_errors) >= 3 # Need at least 3 points to evaluate curvature
-                curvatures = standard_curvature(final_rel_errors)
+                curvatures = standard_curvature(final_rel_errors; method=:finite_differences) # method=:splines
                 if curvatures[end] ≈ maximum(curvatures) # want the last curvature to be significantly smaller than the max
                     continue
                 else

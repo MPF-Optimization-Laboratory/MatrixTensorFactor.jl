@@ -193,7 +193,7 @@ GenericConstraint
 
 ## Manual Constraint Updates
 
-You can manually define the `ConstraintUpdate` that gets applied as part of the block decomposition method. These will be automaticaly inserted into the order of updates immediately following the last update of the matching block with `smart_interlace!`.
+You can manually define the `ConstraintUpdate` that gets applied as part of the block decomposition method. These will be automatically inserted into the order of updates immediately following the last update of the matching block with `smart_interlace!`.
 
 ```@docs
 smart_interlace!

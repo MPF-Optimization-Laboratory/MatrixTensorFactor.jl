@@ -218,6 +218,63 @@ function d2_dx2(y::AbstractVector{<:Real})
     return d
 end
 
+function cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
+    # Set up variables
+    n = length(y)
+    T = eltype(y)
+    f = diff([y; y[end]]) # use diff([y; zero(T)]) to clamp at a y value of 0 instead of a repeated boundary condition
+
+    # solve the system Mb=v
+    M = spline_mat(n)
+    v = 3/h^2 .* [1 - 2y[1] + y[2]; diff(f); 0]
+    b = M \ v
+
+    # use b to find the other coefficients
+    c = [f[i]/h - h/3*(b[i+1] + 2b[i]) for i in 1:n]
+    a = diff(b) ./ 3h
+    d = copy(y)
+
+    # truncate b from length n+1 to n
+    return a, b[1:end-1], c, d
+end
+
+function make_spline(y::AbstractVector{<:Real}; h=1)
+    a, b, c, d = cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
+    n = length(y)
+
+    function f(x)
+        i = Int(floor(x))
+
+        # find which spline piece to use
+        # extrapolating from the first or last spline if needed
+        if i < 1
+            i = 1
+        elseif i > n
+            i = n
+        end
+
+        h = x - i
+
+        return a[i]*h^3 + b[i]*h^2 + c[i]*h + d[i]
+    end
+
+    return f
+end
+
+function d_dx_and_d2_dx2_spline(y::AbstractVector{<:Real}; h=1)
+    _, b, c, _ = cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
+    dy_dx = c
+    dy2_dx2 = 2b
+    return dy_dx, dy2_dx2
+end
+
+function spline_mat(n)
+    du = [0; ones(Int, n-1)]
+    dd = [6; 4*ones(Int, n-1) ; 1]
+    dl = [ones(Int, n-1); 0]
+
+    return Tridiagonal(dl, dd, du)
+end
 
 """
     curvature(y::AbstractVector{<:Real})
@@ -226,10 +283,17 @@ Approximates the signed curvature of a function given evenly spaced samples.
 
 Uses [`d_dx`](@ref) and [`d2_dx2`](@ref) to approximate the first two derivatives.
 """
-function curvature(y::AbstractVector{<:Real}; kwargs...)
-    dy_dx = d_dx(y; kwargs...)
-    dy2_dx2 = d2_dx2(y; kwargs...)
-    return @. dy2_dx2 / (1 + dy_dx^2)^1.5
+function curvature(y::AbstractVector{<:Real}; method=:finite_differences, kwargs...)
+    if method == finite_differences
+        dy_dx = d_dx(y; kwargs...)
+        dy2_dx2 = d2_dx2(y; kwargs...)
+        return @. dy2_dx2 / (1 + dy_dx^2)^1.5
+    elseif method == :splines
+        dy_dx, dy2_dx2 = d_dx_and_d2_dx2_spline(y; h=1)
+        return @. dy2_dx2 / (1 + dy_dx^2)^1.5
+    else
+        throw(ArgumentError("method $method not implemented"))
+    end
 end
 
 """
@@ -239,12 +303,20 @@ Approximates the signed curvature of a function, scaled to the unit box ``[0,1]^
 
 See [`curvature`](@ref).
 """
-function standard_curvature(y::AbstractVector{<:Real}; kwargs...)
+function standard_curvature(y::AbstractVector{<:Real}; method=:finite_differences, kwargs...)
     Δx = 1 / (length(y) - 1) # An interval 0:10 has length(0:10) = 11, but measure 10-0 = 10
-    y_max = maximum(y)
-    dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
-    dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
-    return @. dy2_dx2 / (1 + dy_dx^2)^1.5
+    if method == finite_differences
+        y_max = maximum(y)
+        dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
+        dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
+        return @. dy2_dx2 / (1 + dy_dx^2)^1.5
+    elseif method == :splines
+        # y_max = 1
+        dy_dx, dy2_dx2 = d_dx_and_d2_dx2_spline(y; h=Δx)
+        return @. dy2_dx2 / (1 + dy_dx^2)^1.5
+    else
+        throw(ArgumentError("method $method not implemented"))
+    end
 end
 
 """
