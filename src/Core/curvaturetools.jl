@@ -218,6 +218,19 @@ function d2_dx2(y::AbstractVector{<:Real})
     return d
 end
 
+"""
+    cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
+
+Calculates the list of coefficients a, b, c, d for an interpolating spline.
+
+The spline is defined as f(x) = g_i(x) on x[i] ≤ x ≤ x[i+1] where
+g_i(x) = a[i]*(x-x[i])^3 + b[i]*(x-x[i])^2 + c[i]*(x-x[i]) + d[i]
+
+Uses the following boundary conditions
+- g_1(x[1]-h) = 1 (i.e. the y-intercept is (0,1) for uniform spaced x=1:n)
+- g_n(x[n]+h) = x[n] (i.e. repeated right end-point)
+- g_n''(x[n]+h) = 0 (i.e. flat/no-curvature one spacing after end-point)
+"""
 function cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
     # Set up variables
     n = length(y)
@@ -238,6 +251,16 @@ function cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
     return a, b[1:end-1], c, d
 end
 
+"""creates the tridiagonal matrix to solve for coefficients b"""
+function spline_mat(n)
+    du = [0; ones(Int, n-1)]
+    dd = [6; 4*ones(Int, n-1) ; 1]
+    dl = [ones(Int, n-1); 0]
+
+    return Tridiagonal(dl, dd, du)
+end
+
+"""Returns a function f(x) that is an interpolating/extrapolating spline for y, with uniform stepsize h between the x-values of the knots"""
 function make_spline(y::AbstractVector{<:Real}; h=1)
     a, b, c, d = cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
     n = length(y)
@@ -261,6 +284,7 @@ function make_spline(y::AbstractVector{<:Real}; h=1)
     return f
 end
 
+"""Extracts the first and second derivatives of the splines at the knots"""
 function d_dx_and_d2_dx2_spline(y::AbstractVector{<:Real}; h=1)
     _, b, c, _ = cubic_spline_coefficients(y::AbstractVector{<:Real}; h=1)
     dy_dx = c
@@ -268,13 +292,6 @@ function d_dx_and_d2_dx2_spline(y::AbstractVector{<:Real}; h=1)
     return dy_dx, dy2_dx2
 end
 
-function spline_mat(n)
-    du = [0; ones(Int, n-1)]
-    dd = [6; 4*ones(Int, n-1) ; 1]
-    dl = [ones(Int, n-1); 0]
-
-    return Tridiagonal(dl, dd, du)
-end
 
 """
     curvature(y::AbstractVector{<:Real})
@@ -305,7 +322,7 @@ See [`curvature`](@ref).
 """
 function standard_curvature(y::AbstractVector{<:Real}; method=:finite_differences, kwargs...)
     Δx = 1 / (length(y) - 1) # An interval 0:10 has length(0:10) = 11, but measure 10-0 = 10
-    if method == finite_differences
+    if method == :finite_differences
         y_max = maximum(y)
         dy_dx = d_dx(y; kwargs...) / (Δx * y_max)
         dy2_dx2 = d2_dx2(y; kwargs...) / (Δx^2 * y_max)
