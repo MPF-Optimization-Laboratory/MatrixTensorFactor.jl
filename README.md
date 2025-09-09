@@ -119,7 +119,27 @@ getfield(kwargs, :model) == Tucker1
 # About
 (Coming Soon) The package also supports user defined models and constraints provided the operations for combining factor into a tensor, and projecting/applying the constraint are given. It is also a longer term goal to support other optimization objective beyond minimizing the least-squares (Frobenius norm) between the input tensor and model.
 
-The general scheme for computing the decomposition is a generalization of Xu and Yin's Block Coordinate Descent Method (2013) that cyclicaly updates each factor in a model with a proximal gradient descent step. Note for convex constraints, the proximal operation would be a Euclidian projection onto the constraint set, but we find some improvment with a hybrid approach of a partial Euclidian projection followed by a rescaling step. In the case of a simplex constraint on one factor, this looks like: dividing the constrained factor by the sum of entries, and multiplying another factor by this sum to preserve the product.
+The general scheme for computing the decomposition is a generalization of Xu and Yin's Block Coordinate Descent Method (2013) that cyclically updates each factor in a model with a proximal gradient descent step. Note for convex constraints, the proximal operation would be a Euclidean projection onto the constraint set, but we find some improvement with a hybrid approach of a partial Euclidean projection followed by a rescaling step. In the case of a simplex constraint on one factor, this looks like: dividing the constrained factor by the sum of entries, and multiplying another factor by this sum to preserve the product.
 
 # References
 Naomi Graham, Nicholas Richardson, Michael P. Friedlander, and Joel Saylor. Tracing Sedimentary Origins in Multivariate Geochronology via Constrained Tensor Factorization. Mathematical Geosciences, Feb. 2025. http://doi.org/10.1007/s11004-024-10175-0
+
+# Related Packages
+
+## For decomposing tensors
+
+- [TensorDecompositions.jl](https://github.com/yunjhongwu/TensorDecompositions.jl): Supports the decompositions; high-order SVD, CP & Tucker (and nonnegative version), symmetric rank-1, and Tensor-CUR. Most models support one or two algorithms (usually alternating methods). No customizability of constraints.
+- [NTFk.jl](https://github.com/SmartTensors/NTFk.jl): Only nonnegative Tucker and CP decompositions supported
+- [GCPDecompositions.jl](https://github.com/dahong67/GCPDecompositions.jl): Only LBFGSB or ALS algorithms for CPDecompositions
+- [NMF.jl](https://github.com/JuliaStats/NMF.jl): Multiple algorithms supported for nonnegative matrix factorizations
+
+## For working with tensors and some decompositions
+
+- [TensorOperations.jl](https://github.com/QuantumKitHub/TensorOperations.jl)
+- [TensorKit.jl](https://github.com/QuantumKitHub/TensorKit.jl)
+- [TensorToolbox.jl](https://github.com/lanaperisa/TensorToolbox.jl)
+
+## For purely constructing and manipulating tensors
+
+- [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
+- [OMEinsum.jl](https://github.com/under-Peter/OMEinsum.jl)
