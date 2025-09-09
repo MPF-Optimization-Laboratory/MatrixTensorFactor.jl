@@ -242,6 +242,14 @@ end
 Tucker(factors::Tuple{Vararg{AbstractArray{T}}}, frozen=false_tuple(length(factors))) where T = Tucker{T, length(factors) - 1}(factors, frozen)
 #Tucker(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}, frozen=false_tuple(2)) where T = Tucker1(factors, frozen) # use the more specific struct
 Tucker1(factors::Tuple{<:AbstractArray{T}, <:AbstractMatrix{T}}, frozen=false_tuple(2)) where T = Tucker1{T, ndims(factors[1])}(factors, frozen)
+
+"""
+    Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen=false_tuple(length(ranks)+1), init=DEFAULT_INIT, kwargs...) where N
+
+Constructs a random Tucker type using `init` to initialize the factors.
+
+See [`Tucker1`](@ref).
+"""
 function Tucker(full_size::NTuple{N, Integer}, ranks::NTuple{N, Integer}; frozen=false_tuple(length(ranks)+1), init=DEFAULT_INIT, kwargs...) where N
     core = init(ranks)
     matrix_factors = init.(full_size, ranks)
@@ -250,6 +258,12 @@ end
 
 # TODO throw a readable error if the length of `ranks` does not match the number of dimensions of full_size
 
+
+"""
+    Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tuple(2), init=DEFAULT_INIT, kwargs...) where N
+
+Constructs a random Tucker1 type using `init` to initialize the factors.
+"""
 function Tucker1(full_size::NTuple{N, Integer}, rank::Integer; frozen=false_tuple(2), init=DEFAULT_INIT, kwargs...) where N
     I, J... = full_size
     core = init((rank, J...))
