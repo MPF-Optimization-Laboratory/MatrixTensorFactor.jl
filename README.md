@@ -133,13 +133,17 @@ Naomi Graham, Nicholas Richardson, Michael P. Friedlander, and Joel Saylor. Trac
 - [GCPDecompositions.jl](https://github.com/dahong67/GCPDecompositions.jl): Only LBFGSB or ALS algorithms for CPDecompositions
 - [NMF.jl](https://github.com/JuliaStats/NMF.jl): Multiple algorithms supported for nonnegative matrix factorizations
 
-## For working with tensors and some decompositions
+## For working with tensors and some basic decompositions
 
 - [TensorOperations.jl](https://github.com/QuantumKitHub/TensorOperations.jl)
 - [TensorKit.jl](https://github.com/QuantumKitHub/TensorKit.jl)
 - [TensorToolbox.jl](https://github.com/lanaperisa/TensorToolbox.jl)
+- [ITensors.jl](https://github.com/ITensor/ITensors.jl)
 
 ## For purely constructing and manipulating tensors
 
-- [Tullio.jl](https://github.com/mcabbott/Tullio.jl)
-- [OMEinsum.jl](https://github.com/under-Peter/OMEinsum.jl)
+- [Tullio.jl](https://github.com/mcabbott/Tullio.jl): Index notation construction
+- [OMEinsum.jl](https://github.com/under-Peter/OMEinsum.jl): Index notation construction
+- [Tensors.jl](https://github.com/Ferrite-FEM/Tensors.jl): Fast operations with order 1, 2, and 4 tensors, symmetric tensors supported
+- [Tensorial.jl](https://github.com/KeitaNakamura/Tensorial.jl): Statically sized tensors
+- [SymmetricTensors.jl](https://github.com/iitis/SymmetricTensors.jl): Working with symmetric tensors
