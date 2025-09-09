@@ -132,6 +132,7 @@ Naomi Graham, Nicholas Richardson, Michael P. Friedlander, and Joel Saylor. Trac
 - [NTFk.jl](https://github.com/SmartTensors/NTFk.jl): Only nonnegative Tucker and CP decompositions supported
 - [GCPDecompositions.jl](https://github.com/dahong67/GCPDecompositions.jl): Only LBFGSB or ALS algorithms for CPDecompositions
 - [NMF.jl](https://github.com/JuliaStats/NMF.jl): Multiple algorithms supported for nonnegative matrix factorizations
+- [TensorFactorizations.jl](https://github.com/mhauru/TensorFactorizations.jl): Eigenvalue and singular value decompositions of tensors
 
 ## For working with tensors and some basic decompositions
 
