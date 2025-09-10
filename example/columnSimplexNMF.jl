@@ -1,7 +1,7 @@
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using Random
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 
 # Generate two matrices with columns constrained to the simplex
 I, J = 10, 20
@@ -21,7 +21,7 @@ Ydecomp = Tucker1((B, A)) # This means Y = A*B
 Y = array(Ydecomp) # Convert to a plain matrix type
 
 # Set options for factorization. Enter the following in the REPL for full list of options
-# julia>?BlockTensorDecomposition.Core.default_kwargs
+# julia>?BlockTensorFactorization.Core.default_kwargs
 
 options = (
     rank=R,

@@ -1,6 +1,6 @@
 # Test of multiscale
 
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using HDF5
 using BenchmarkTools
 using Logging

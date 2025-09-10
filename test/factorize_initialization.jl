@@ -1,11 +1,11 @@
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using Random
 
 N = 100
 R = 5
 D = 2
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 matrices = [abs_randn(N, R) for _ in 1:D]
 l1scale_cols!.(matrices)
 Ydecomp = CPDecomposition(Tuple(matrices))#abs_randn
@@ -29,9 +29,9 @@ options = (
 )
 
 # Test initialization functions of factorize
-kwargs = BlockTensorDecomposition.default_kwargs(Y; options...)
+kwargs = BlockTensorFactorization.default_kwargs(Y; options...)
 
-decomposition, kwargs = BlockTensorDecomposition.initialize_decomposition(Y; kwargs...)
-previous, updateprevious! = BlockTensorDecomposition.initialize_previous(decomposition, Y; kwargs...)
-parameters, updateparameters! = BlockTensorDecomposition.initialize_parameters(decomposition, Y, previous; kwargs...)
-update!, kwargs = BlockTensorDecomposition.make_update!(decomposition, Y; kwargs...)
+decomposition, kwargs = BlockTensorFactorization.initialize_decomposition(Y; kwargs...)
+previous, updateprevious! = BlockTensorFactorization.initialize_previous(decomposition, Y; kwargs...)
+parameters, updateparameters! = BlockTensorFactorization.initialize_parameters(decomposition, Y, previous; kwargs...)
+update!, kwargs = BlockTensorFactorization.make_update!(decomposition, Y; kwargs...)

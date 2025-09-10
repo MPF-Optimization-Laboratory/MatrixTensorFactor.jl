@@ -1,5 +1,5 @@
-# BlockTensorDecomposition.jl
-BlockTensorDecomposition.jl is a package to factorize tensors. The main feature is its flexibility at decomposing input tensors according to many common tensor models (ex. CP, Tucker) with a number of constraints (ex. nonnegative, simplex), while also supporting user-defined models, constraints, and optimization updates.
+# BlockTensorFactorization.jl
+BlockTensorFactorization.jl is a package to factorize tensors. The main feature is its flexibility at decomposing input tensors according to many common tensor models (ex. CP, Tucker) with a number of constraints (ex. nonnegative, simplex), while also supporting user-defined models, constraints, and optimization updates.
 
 # Quick Guide
 
@@ -22,7 +22,7 @@ Y = randn(100,100,100)
 Then you can call `factorize` with a number of keywords. The main keywords you many want to specify are the `model` and `rank`. This lets `factorize` know they type and size of the decomposition. See [Decomposition Models](@ref) for a complete list of avalible models, and how to define your own custom decomposition.
 
 ```julia
-using BlockTensorDecomposition
+using BlockTensorFactorization
 
 X, stats, kwargs = factorize(Y; model=Tucker1, rank=5)
 ```

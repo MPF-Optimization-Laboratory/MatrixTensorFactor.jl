@@ -1,6 +1,6 @@
-using BlockTensorDecomposition
+using BlockTensorFactorization
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 
 G = abs_randn(2,3,4)
 A = abs_randn(10, 2)

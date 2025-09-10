@@ -29,13 +29,13 @@
 # ```{julia}
 # using Pkg; Pkg.activate(".")
 # Pkg.add(["LinearAlgebra","Random","Arpack","BenchmarkTools"])
-# #Pkg.add(path="C:\\Users\\Nicholas\\OneDrive - UBC\\Research\\general-block-decomposition\\BlockTensorDecomposition.jl")
+# #Pkg.add(path="C:\\Users\\Nicholas\\OneDrive - UBC\\Research\\general-block-decomposition\\BlockTensorFactorization.jl")
 # ```
 
 using Random: rand, randn
 using LinearAlgebra: svdvals, opnorm, Symmetric
 using Arpack: svds
-using BlockTensorDecomposition: slicewise_dot
+using BlockTensorFactorization: slicewise_dot
 using BenchmarkTools
 
 

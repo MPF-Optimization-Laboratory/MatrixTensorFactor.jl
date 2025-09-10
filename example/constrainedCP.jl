@@ -1,4 +1,4 @@
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using Random
 using UnicodePlots
 
@@ -6,7 +6,7 @@ N = 100
 R = 5
 D = 2
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 matrices = [abs_randn(N, R) for _ in 1:D]
 l1scale_cols!.(matrices)
 Ydecomp = CPDecomposition(Tuple(matrices))#abs_randn

@@ -134,9 +134,9 @@
   }
 
   let new_title_block = block_with_new_content(
-    old_title_block, 
+    old_title_block,
     block_with_new_content(
-      old_title_block.body, 
+      old_title_block.body,
       old_title_block.body.body.children.at(0) +
       old_title_block.body.body.children.at(1) +
       new_title))
@@ -149,23 +149,23 @@
 // 2023-10-09: #fa-icon("fa-info") is not working, so we'll eval "#"❕"" instead
 #let callout(body: [], title: "Callout", background_color: rgb("#dddddd"), icon: none, icon_color: black) = {
   block(
-    breakable: false, 
-    fill: background_color, 
-    stroke: (paint: icon_color, thickness: 0.5pt, cap: "round"), 
-    width: 100%, 
+    breakable: false,
+    fill: background_color,
+    stroke: (paint: icon_color, thickness: 0.5pt, cap: "round"),
+    width: 100%,
     radius: 2pt,
     block(
       inset: 1pt,
-      width: 100%, 
-      below: 0pt, 
+      width: 100%,
+      below: 0pt,
       block(
-        fill: background_color, 
-        width: 100%, 
+        fill: background_color,
+        width: 100%,
         inset: 8pt)[#text(icon_color, weight: 900)[#icon] #title]) +
       if(body != []){
         block(
-          inset: 1pt, 
-          width: 100%, 
+          inset: 1pt,
+          width: 100%,
           block(fill: white, width: 100%, inset: 8pt, body))
       }
     )
@@ -298,7 +298,7 @@
 #let proposition = thmbox("proposition", "Proposition", base_level: 1)
 
 #show: doc => article(
-  title: [BlockTensorDecompositions.jl: A Unified Constrained Tensor Decomposition Julia Package],
+  title: [BlockTensorFactorizations.jl: A Unified Constrained Tensor Decomposition Julia Package],
   authors: (
     ( name: [Nicholas J. E. Richardson],
       affiliation: [Department of Mathematics],
@@ -326,7 +326,7 @@
 - Tenors are useful in many applications
 - Need tools for fast and efficient decompositions
 
-For the scientific user, it would be most useful for there to be a single piece of software that can take as input 1) any reasonable type of factorization model and 2) constraints on the individual factors, and produce a factorization. Details like what rank to select, how the constraints should be enforced, and convergence criteria should be handled automatically, but customizable to the knowledgable user. These are the core specification for BlockTensorDecompositions.jl.
+For the scientific user, it would be most useful for there to be a single piece of software that can take as input 1) any reasonable type of factorization model and 2) constraints on the individual factors, and produce a factorization. Details like what rank to select, how the constraints should be enforced, and convergence criteria should be handled automatically, but customizable to the knowledgable user. These are the core specification for BlockTensorFactorizations.jl.
 
 == Related tools
 <related-tools>
@@ -351,7 +351,7 @@ Some progress towards building a unified framework has been made @xu_BlockCoordi
   - partial projection and rescaling to enforce linear constraints (rather than Euclidean projection)
 - ?? rank detection ??
 
-The main contribution is a description of a fast and flexible tensor decomposition package, along with a public implementation written in Julia: BlockTensorDecompositions.jl. This package provides a framework for creating and performing custom tensor decompositions. To the author’s knowledge, it is the first package to provide automatic factorization to a large class of constrained tensor decompositions problems, as well as a framework for implementing new constraints and iterative algorithms. This paper also describes three new techniques not found in the literature that empirically convergence faster than traditional block-coordinate descent.
+The main contribution is a description of a fast and flexible tensor decomposition package, along with a public implementation written in Julia: BlockTensorFactorizations.jl. This package provides a framework for creating and performing custom tensor decompositions. To the author’s knowledge, it is the first package to provide automatic factorization to a large class of constrained tensor decompositions problems, as well as a framework for implementing new constraints and iterative algorithms. This paper also describes three new techniques not found in the literature that empirically convergence faster than traditional block-coordinate descent.
 
 = Tensor Decompositions
 <tensor-decompositions>
@@ -388,37 +388,37 @@ The $n$-slices, $n$th mode slices, or mode $n$ slices of an $N$th order tensor $
 #figure([
 #box(image("figure/tensor_slices.png"))
 ], caption: figure.caption(
-position: bottom, 
+position: bottom,
 [
 Slices of an order $3$ tensor $A$.
-]), 
-kind: "quarto-float-fig", 
-supplement: "Figure", 
+]),
+kind: "quarto-float-fig",
+supplement: "Figure",
 )
 <fig-tensor-slices>
 
 
 The $n$-fibres, $n$th mode fibres, or mode $n$ fibres of an $N$th order tensor $A$ are denoted $A [i_1 , med dots.h , med i_(n - 1) , med : , med i_(n + 1) , med dots.h , med i_N]$. For example, the 1-fibres of a matrix $M$ are the column vectors \
-$M [: , med j]$, and the 2-fibres are the row vectors $M [i , med :]$. For order-3 tensors, the $1$st, $2$nd, and $3$rd mode fibres $A [: , j , k]$, $A [i , : , :]$, and $A [i , j , :]$ are called the vertical/column, horizontal/row, and depth/tube fibres respectively and are displayed in @fig-tensor-fibres. Natively in Julia, the 1-, 2-, and 3-fibres of a third order array `A` would be `eachslice(A, dims=(2,3))`, `eachslice(A, dims=(1,3))`, and `eachslice(A, dims=(1,2))`. BlockTensorDecomposition.jl defines the function `eachfibre(A; n)` to do exactly this. For example, the 1-fibres of an array `A` would be `eachfibre(A, n=1)`.
+$M [: , med j]$, and the 2-fibres are the row vectors $M [i , med :]$. For order-3 tensors, the $1$st, $2$nd, and $3$rd mode fibres $A [: , j , k]$, $A [i , : , :]$, and $A [i , j , :]$ are called the vertical/column, horizontal/row, and depth/tube fibres respectively and are displayed in @fig-tensor-fibres. Natively in Julia, the 1-, 2-, and 3-fibres of a third order array `A` would be `eachslice(A, dims=(2,3))`, `eachslice(A, dims=(1,3))`, and `eachslice(A, dims=(1,2))`. BlockTensorFactorization.jl defines the function `eachfibre(A; n)` to do exactly this. For example, the 1-fibres of an array `A` would be `eachfibre(A, n=1)`.
 
 For matrices, the 1-fibres are the same as the 2-slices (and vice versa), but for $N$th order tensors in general, fibres are always vectors, whereas $n$-slices are $(N - 1)$th order tensors.
 
 #figure([
 #box(image("figure/tensor_fibres.png"))
 ], caption: figure.caption(
-position: bottom, 
+position: bottom,
 [
 Fibres of an order $3$ tensor $A$.
-]), 
-kind: "quarto-float-fig", 
-supplement: "Figure", 
+]),
+kind: "quarto-float-fig",
+supplement: "Figure",
 )
 <fig-tensor-fibres>
 
 
 Since we commonly use $I$ as the size of a tensor’s dimension, we use $upright(i d)_I$ to denote the identity tensor of size $I$ (of the appropriate order). When the order is $2$, $upright(i d)_I$ is an $I times I$ matrix with ones along the main diagonal, and zeros elsewhere. For higher orders $N$, this is an $underbrace(I times dots.h.c times I, N upright("times"))$ tensor where $upright(i d)_I [i_1 , dots.h , i_N] = 1$ when $i_1 = dots.h = i_N in [I]$, and is zero otherwise.
 
-BlockTensorDecomposition.jl defines `identity_tensor(I, ndims)` to construct $upright(i d)_I$.
+BlockTensorFactorization.jl defines `identity_tensor(I, ndims)` to construct $upright(i d)_I$.
 
 For a vector, matrix, or tensor filled with ones, we use $bb(1) in bb(R)^(I_1 times dots.h.c times I_N)$. This can be constructed in Julia with `ones(I₁, ..., Iₙ)`.
 
@@ -430,7 +430,7 @@ The outer product $times.circle$ between two tensors $A in bb(R)^(I_1 times dots
 $ (A times.circle B) [i_1 , dots.h , i_M , j_1 , dots.h , j_N] = A [i_1 , dots.h , i_M] B [j_1 , dots.h , j_N] . $
 
 ] <def-outer-product>
-TODO Define in BlockTensorDecomposition.jl
+TODO Define in BlockTensorFactorization.jl
 
 The Frobenius inner product between two tensors $A , B in bb(R)^(I_1 times dots.h.c times I_N)$ yields a real number $A dot.op B in bb(R)$ and is defined as
 
@@ -442,7 +442,7 @@ The $n$-slice dot product $dot.op_n$ between two tensors $A in bb(R)^(K_1 , dots
 
 $ (A dot.op_n B) [i , j] = sum_(k_1 dots.h k_(n - 1) k_(n + 1) dots.h k_N) A [k_1 , dots.h , k_(n - 1) , i , k_(n + 1) , dots.h , k_N] B [k_1 , dots.h , k_(n - 1) , j , k_(n + 1) , dots.h , k_N] . $
 
-This product can also be thought of as taking the dot product $(A dot.op_n B) [i , j] = A_i dot.op B_j$ between all pairs of $n$th order slices of $A$ and $B$, which exactly how BlockTensorDecomposition.jl defines the operation.
+This product can also be thought of as taking the dot product $(A dot.op_n B) [i , j] = A_i dot.op B_j$ between all pairs of $n$th order slices of $A$ and $B$, which exactly how BlockTensorFactorization.jl defines the operation.
 
 ```julia
 function slicewise_dot(A::AbstractArray, B::AbstractArray; dims=1)
@@ -474,7 +474,7 @@ function _slicewise_self_dot!(C, A; dims=1)
 end
 ```
 
-BlockTensorDecomposition.jl defines this operation with `slicewise_dot(A, B, n)`. In the special case where $A = B$, a more efficient method that only computes entries where $i lt.eq j$ is defined since $A dot.op_n A$ is a symmetric matrix.
+BlockTensorFactorization.jl defines this operation with `slicewise_dot(A, B, n)`. In the special case where $A = B$, a more efficient method that only computes entries where $i lt.eq j$ is defined since $A dot.op_n A$ is a symmetric matrix.
 
 The $n$-slice product of a tensor with itself $X dot.op_n X$ should be thought of as a generalization of the Gram matrix $X^tack.b X$ since it considers the matrix generated by taking the dot product between every $n$th mode slice, just like how the Gram matrix considers the dot product between every pair of columns.
 
@@ -482,7 +482,7 @@ The $n$-mode product $times_n$ between a tensor $A in bb(R)^(I_1 times dots.h.c 
 
 $ (A times_n B) [i_1 , dots.h , i_(n - 1) , j , i_(n + 1) , dots.h , i_N] = sum_(i_n = 1)^(I_n) A [i_1 , dots.h , i_(n - 1) , i_n , i_(n + 1) , dots.h , i_N] B [i_n , j] . $
 
-BlockTensorDecomposition.jl defines this operation with `nmode_product(A, B, n)`.
+BlockTensorFactorization.jl defines this operation with `nmode_product(A, B, n)`.
 
 ```julia
 function nmode_product(A::AbstractArray, B::AbstractMatrix, n::Integer)
@@ -518,7 +518,7 @@ end
 
 #block[
 #callout(
-body: 
+body:
 [
 If we were only working with a fixed order of tensors, we could have defined `×₁` entry-wise with `Tullio.jl`. The function definition `tullio×₁` below gives an example for order three tensors.
 
@@ -532,19 +532,19 @@ end
 But we would need a new definition for each ordered tensor, or use Julia’s meta programming to write a method for each order at runtime.
 
 ]
-, 
-title: 
+,
+title:
 [
 Note
 ]
-, 
-background_color: 
+,
+background_color:
 rgb("#dae6fb")
-, 
-icon_color: 
+,
+icon_color:
 rgb("#0758E5")
-, 
-icon: 
+,
+icon:
 "❕"
 )
 ]
@@ -630,7 +630,7 @@ $ norm(T)_(upright("op")) = product_(n = 1)^N norm(A_n)_(upright("op")) . $
 ] <thm-operator-norm-outer-product>
 #block[
 #callout(
-body: 
+body:
 [
 According to how the outer product $times.circle$ is defined in @def-outer-product, the product $A_1 times.circle dots.h.c times.circle A_N$ shown in @thm-operator-norm-outer-product is really an element of $bb(R)^(I_1 times I_1 times dots.h.c times I_N times I_N)$. Note how the indexes are ordered differently than an element of $bb(R)^((I_1 times dots.h.c times I_N)^2) = bb(R)^(I_1 times dots.h.c times I_N times I_1 times dots.h.c times I_N)$. Correcting for this with explicit notation becomes cumbersome and would require tensor transposes, a new definition of an outer product, or reordering of indexes in the definition of a half-symmetric tensor. These can have knock-on effects to the definition of the Hessian, multi-mode product, and the operator norm.
 
@@ -645,19 +645,19 @@ in @thm-operator-norm-outer-product should be thought of as the following entry-
 With the outer product understood as @eq-corrected-outer-product, the results of @thm-operator-norm-outer-product that $T$ is half-symmetric and its operator norm is the product of the operator norms of the constituent matrices is true.
 
 ]
-, 
-title: 
+,
+title:
 [
 Warning
 ]
-, 
-background_color: 
+,
+background_color:
 rgb("#fcefdc")
-, 
-icon_color: 
+,
+icon_color:
 rgb("#EB9113")
-, 
-icon: 
+,
+icon:
 "⚠"
 )
 ]
@@ -703,7 +703,7 @@ A tensor decomposition is a factorization of a tensor into multiple (usually sma
 abstract type AbstractDecomposition{T, N} <: AbstractArray{T, N} end
 ```
 
-Computationally, we can think of a generic decomposition as storing factors $(A , B , C , . . .)$ and operations $(times_a , times_b , . . .)$ for combining them. This is what we do in BlockTensorDecomposition.jl.
+Computationally, we can think of a generic decomposition as storing factors $(A , B , C , . . .)$ and operations $(times_a , times_b , . . .)$ for combining them. This is what we do in BlockTensorFactorization.jl.
 
 ```julia
 struct GenericDecomposition{T, N} <: AbstractDecomposition{T, N}
@@ -741,7 +741,7 @@ entry-wise. More compactly, this decomposition can be written using the $n$-mode
 #math.equation(block: true, numbering: "(1)", [ $ Y = B times_1 A_1 times_2 dots.h times_N A_N = B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $ ])<eq-tucker-product>
 
 ] <def-tucker-decomposition>
-The #emph[Tucker Product] defined by @eq-tucker-product is implemented in BlockTensorDecomposition.jl with `tuckerproduct(B, (A1, ..., AN))` and computes $ B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $
+The #emph[Tucker Product] defined by @eq-tucker-product is implemented in BlockTensorFactorization.jl with `tuckerproduct(B, (A1, ..., AN))` and computes $ B times.big_n A_n = lr(bracket.l.double B \; A_1 , dots.h , A_N bracket.r.double) . $
 
 It can also optionally "exclude" one of the matrix factors with the call `tuckerproduct(B, (A1, ..., AN); exclude=n)` to compute
 
@@ -765,12 +765,12 @@ Sometimes we write $A_0 = B$ to ease notation, and suggest the "zeroth" factor o
 #figure([
 #box(image("figure/tucker_decomposition_order_3.png"))
 ], caption: figure.caption(
-position: bottom, 
+position: bottom,
 [
 Tucker factorization of a $3$rd order tensor $Y$.
-]), 
-kind: "quarto-float-fig", 
-supplement: "Figure", 
+]),
+kind: "quarto-float-fig",
+supplement: "Figure",
 )
 <fig-tucker>
 
@@ -833,12 +833,12 @@ Other factorization models are used that combine aspects of CP and Tucker decomp
   [CP], [$lr(bracket.l.double A_1 , dots.h , A_N bracket.r.double)$], [$upright(i d)_R times_1 A_1 times_2 dots.h times_N A_N$], [@eq-cp],
 )
 ], caption: figure.caption(
-position: top, 
+position: top,
 [
 Summary of common tensor factorizations. Here, $N$ is the order of the factorized tensor.
-]), 
-kind: "quarto-float-tbl", 
-supplement: "Table", 
+]),
+kind: "quarto-float-tbl",
+supplement: "Table",
 )
 <tbl-tensor-factorizations>
 
@@ -849,7 +849,7 @@ Tensor decompositions are not nessisarily unique. It should be clear that scalin
 
 === Representing Tucker Decompositions
 <representing-tucker-decompositions>
-There are implemented in BlockTensorDecomposition.jl and can be called, for a third order tensor, with `Tucker((B, A₁, A₂, A₃))`, `Tucker1((B, A₁))`, and `CPDecomposition((A₁, A₂, A₃))`. These Julia `structs` store the tensor in its factored form. We could define the contractions for these types and use the common interface provided by `array`, but it turns out we can reconstruct the whole tensor more efficiently. If the recombined tensor or particular entries are requested, Julia dispatches on the type of decomposition and calls a particular method of `array` or `getindex`. The implementations for efficient array construction and index access are provided below.
+There are implemented in BlockTensorFactorization.jl and can be called, for a third order tensor, with `Tucker((B, A₁, A₂, A₃))`, `Tucker1((B, A₁))`, and `CPDecomposition((A₁, A₂, A₃))`. These Julia `structs` store the tensor in its factored form. We could define the contractions for these types and use the common interface provided by `array`, but it turns out we can reconstruct the whole tensor more efficiently. If the recombined tensor or particular entries are requested, Julia dispatches on the type of decomposition and calls a particular method of `array` or `getindex`. The implementations for efficient array construction and index access are provided below.
 
 ```julia
 array(T::Tucker) = multifoldl(tucker_contractions(ndims(T)), factors(T))
@@ -969,7 +969,7 @@ We typically choose $L_n^t$ to be the Lipschitz constant of $nabla f_n^t$, since
 
 === High level code
 <high-level-code>
-To ensure the code stays flexible, the main algorithm of BlockTensorDecomposition.jl, `factorize`, is defined at a very high level.
+To ensure the code stays flexible, the main algorithm of BlockTensorFactorization.jl, `factorize`, is defined at a very high level.
 
 ```julia
 factorize(Y; kwargs...) =
@@ -1035,28 +1035,28 @@ $ nabla_A f (B , A) = A (B dot.op_1 B) - Y dot.op_1 B . $
 
 #block[
 #callout(
-body: 
+body:
 [
 For the family of Tucker decompositions, the objective function $f$ is "block-quadratic" with respect to the factors. This means the gradient with respect to a factor is an affine function of that factor. This is exactly what we see in @eq-tucker-1-gradient-2 where $B$ is multiplied by the "slope" $A^tack.b A$ plus a shift of $- Y times_1 A^tack.b$.
 
 ]
-, 
-title: 
+,
+title:
 [
 Note
 ]
-, 
-background_color: 
+,
+background_color:
 rgb("#dae6fb")
-, 
-icon_color: 
+,
+icon_color:
 rgb("#0758E5")
-, 
-icon: 
+,
+icon:
 "❕"
 )
 ]
-The associated implementation with BlockTensorDecomposition.jl is shown below. We define a `make_gradient` which takes the decomposition, factor index `n`, and data tensor `Y`, and creates a function that computes the gradient for the same type of decomposition. This lets us manipulate the function that computes the gradient, rather than just the computed gradient.
+The associated implementation with BlockTensorFactorization.jl is shown below. We define a `make_gradient` which takes the decomposition, factor index `n`, and data tensor `Y`, and creates a function that computes the gradient for the same type of decomposition. This lets us manipulate the function that computes the gradient, rather than just the computed gradient.
 
 ```julia
 function make_gradient(T::Tucker1, n::Integer, Y::AbstractArray; objective::L2, kwargs...)
@@ -1202,24 +1202,24 @@ This yields the following efficient implementations.
 
 #block[
 #callout(
-body: 
+body:
 [
 It is tempting to use the identity $norm(A^tack.b A)_(upright("op")) = norm(A)_(upright("op"))^2$ to calculate the Lipschitz constant without forming $A^tack.b A$. For tall dense matrices, using this identity is slower and more memory intensive as of Julia 1.11.2. See #link("https://github.com/JuliaLang/LinearAlgebra.jl/issues/1185")[LinearAlgebra.jl issue 1185] on Github.
 
 ]
-, 
-title: 
+,
+title:
 [
 Note
 ]
-, 
-background_color: 
+,
+background_color:
 rgb("#dae6fb")
-, 
-icon_color: 
+,
+icon_color:
 rgb("#0758E5")
-, 
-icon: 
+,
+icon:
 "❕"
 )
 ]
@@ -1492,7 +1492,7 @@ As stated, the algorithm described in @sec-base-algorithm works. It will converg
 <for-improving-convergence-speed>
 There are a few techniques used to assist convergence. Two ideas that are well studied are discussed in this section. They are 1) breaking up the updates into smaller blocks, and 2) using momentum or acceleration. What is perhaps novel is considering the synergy between these two ideas.
 
-Two more techniques are implemented in BlockTensorDecomposition.jl to improve convergence. To the authors knowledge, these are new to tensor factorization, but may or may not be applicable depending on the exact factorization problem or data being studied. For these reasons, these other techniques are discussed separately in @sec-ppr and @sec-multi-scale.
+Two more techniques are implemented in BlockTensorFactorization.jl to improve convergence. To the authors knowledge, these are new to tensor factorization, but may or may not be applicable depending on the exact factorization problem or data being studied. For these reasons, these other techniques are discussed separately in @sec-ppr and @sec-multi-scale.
 
 === Sub-block Descent
 <sec-sub-block-descent>
@@ -1694,9 +1694,9 @@ To showcase that the combination of these two tricks can speed up convergence, w
 
 ```julia
 using BenchmarkTools
-using BlockTensorDecomposition
+using BlockTensorFactorization
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 
 options = (
     :rank => 3,
@@ -1752,12 +1752,12 @@ The code `Tucker1((I, J), R)` produces a random $I times J$ rank-$R$ matrix by g
   [#strong[Yes Sub-Block];], [27.473 ms (77.785% faster)], [#strong[24.350 ms (100.59% faster)];],
 )
 ], caption: figure.caption(
-position: top, 
+position: top,
 [
 Summary of median times to factorize a random $10 times 10$ rank-3 matrix under different methods. The performance increase is given by the formula $(upright("old") - upright("new")) \/ upright("new")$.
-]), 
-kind: "quarto-float-tbl", 
-supplement: "Table", 
+]),
+kind: "quarto-float-tbl",
+supplement: "Table",
 )
 <tbl-subblock-momentum-results>
 
@@ -1776,7 +1776,7 @@ TODO Repeat this experiment on a less trivial factorization. What I’ve done ab
   - cyclically or partially randomly or fully randomly update factors
 - smart enough to apply these in a reasonable order
 
-There are a number of software engineering techniques used to ensure BlockTensorDecomposition.jl is flexible and applicable to a wide range of problems. These enable key algorithmic choices to be hot-swapped and easily compared with each other.
+There are a number of software engineering techniques used to ensure BlockTensorFactorization.jl is flexible and applicable to a wide range of problems. These enable key algorithmic choices to be hot-swapped and easily compared with each other.
 
 === Convergence Criteria and Stats
 <sec-convergence-criteria>
@@ -1785,7 +1785,7 @@ There are a number of software engineering techniques used to ensure BlockTensor
 
 Some iterative algorithms produce the exact solution of a problem after a finite number of iterations. Generalized minimal residual method (GMRES) is a good example of this \[TODO cite!\]. Our algorithm, like many others, only converges to the exact solution in the limit as the number of iterations grow. Since we would like a solution in finite time, we must halt the algorithm early.
 
-In finite precision, we can halt the algorithm if we can guarantee the solution is accurate to machine precision. This can often be too strict if convergence is not at a fast enough rate. Furthermore, depending on #emph[why] we are decomposing a tensor, we may want different stats to be within a given a tolerance. BlockTensorDecomposition.jl attempts to solve this issue by defining some standard criteria that can be used to halt the algorithm. These are subtypes of the abstract type `AbstractStat` and are listed below.
+In finite precision, we can halt the algorithm if we can guarantee the solution is accurate to machine precision. This can often be too strict if convergence is not at a fast enough rate. Furthermore, depending on #emph[why] we are decomposing a tensor, we may want different stats to be within a given a tolerance. BlockTensorFactorization.jl attempts to solve this issue by defining some standard criteria that can be used to halt the algorithm. These are subtypes of the abstract type `AbstractStat` and are listed below.
 
 ```julia
 # X is the decomposition model e.g. Tucker((B, A1, A2, A2)))
@@ -1827,7 +1827,7 @@ Finally, there are two auxiliary stats `PrintStats` and `DisplayDecomposition` w
 - Constraint updates combine the constraint with how they are enforced
   - need to go together since there are multiple ways to enforce them e.g.~simplex (see next section)
 
-One of the main motivations for developing BlockTensorDecomposition.jl is to solve constrained tensor problems. Other code did not have the expressivity to handle constraints beyond the most common constraints on the factors: nonnegativity and Euclidean normalized columns. To enable flexibility, BlockTensorDecomposition.jl defines
+One of the main motivations for developing BlockTensorFactorization.jl is to solve constrained tensor problems. Other code did not have the expressivity to handle constraints beyond the most common constraints on the factors: nonnegativity and Euclidean normalized columns. To enable flexibility, BlockTensorFactorization.jl defines
 
 ```julia
 abstract type AbstractConstraint <: Function end
@@ -1907,7 +1907,7 @@ or a scaling (assuming $v eq.not 0$)
 
 $ hat(v) arrow.l v / lr(bar.v.double v bar.v.double)_a . $
 
-These operations agree for the Frobenius norm (entry-wise $2$-norm), but are different operations in general. In BlockTensorDecomposition.jl, we define these classes as the following.
+These operations agree for the Frobenius norm (entry-wise $2$-norm), but are different operations in general. In BlockTensorFactorization.jl, we define these classes as the following.
 
 TODO simplify the following code?
 
@@ -2329,24 +2329,24 @@ end
 
 #block[
 #callout(
-body: 
+body:
 [
 We need the updates to be exactly something of the form `AbstractUpdate[]` since we want to push any type of `AbstractUpdate`s such as a `MomentumUpdate` or another `BlockedUpdate`, even if not already present. This means it cannot be `Vector{<:AbstractUpdate}` since a `BlockedUpdate` constructed with only `GradientDescent` would give a `GradientDescent[]` vector and we couldn’t push a `MomentumUpdate`. And it cannot be `AbstractVector{AbstractUpdate}` since we may not be able to `insert!` or `push!` into other `AbstractVectors` like `Views`.
 
 ]
-, 
-title: 
+,
+title:
 [
 Technical Julia Note
 ]
-, 
-background_color: 
+,
+background_color:
 rgb("#dae6fb")
-, 
-icon_color: 
+,
+icon_color:
 rgb("#0758E5")
-, 
-icon: 
+,
+icon:
 "❕"
 )
 ]
@@ -2629,7 +2629,7 @@ The Euclidean simplex projection can be done with the following implementation o
 
 #math.equation(block: true, numbering: "(1)", [ $ v arrow.l max (0 , v - t bb(1)) in Delta_J . $ ])<eq-simplex-projection>
 
-The $max (0 , x)$ function should be understood as operating entrywise on $x$. In BlockTensorDecomposition, we use the helper `ReLU(x) = max(0, x)` for this function to assist with broadcasting.
+The $max (0 , x)$ function should be understood as operating entrywise on $x$. In BlockTensorFactorization, we use the helper `ReLU(x) = max(0, x)` for this function to assist with broadcasting.
 
 ```julia
 function projsplx(v)
@@ -2688,7 +2688,7 @@ $ v arrow.l arg thin min_(u in bb(R)_(+)^J) lr(bar.v.double u - v bar.v.double)_
 
 and then apply the divergence projection.#footnote[In the unfortunate case where every entry of $v$ is nonpositive, we can fallback to the Euclidean simplex projection.] All together, this looks like #math.equation(block: true, numbering: "(1)", [ $ v arrow.l frac(max (0 , v), sum_j max (0 , v [j])) . $ ])<eq-nnpr>
 
-We will refer to @eq-nnpr as nonnegative projection and rescaling (NNPR). NNPR has the following implementation in BlockTensorDecomposition.jl.
+We will refer to @eq-nnpr as nonnegative projection and rescaling (NNPR). NNPR has the following implementation in BlockTensorFactorization.jl.
 
 ```julia
 l1scale! ∘ nonnegative!
@@ -2745,7 +2745,7 @@ c & arrow.l sum_(r , j) B [r , j]\
 A & arrow.l c A\
 B & arrow.l c^(- 1) B . $ ])<eq-nnpr-gd>
 
-This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+This algorithm can be called in BlockTensorFactorization.jl with the following code.
 
 ```julia
 options = (
@@ -2779,7 +2779,7 @@ It is clear that the objective value would be maintained for any invertible matr
 
 $ f (A C , C^(- 1) B) = 1 / 2 norm(A C C^(- 1) B - Y)_F^2 = 1 / 2 norm(A B - Y)_F^2 = f (A , B) . $
 
-This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+This algorithm can be called in BlockTensorFactorization.jl with the following code.
 
 ```julia
 options = (
@@ -2792,24 +2792,24 @@ decomposition, stats, kwargs = factorize(Y; options...);
 
 #block[
 #callout(
-body: 
+body:
 [
 This trick would also work if we wanted the columns of $A$ normalized to the simplex. But it does #emph[not] work when we would like each column of $B$ to be constrained to the simplex. The normalizing matrix $C$ would have to be multiplied to the right of $B$ rather than between $A$ amd $B$. A similar story can be said with the rows of $A$.
 
 ]
-, 
-title: 
+,
+title:
 [
 Warning
 ]
-, 
-background_color: 
+,
+background_color:
 rgb("#fcefdc")
-, 
-icon_color: 
+,
+icon_color:
 rgb("#EB9113")
-, 
-icon: 
+,
+icon:
 "⚠"
 )
 ]
@@ -2840,7 +2840,7 @@ C [r , r] & arrow.l max_(j in [J]) abs(B [r , j]) quad upright("(") C in bb(R)^(
 A & arrow.l A C\
 B & arrow.l C^(- 1) B . $ ])<eq-nnpr-gd-B-rows-infinity>
 
-This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+This algorithm can be called in BlockTensorFactorization.jl with the following code.
 
 ```julia
 options = (
@@ -2877,7 +2877,7 @@ C [r , r] & arrow.l sum_(j in [J] , k in [K]) B [r , j , k] quad upright("(") C 
 A & arrow.l A C\
 B & arrow.l B times_1 C^(- 1) . $ ])<eq-nnpr-gd-B-slices-simplex>
 
-This algorithm can be called in BlockTensorDecomposition.jl with the following code.
+This algorithm can be called in BlockTensorFactorization.jl with the following code.
 
 ```julia
 options = (
@@ -2908,7 +2908,7 @@ In either case, the recombined tensor remains unchanged
 
 $ lr(bracket.l.double c^(- 1) A , c B , C , D bracket.r.double) = lr(bracket.l.double c^(- 1) A , c^(1 \/ 3) B , c^(1 \/ 3) C , c^(1 \/ 3) D bracket.r.double) = lr(bracket.l.double A , B , C , D bracket.r.double) . $
 
-The two algorithms can be called in BlockTensorDecomposition.jl with the following code.
+The two algorithms can be called in BlockTensorFactorization.jl with the following code.
 
 ```julia
 options = (
@@ -2953,7 +2953,7 @@ C_B [r , r] & arrow.l sum_(j in [J]) B [r , j]\
 A & arrow.l A C_B\
 B & arrow.l C_B^(- 1) B $
 
-The relevant call in BlockTensorDecomposition would be the following.
+The relevant call in BlockTensorFactorization would be the following.
 
 ```julia
 options = (
@@ -3009,7 +3009,7 @@ C_B [r , r] & arrow.l sum_(j in [J]) B [r , j]\
 A & arrow.l A C_B\
 B & arrow.l C_B^(- 1) B $
 
-and is called in BlockTensorDecomposition.jl with the following code.
+and is called in BlockTensorFactorization.jl with the following code.
 
 ```julia
 options = (
@@ -3791,7 +3791,7 @@ By every metric, the multi-scale approach is faster and uses less memory than th
 
 = Conclusion
 <conclusion>
-The BlockTensorDecomposition.jl Julia provides a new all-in-one package for performing constrained tensor factorizations, and a playground for designing new decompositions and custom constraints. Careful design elements were engineered to balance flexibility and efficiency. By creating this package, new advancements like enforcing constraints through scaling rather than projection, and performing optimization over multiple scales were mathematically examined and numerically tested. These novel ideas are worth investigating further to see their applicability to continuous optimization beyond tensor factorization.
+The BlockTensorFactorization.jl Julia provides a new all-in-one package for performing constrained tensor factorizations, and a playground for designing new decompositions and custom constraints. Careful design elements were engineered to balance flexibility and efficiency. By creating this package, new advancements like enforcing constraints through scaling rather than projection, and performing optimization over multiple scales were mathematically examined and numerically tested. These novel ideas are worth investigating further to see their applicability to continuous optimization beyond tensor factorization.
 
 = Appendix
 <appendix>
@@ -3840,12 +3840,12 @@ $ frac(partial^2 f, partial A [j_1 , dots.h , j_N] partial A [i_1 , dots.h , i_N
   [`true`], [`true`], [`true`], [Almost fully random, but updates for each factor are done together],
 )
 ], caption: figure.caption(
-position: top, 
+position: top,
 [
 Full description of randomizing the order of updates within a `BlockUpdate`.
-]), 
-kind: "quarto-float-tbl", 
-supplement: "Table", 
+]),
+kind: "quarto-float-tbl",
+supplement: "Table",
 )
 <tbl-blockupdate-randomization>
 
@@ -4166,10 +4166,9 @@ TODO : Note I think the argument can be tightened to get something like $K' < fr
 
 The way the expected error upper bound works for the freezed multi-scale, the condition on the number of scales needed $S$ is enough to ensure that multi-scale gives a better error bound, assuming we take both methods to large enough iterations $K$.
 
- 
-  
-#set bibliography(style: "citationstyles/ieee-compressed-in-text-citations.csl") 
+
+
+#set bibliography(style: "citationstyles/ieee-compressed-in-text-citations.csl")
 
 
 #bibliography("references.bib")
-

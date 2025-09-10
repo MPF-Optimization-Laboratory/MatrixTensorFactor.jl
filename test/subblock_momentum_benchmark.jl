@@ -1,11 +1,11 @@
 using BenchmarkTools
 using Logging
-using BlockTensorDecomposition
+using BlockTensorFactorization
 
 
 global_logger(SimpleLogger(Warn))
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 
 function nnrankr_matrix((I, J), R)
     A = randn(I, R) .|> abs

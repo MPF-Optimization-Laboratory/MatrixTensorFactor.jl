@@ -2,21 +2,21 @@ using Documenter
 
 #push!(LOAD_PATH,"../src/")
 
-using BlockTensorDecomposition
+using BlockTensorFactorization
 
 DocMeta.setdocmeta!(
-    BlockTensorDecomposition,
+    BlockTensorFactorization,
     :DocTestSetup,
-    :(using BlockTensorDecomposition;);
+    :(using BlockTensorFactorization;);
     recursive=true
 )
 
 makedocs(
     sitename="Block Tensor Decomposition",
-    modules = [BlockTensorDecomposition,],
+    modules = [BlockTensorFactorization,],
     checkdocs=:exports,
 )
 
 deploydocs(
-    repo = "github.com/MPF-Optimization-Laboratory/BlockTensorDecomposition.jl.git",
+    repo = "github.com/MPF-Optimization-Laboratory/BlockTensorFactorization.jl.git",
 )

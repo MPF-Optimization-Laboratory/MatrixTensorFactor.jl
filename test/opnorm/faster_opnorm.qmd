@@ -38,13 +38,13 @@ Let's look at a few ways we can find the norm of a matrix in Julia. To ensure a 
 ```{julia}
 using Pkg; Pkg.activate(".")
 Pkg.add(["LinearAlgebra","Random","Arpack","BenchmarkTools"])
-#Pkg.add(path="C:\\Users\\Nicholas\\OneDrive - UBC\\Research\\general-block-decomposition\\BlockTensorDecomposition.jl")
+#Pkg.add(path="C:\\Users\\Nicholas\\OneDrive - UBC\\Research\\general-block-decomposition\\BlockTensorFactorization.jl")
 ```
 ```{julia}
 using Random: rand, randn
 using LinearAlgebra: svdvals, opnorm, Symmetric
 using Arpack: svds
-using BlockTensorDecomposition: slicewise_dot
+using BlockTensorFactorization: slicewise_dot
 using BenchmarkTools
 ```
 

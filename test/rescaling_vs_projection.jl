@@ -2,14 +2,14 @@
 # 1/2 ||AB-Y||_F^2
 # where the rows of A, B, & Y all sum to 1
 
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using Random
 using UnicodePlots
 using Plots
 
 Random.seed!(31415926535897)
 
-fact = BlockTensorDecomposition.factorize
+fact = BlockTensorFactorization.factorize
 
 I, J = 25, 50
 R = 5

@@ -5,7 +5,7 @@ Depth = 3
 ```
 
 ## About this package
-`BlockTensorDecomposition.jl` is a package to factorize tensors. The main feature is its flexibility at decomposing input tensors according to many common tensor models (ex. CP, Tucker) with a number of constraints (ex. nonnegative, simplex).
+`BlockTensorFactorization.jl` is a package to factorize tensors. The main feature is its flexibility at decomposing input tensors according to many common tensor models (ex. CP, Tucker) with a number of constraints (ex. nonnegative, simplex).
 
 (Coming Soon) The package also supports user defined models and constraints provided the operations for combining factor into a tensor, and projecting/applying the constraint are given. It is also a longer term goal to support other optimization objective beyond minimizing the least-squares (Frobenius norm) between the input tensor and model.
 

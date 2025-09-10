@@ -8,7 +8,7 @@ using KernelDensity
 #Pkg.add("PlotlyJS")
 
 using Distributions
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using Plots
 using PlotlyJS
 
@@ -179,27 +179,27 @@ options = (
 # @show length(rel_errors)
 # @show mean_rel_error(C*F, Y; dims=1)
 
-# # BlockTensorDecomposition.Core.expand_decomposition_constraints(Y, options)[2]
-# # BlockedUpdate([BlockTensorDecomposition.Core.scale_decomposition_constraint([2,3,4], constraint, 2, Tucker1(size(Y),3)) for constraint in BlockTensorDecomposition.Core.expand_decomposition_constraints(Y, options)[2]])
+# # BlockTensorFactorization.Core.expand_decomposition_constraints(Y, options)[2]
+# # BlockedUpdate([BlockTensorFactorization.Core.scale_decomposition_constraint([2,3,4], constraint, 2, Tucker1(size(Y),3)) for constraint in BlockTensorFactorization.Core.expand_decomposition_constraints(Y, options)[2]])
 # constraints = nothing
 # kwargs=options
 # kwargs_copy = nothing
 # expanded_constraints = nothing
 # begin
-#     continuous_dims, kwargs = BlockTensorDecomposition.Core.initialize_continuous_dims(Y; kwargs...)
-#     scales, kwargs = BlockTensorDecomposition.Core.initialize_scales(Y; kwargs...)
+#     continuous_dims, kwargs = BlockTensorFactorization.Core.initialize_continuous_dims(Y; kwargs...)
+#     scales, kwargs = BlockTensorFactorization.Core.initialize_scales(Y; kwargs...)
 #     coarsest_scale, finer_scales... = scales
 
 #     # Factorize Y at the coarsest scale
-#     Yₛ = BlockTensorDecomposition.Core.coarsen(Y, coarsest_scale; dims=continuous_dims, kwargs...)
+#     Yₛ = BlockTensorFactorization.Core.coarsen(Y, coarsest_scale; dims=continuous_dims, kwargs...)
 
-#     #constraints, kwargs = BlockTensorDecomposition.Core.scale_constraints(Yₛ, coarsest_scale; continuous_dims, kwargs...)
+#     #constraints, kwargs = BlockTensorFactorization.Core.scale_constraints(Yₛ, coarsest_scale; continuous_dims, kwargs...)
 
-#     decomposition, constraints = BlockTensorDecomposition.Core.expand_decomposition_constraints(Yₛ, kwargs)
+#     decomposition, constraints = BlockTensorFactorization.Core.expand_decomposition_constraints(Yₛ, kwargs)
 
-#     any(x-> typeof(decomposition) <: x,  BlockTensorDecomposition.Core.IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING)
+#     any(x-> typeof(decomposition) <: x,  BlockTensorFactorization.Core.IMPLEMENTED_DECOMPOSITION_CONSTRAINT_SCALING)
 
-#     constraints = BlockedUpdate([BlockTensorDecomposition.Core.scale_decomposition_constraint(continuous_dims, constraint, S, decomposition) for constraint in constraints])
+#     constraints = BlockedUpdate([BlockTensorFactorization.Core.scale_decomposition_constraint(continuous_dims, constraint, S, decomposition) for constraint in constraints])
 
 #     #  kwargs = Dict{Symbol,Any}(kwargs)
 
@@ -208,11 +208,11 @@ options = (
 
 
 #     #  kwargs_copy = deepcopy(kwargs) # Don't mess up anything since the following functions mutate kwargs
-#     #  kwargs_copy = BlockTensorDecomposition.Core.default_kwargs(Yₛ; kwargs_copy...) # TODO Is there some way to clean this up?
-#     #  decomposition, kwargs_copy = BlockTensorDecomposition.Core.initialize_decomposition(Yₛ; kwargs_copy...)
+#     #  kwargs_copy = BlockTensorFactorization.Core.default_kwargs(Yₛ; kwargs_copy...) # TODO Is there some way to clean this up?
+#     #  decomposition, kwargs_copy = BlockTensorFactorization.Core.initialize_decomposition(Yₛ; kwargs_copy...)
 
 
-#     #  expanded_constraints = BlockTensorDecomposition.Core.parse_constraints(kwargs_copy[:constraints], decomposition; kwargs_copy...)
+#     #  expanded_constraints = BlockTensorFactorization.Core.parse_constraints(kwargs_copy[:constraints], decomposition; kwargs_copy...)
 
 
 # end

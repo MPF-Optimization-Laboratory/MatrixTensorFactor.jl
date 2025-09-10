@@ -7,11 +7,11 @@ using Test
 using Random
 using LinearAlgebra
 
-using BlockTensorDecomposition
+using BlockTensorFactorization
 
 const VERBOSE = true
 
-@testset verbose=VERBOSE "BlockTensorDecomposition" begin
+@testset verbose=VERBOSE "BlockTensorFactorization" begin
 
     @testset "Utils" begin
 
@@ -446,7 +446,7 @@ end
     Y = Tucker1((10,11,12), 5);
     Y = array(Y);
 
-    fact = BlockTensorDecomposition.factorize
+    fact = BlockTensorFactorization.factorize
 
     # check hitting maximum number of iterations
     decomposition, stats_data = fact(Y; rank=5, momentum=false, maxiter=2);
@@ -535,7 +535,7 @@ end
 
     core_constraint_update! = ConstraintUpdate(0, l1scale_average12slices! ∘ nonnegative!; whats_rescaled=(x -> eachcol(matrix_factor(x, 1))))
 
-    X, stats, kwargs = BlockTensorDecomposition.factorize(Y2;
+    X, stats, kwargs = BlockTensorFactorization.factorize(Y2;
         model=Tucker1, rank=R, tolerance=0.001, converged=RelativeError,
         constraints=[core_constraint_update!, ConstraintUpdate(1, nonnegative!)],
         )

@@ -1,9 +1,9 @@
-using BlockTensorDecomposition
+using BlockTensorFactorization
 using Random
 using LinearAlgebra
 
 using Base: getindex, size
-using BlockTensorDecomposition: array
+using BlockTensorFactorization: array
 
 ######## SymPermTensor ###########
 
@@ -36,7 +36,7 @@ function Base.getindex(S::SymPermTensor{T, N}, I::Vararg{Int}) where {T, N}
     end
 end
 
-function BlockTensorDecomposition.array(S::SymPermTensor{T, N}) where {T, N}
+function BlockTensorFactorization.array(S::SymPermTensor{T, N}) where {T, N}
     nonzeroentry = S.nonzeroentry
     output = zeros(T, size(S))
     unique_indices = filter(I -> allunique(Tuple(I)),CartesianIndices(S))
@@ -77,7 +77,7 @@ W2 = randn(1,2)
 RD = RationalDecomp((W1, W2));
 
 # Example with a (2,2,1) network
-function BlockTensorDecomposition.array(RD::RationalDecomp)
+function BlockTensorFactorization.array(RD::RationalDecomp)
     coreRD = core(RD)
     top = tuckerproduct(coreRD, Tuple(fill(factor(RD, 1), ndims(RD))))
     bottom = tuckerproduct(coreRD, reverse(factors(RD)))
