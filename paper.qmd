@@ -1,5 +1,5 @@
 ---
-title: "BlockTensorFactorizations.jl: A Unified Constrained Tensor Decomposition Julia Package"
+title: "BlockTensorFactorization.jl: A Unified Constrained Tensor Decomposition Julia Package"
 subtitle: ""
 authors:
   - name: "Nicholas J. E. Richardson"
@@ -48,7 +48,7 @@ editor:
 - Tenors are useful in many applications
 - Need tools for fast and efficient decompositions
 
-For the scientific user, it would be most useful for there to be a single piece of software that can take as input 1) any reasonable type of factorization model and 2) constraints on the individual factors, and produce a factorization. Details like what rank to select, how the constraints should be enforced, and convergence criteria should be handled automatically, but customizable to the knowledgable user. These are the core specification for BlockTensorFactorizations.jl.
+For the scientific user, it would be most useful for there to be a single piece of software that can take as input 1) any reasonable type of factorization model and 2) constraints on the individual factors, and produce a factorization. Details like what rank to select, how the constraints should be enforced, and convergence criteria should be handled automatically, but customizable to the knowledgable user. These are the core specification for BlockTensorFactorization.jl.
 
 ## Related tools
 
@@ -73,7 +73,7 @@ Some progress towards building a unified framework has been made [@xu_BlockCoord
   - partial projection and rescaling to enforce linear constraints (rather than Euclidean projection)
 - ?? rank detection ??
 
-The main contribution is a description of a fast and flexible tensor decomposition package, along with a public implementation written in Julia: BlockTensorFactorizations.jl. This package provides a framework for creating and performing custom tensor decompositions. To the author's knowledge, it is the first package to provide automatic factorization to a large class of constrained tensor decompositions problems, as well as a framework for implementing new constraints and iterative algorithms. This paper also describes three new techniques not found in the literature that empirically convergence faster than traditional block-coordinate descent.
+The main contribution is a description of a fast and flexible tensor decomposition package, along with a public implementation written in Julia: BlockTensorFactorization.jl. This package provides a framework for creating and performing custom tensor decompositions. To the author's knowledge, it is the first package to provide automatic factorization to a large class of constrained tensor decompositions problems, as well as a framework for implementing new constraints and iterative algorithms. This paper also describes three new techniques not found in the literature that empirically convergence faster than traditional block-coordinate descent.
 
 # Tensor Decompositions
 - the math section of the paper
