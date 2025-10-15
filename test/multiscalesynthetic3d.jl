@@ -12,6 +12,8 @@ using BlockTensorFactorization
 using Plots
 using PlotlyJS
 
+show_plots = false
+
 J = 65 # Number of samples in the x dimension
 K = 65 # Number of samples in the y dimension
 L = 65 # Number of samples in the z dimension
@@ -80,9 +82,11 @@ function plot3d(pdf3d; isomin=1e-4)
         caps=attr(x_show=false, y_show=false),
     )) |> display
 end
-plot3d(source1_density)
-plot3d(source2_density)
-plot3d(source3_density)
+if show_plots
+    plot3d(source1_density)
+    plot3d(source2_density)
+    plot3d(source3_density)
+end
 
 #heatmap(x,y,pdf.((source1,), xyz)) |> display
 
@@ -163,17 +167,24 @@ options = (
 @time decomposition, stats_data, kwargs = factorize(Y; options...);
 
 # Second pass to time
-@time decomposition, stats_data, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
 
-@time decomposition, stats_data, kwargs = factorize(Y; options...);
+using BenchmarkTools
+using BenchmarkPlots
+BenchmarkTools.DEFAULT_PARAMETERS.seconds = 20 # default 5
+BenchmarkTools.DEFAULT_PARAMETERS.gcsample = false # default false
+# t_multi = @btime decomposition, stats_data, kwargs = multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...);
 
-#using BenchmarkTools
+# t_single = @btime decomposition, stats_data, kwargs = factorize(Y; options...);
+
 
 # bmk = @benchmark factorize(Y; options...)
 # display(bmk)
 
-# bmk = @benchmark multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...)
-# display(bmk)
+
+bmk = @benchmarkable multiscale_factorize(Y; continuous_dims=[2, 3, 4], options...) samples=5
+the_result = run(bmk)
+StatsPlots.plot(the_result)
+display(bmk)
 
 # @show (I, R, J, K, L)
 # @show length(rel_errors)
@@ -224,21 +235,22 @@ options = (
 # F ./= Δx * Δy * Δz # Rescale factors
 
 # Plot learned factors
-Plots.heatmap(C, yflip=true, title="Learned Coefficients", clims=(0,1)) |> display
-Plots.heatmap(C_true, yflip=true, title="True Coefficients", clims=(0,1)) |> display # possibly permuted order
 
-F = factor(decomposition, 0)
+# Plots.heatmap(C, yflip=true, title="Learned Coefficients", clims=(0,1)) |> display
+# Plots.heatmap(C_true, yflip=true, title="True Coefficients", clims=(0,1)) |> display # possibly permuted order
+
+# F = factor(decomposition, 0)
 
 
-for r in 1:R
-    if r != 3
-        continue
-    end
-    plot3d(F[r, :, :, :]) |> display
-    #heatmap(x, y, F[r,:,:], title="Learned Source $r") |> display
-end
+# for r in 1:R
+#     if r != 3
+#         continue
+#     end
+#     plot3d(F[r, :, :, :]) |> display
+#     #heatmap(x, y, F[r,:,:], title="Learned Source $r") |> display
+# end
 
-plot3d(F[2, :, :, :])
+# plot3d(F[2, :, :, :])
 
 # #plot3d(Y[3, :, :, :])
 
