@@ -10,46 +10,42 @@ using BlockTensorFactorization
 using Random
 using LinearAlgebra
 using Plots
+using Statistics
+using BenchmarkTools
 
-n_scales = 8
-n_measurements = 8
-fine_scale_size = 2^n_scales + 1
-scale_to_skip(s) = 2^(s-1)
-n_points_to_n_scales(n) = Int(log2(n-1))
-# t = range(0, 1, length=fine_scale_size)
+n_measurements = 5
+
 h(t) = -84t^4 + 146.4t^3 - 74.4t^2 + 12t
 f(t) = h((t+1)/2) / 2
-t = range(-1, 1, length=fine_scale_size+1)[begin:end-1]
-Δt = Float64(t.step)
-# f(t) = (1 - t^2)*(3/2 + sin(2pi*t))/2
+
+λ = 0.1 # Total variation regularization parameter
+σ = 0.01 # percent Gaussian noise in measurement y
+percent_loss_tol = 0.01 # iterate until the loss is within 1% of the optimal loss
+
+scale_to_skip(s) = 2^(s-1)
+n_points_to_n_scales(n) = Int(log2(n-1))
 
 """Measurement Basis Functions"""
 #g(t, n) = n % 2 == 1 ? cos(n/2*pi*t) : sin((n-1)/2*pi*t)
 #g(t, n) = t^n
 g(t, n) = sum(binomial(n, k)*binomial(n+k, k)*((t - 1)/2)^k for k in 0:n) * sqrt((2n+1)/2) # Legendre Polynomials
-g.(t, 0)
 
 """Graph Laplacian"""
 laplacian_matrix(n) = Tridiagonal(-ones(n-1), [1;2*ones(n-2);1],-ones(n-1))
-GL(x; Δt=Δt) =  x'*laplacian_matrix(length(x))*x/Δt^2
-∇GL(x; Δt=Δt) =  laplacian_matrix(length(x))*x/Δt^2
-
-λ = 0.1 # Total variation regularization parameter
-"""Loss Function"""
-L(x; Δt=Δt, λ=λ, A=A, y=y) = 0.5 * norm(A*x - y)^2 + λ*GL(x;Δt)
-∇L(x; Δt=Δt, λ=λ, A=A, y=y) = A'*(A*x - y) + λ*∇GL(x;Δt)
+GL(x; Δt) =  x'*laplacian_matrix(length(x))*x/Δt^2
+∇GL(x; Δt) =  laplacian_matrix(length(x))*x/Δt^2
 
 """step size"""
 make_step_size(; A, y, Δt, λ, n) = 1 / opnorm(Symmetric(A'*A)+(λ/Δt^2)*Symmetric(laplacian_matrix(n))) # Inverse of Smoothness of L(x)
 # 1 / sqrt(opnorm(Symmetric(A*A'))^2 + λ^2*norm(∇TV(x; Δt))^2)
 
-function is_valid_scale(scale; grid=t)
+function is_valid_scale(scale; grid)
     n_scale = log2(length(grid)-1)
     return scale ≤ n_scale || throw(ArgumentError("scale must be ≤ than the number of scales $n_scale"))
 end
 
-function make_measurement_matrix(scale; grid=t, n_measurements=n_measurements)
-    is_valid_scale(scale)
+function make_measurement_matrix(scale; grid, n_measurements=n_measurements)
+    is_valid_scale(scale; grid)
     skip = scale_to_skip(scale)
     t = coarsen(grid, skip)
     n = 0:n_measurements
@@ -57,16 +53,18 @@ function make_measurement_matrix(scale; grid=t, n_measurements=n_measurements)
     return A
 end
 
-function make_problem(; grid=t)
+function make_problem(; grid=t, σ=0)
     Δt = grid.step |> Float64
     x = f.(grid) * Δt
     A = make_measurement_matrix(1; grid)
-    y = A*x
+    ϵ = randn(size(A, 1))
+    y_clean = A*x
+    y = y_clean + norm(y_clean)*σ*ϵ
     return A, x, y
 end
 
-function scale_problem(A, y; scale=1)
-    is_valid_scale(scale)
+function scale_problem(A, y; grid, scale=1)
+    is_valid_scale(scale; grid)
     skip = scale_to_skip(scale)
     A = coarsen(A, skip; dims=2)
     y = y / scale_to_skip(scale)
@@ -77,15 +75,13 @@ function interpolate_solution(x)
     return interpolate(x, 2; degree=1) # twice as many points (minus 1)
 end
 
-proj(y; sum_constraint=1) = proj_scaled_simplex(y; S=sum_constraint)
-# proj(y; sum_constraint=1) = positive_normalize_sum(y; sum_constraint)
-ReLU(x) = max(0, x)
-
 function positive_normalize_sum(x; sum_constraint=1)
     x = abs.(x)
     x .*= sum_constraint/sum(x)
     return x
 end
+
+ReLU(x) = max(0, x)
 
 """
     proj_scaled_simplex(y; S=1)
@@ -124,6 +120,9 @@ function proj_scaled_simplex(y; S=1)
     return ReLU.(y .- t)
 end
 
+proj(y; sum_constraint=1) = proj_scaled_simplex(y; S=sum_constraint)
+# proj(y; sum_constraint=1) = positive_normalize_sum(y; sum_constraint)
+
 relative_error(a, b) = norm(a - b) / norm(b)
 
 function initialize_x(size)
@@ -133,9 +132,9 @@ function initialize_x(size)
     return x
 end
 
-function solve_problem(A, y; x_init=initialize_x(size(A, 2)), loss_tol=L(x), grad_tol=0.0001, rel_tol=0.002, max_itr=1500, Δt=Δt, λ=λ, ignore_warnings=false)
+function solve_problem(A, y; L, ∇L, Δt, t, x_init=initialize_x(size(A, 2)), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=1500,λ=λ, ignore_warnings=false)
     n = length(x_init)
-    sum_constraint = n / fine_scale_size
+    sum_constraint = n / length(t)
     sum(proj(x_init; sum_constraint)) ≈ sum_constraint || throw(ArgumentError("x_init does not sum to $sum_constraint"))
 
     x = x_init
@@ -157,66 +156,110 @@ function solve_problem(A, y; x_init=initialize_x(size(A, 2)), loss_tol=L(x), gra
     return x, i
 end
 
-function solve_problem_multiscale(A, y; x_init=initialize_x(3), loss_tol=L(x), grad_tol=0.0001, rel_tol=0.002, max_itr=1500, Δt=Δt, ignore_warnings=false, n_scales=n_points_to_n_scales(size(A, 2)))
+function solve_problem_multiscale(A, y; L, ∇L, Δt, t, x_init=initialize_x(3), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=1500, ignore_warnings=false, n_scales=n_points_to_n_scales(size(A, 2)))
 
     # Coarsest scale solve
-    A_S, y_S = scale_problem(A, y; scale=n_scales)
+    A_S, y_S = scale_problem(A, y; grid=t, scale=n_scales)
 
-    x_S, _ = solve_problem(A_S, y_S;
+    x_S, _ = solve_problem(A_S, y_S; L, ∇L, t,
         x_init, ignore_warnings=true, max_itr=1, grad_tol=0, Δt=Δt * scale_to_skip(n_scales)) # force one gradient step
     # p = plot(coarsen(t, scale_to_skip(n_scales)), x_S)
     x_s = interpolate_solution(x_S)
     # Middle scale solves
     for scale in (n_scales-1):-1:2 # Count down from larger to smaller scales
-        A_s, y_s = scale_problem(A, y; scale)
-        x_s, _ = solve_problem(A_s, y_s;
+        A_s, y_s = scale_problem(A, y; grid=t, scale)
+        x_s, _ = solve_problem(A_s, y_s; L, ∇L, t,
             x_init=x_s, ignore_warnings=true, max_itr=1, Δt=Δt * scale_to_skip(scale)) # force one gradient step
         # p = plot!(coarsen(t, scale_to_skip(scale)), x_s)
         x_s = interpolate_solution(x_s)
     end
 
     # Finest scale solve
-    x_1, n_iterations = solve_problem(A, y; x_init=x_s, max_itr, loss_tol)
+    x_1, n_iterations = solve_problem(A, y; L, ∇L, t, Δt, x_init=x_s, max_itr, loss_tol)
     # p = plot!(t, x_1)
     # display(p)
     return x_1, n_iterations
 end
 
-A, x, y = make_problem()
+#######################
+# Start of Benchmarks #
+#######################
 
-@time xhat, n_iterations = solve_problem(A, y)
+scales = 3:12 # 3:12
+regularization = []
 
-@time xhat_multi, n_iterations_multi = solve_problem_multiscale(A, y)
+suite = BenchmarkGroup()
 
-# p = plot()
-# for n in 1:n_measurements
-#     plot!(t, g.(t, n))
-# end
-# display(p)
+for n_scales in scales
 
-p = plot(t, x)
-plot!(t, xhat)
-plot!(t, xhat_multi)
-display(p)
-@show sum(x)
-@show sum(xhat)
-@show L(x)
-@show L(xhat)
-@show norm(∇L(xhat))
-println()
-@show sum(xhat_multi)
-@show L(xhat_multi)
-@show norm(∇L(xhat_multi))
+    fine_scale_size = 2^n_scales + 1
+    t = range(-1, 1, length=fine_scale_size+1)[begin:end-1]
+    Δt = Float64(t.step)
 
-benchmark = true
-using BenchmarkTools
-if benchmark
-bmk_single = @benchmark solve_problem(A, y)
-display(bmk_single)
+    A, x, y = make_problem(; grid=t, σ)
 
-bmk_multi = @benchmark solve_problem_multiscale(A, y)
-display(bmk_multi)
+    """Loss Function"""
+    L(x; Δt, λ=λ, A=A, y=y) = 0.5 * norm(A*x - y)^2 + λ*GL(x;Δt)
+    ∇L(x; Δt, λ=λ, A=A, y=y) = A'*(A*x - y) + λ*∇GL(x;Δt)
+
+    loss_tol = L(x; Δt) * (1 + percent_loss_tol)
+
+    # Compile
+    xhat, _ = solve_problem(A, y; L, ∇L, loss_tol, Δt, t, λ)
+    xhat_multi, _ = solve_problem_multiscale(A, y; L, ∇L, loss_tol, Δt, t, λ)
+
+    # Plot a typical solution
+    p = plot(; xlabel="t at scale $n_scales", ylabel="density")
+    plot!(t, x; label="true distribution")
+    plot!(t, xhat;label="single scale")
+    plot!(t, xhat_multi; label="multi-scale")
+    display(p)
+
+    # Prep the benchmarks
+    suite["single"][n_scales] = @benchmarkable solve_problem($A, $y; L=$L, ∇L=$∇L, loss_tol=$loss_tol, Δt=$Δt, t=$t, λ=$λ)
+    suite["multi"][n_scales] = @benchmarkable solve_problem_multiscale($A, $y; L=$L, ∇L=$∇L, loss_tol=$loss_tol, Δt=$Δt, t=$t, λ=$λ)
+
 end
 
-scale = n_scales - 3
-y_s = coarsen(A, scale_to_skip(scale);dims=2) * coarsen(x, scale_to_skip(scale))
+run_benchmarks = false
+
+if run_benchmarks
+
+# how to extract
+# median(bmk_single).time # in ns
+# median(bmk_single).memory # in bytes (divide by 2^20 for MiB or 10^6 for MB)
+# bmk_single.params.samples # number of times the benchmark was run
+
+tune!(suite) # tunes the parameters of all the benchmarks
+
+results = run(suite, verbose=true)
+
+################
+# Plot Results #
+################
+
+single_median_times = [(x[2]).time for x in median(results["single"])] # in ns
+multi_median_times = [(x[2]).time for x in median(results["multi"])] # in ns
+
+single_mean_times = [(x[2]).time for x in mean(results["single"])] # in ns
+multi_mean_times = [(x[2]).time for x in mean(results["multi"])] # in ns
+
+single_median_times .*= 1e-6 # in ms
+multi_median_times .*= 1e-6 # in ms
+
+problem_sizes = @. 2^scales + 1
+
+p = plot(;
+    xlabel="problem size (number of points)",
+    ylabel="median time (ms)",
+    xticks=(problem_sizes .- 1),
+    xaxis=:log2,
+    marker=:circle,
+    markersize=5,
+    yaxis=:log10,
+    )
+scatter!(problem_sizes, single_median_times; label="single scale")
+scatter!(problem_sizes, multi_median_times; label="multi-scale")
+display(p)
+
+end
