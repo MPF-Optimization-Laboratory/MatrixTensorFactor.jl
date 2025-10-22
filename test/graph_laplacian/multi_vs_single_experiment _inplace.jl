@@ -32,11 +32,37 @@ g(t, n) = sum(binomial(n, k)*binomial(n+k, k)*((t - 1)/2)^k for k in 0:n) * sqrt
 
 """Graph Laplacian"""
 laplacian_matrix(n) = Tridiagonal(-ones(n-1), [1;2*ones(n-2);1],-ones(n-1))
-GL(x; Δt) =  x'*laplacian_matrix(length(x))*x/Δt^2
-∇GL(x; Δt) =  laplacian_matrix(length(x))*x/Δt^2
+
+# Although the following implementations are clean, they are slow because of generating the laplacian matrix
+# GL_old(x; Δt) =  x'*laplacian_matrix(length(x))*x/Δt^2
+# ∇GL_old(x; Δt) =  laplacian_matrix(length(x))*x/Δt^2
+
+GL(x; Δt) =  norm2(diff(x))/Δt^2
+function ∇GL(x; Δt)
+    dt2 = Δt^2
+    out = zero(x)
+    n = length(x)
+    for i in eachindex(x)
+        if i == 1
+            out[i] = (x[i] - x[i+1]) / dt2
+        elseif i == n
+            out[i] = (x[i] - x[i-1]) / dt2
+        else
+            out[i] = (-x[i-1] + 2x[i] - x[i+1]) / dt2
+        end
+    end
+    return out
+end
 
 """step size"""
-make_step_size(; A, y, Δt, λ, n) = 1 / opnorm(Symmetric(A'*A)+(λ/Δt^2)*Symmetric(laplacian_matrix(n))) # Inverse of Smoothness of L(x)
+# Inverse of Smoothness of L(x)
+make_step_size(; A, y, Δt, λ, n) = 1 / (opnorm(Symmetric(A*A'))+4λ/Δt^2)
+# Using the fact that the opnorm satisfied triangle inequality,
+# We get an upper bound by splitting up the opnorm for the two matrices
+# The bound is fairly tight since both matrices are close to a constant times the identity
+# The laplacian matrix's opnorm is upper bounded by 4 so we cna skip that computation
+# And since A*A' and A'*A have the same opnorm, we use the former since its smaller
+# 1 / opnorm(Symmetric(A'*A+(λ/Δt^2)laplacian_matrix(n)))
 # 1 / sqrt(opnorm(Symmetric(A*A'))^2 + λ^2*norm(∇TV(x; Δt))^2)
 
 function is_valid_scale(scale; grid)
@@ -120,8 +146,8 @@ function proj_scaled_simplex(y; S=1)
     return ReLU.(y .- t)
 end
 
-proj(y; sum_constraint=1) = proj_scaled_simplex(y; S=sum_constraint)
-# proj(y; sum_constraint=1) = positive_normalize_sum(y; sum_constraint)
+#proj(y; sum_constraint=1) = proj_scaled_simplex(y; S=sum_constraint)
+proj(y; sum_constraint=1) = positive_normalize_sum(y; sum_constraint)
 
 relative_error(a, b) = norm(a - b) / norm(b)
 
@@ -132,7 +158,7 @@ function initialize_x(size)
     return x
 end
 
-function solve_problem(A, y; L, ∇L, Δt, t, x_init=initialize_x(size(A, 2)), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=1500,λ=λ, ignore_warnings=false)
+function solve_problem(A, y; L, ∇L, Δt, t, x_init=initialize_x(size(A, 2)), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=4e3,λ=λ, ignore_warnings=false)
     n = length(x_init)
     sum_constraint = n / length(t)
     sum(proj(x_init; sum_constraint)) ≈ sum_constraint || throw(ArgumentError("x_init does not sum to $sum_constraint"))
@@ -143,8 +169,10 @@ function solve_problem(A, y; L, ∇L, Δt, t, x_init=initialize_x(size(A, 2)), l
     norm_grad_init = norm(∇L(x; Δt, A, y, λ))
     grad = ∇L(x; Δt, A, y)
 
-    while L(x; Δt, A, y, λ) > loss_tol #norm(grad)/norm_grad_init > grad_tol #relative_error(A*x, y) > rel_tol
-        x = proj(x - α*grad; sum_constraint)
+    loss_tol *= sqrt(n) # scale by problem size
+
+    while norm(grad) > loss_tol #L(x; Δt, A, y, λ) > loss_tol #norm(grad)/norm_grad_init > grad_tol #relative_error(A*x, y) > rel_tol
+        x = proj(x .- α .* grad; sum_constraint)
         grad = ∇L(x; Δt, A, y, λ)
 
         i += 1
@@ -156,30 +184,78 @@ function solve_problem(A, y; L, ∇L, Δt, t, x_init=initialize_x(size(A, 2)), l
     return x, i
 end
 
-function solve_problem_multiscale(A, y; L, ∇L, Δt, t, x_init=initialize_x(3), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=1500, ignore_warnings=false, n_scales=n_points_to_n_scales(size(A, 2)))
+function solve_problem_multiscale(A, y; L, ∇L, Δt, t, λ, x_init=initialize_x(3), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=4e3, ignore_warnings=false, n_scales=n_points_to_n_scales(size(A, 2)))
 
     # Coarsest scale solve
     A_S, y_S = scale_problem(A, y; grid=t, scale=n_scales)
 
-    x_S, _ = solve_problem(A_S, y_S; L, ∇L, t,
+    x_S, _ = solve_problem(A_S, y_S; L, ∇L, t, λ,
         x_init, ignore_warnings=true, max_itr=1, grad_tol=0, Δt=Δt * scale_to_skip(n_scales)) # force one gradient step
     # p = plot(coarsen(t, scale_to_skip(n_scales)), x_S)
     x_s = interpolate_solution(x_S)
     # Middle scale solves
     for scale in (n_scales-1):-1:2 # Count down from larger to smaller scales
         A_s, y_s = scale_problem(A, y; grid=t, scale)
-        x_s, _ = solve_problem(A_s, y_s; L, ∇L, t,
+        x_s, _ = solve_problem(A_s, y_s; L, ∇L, t, λ,
             x_init=x_s, ignore_warnings=true, max_itr=1, Δt=Δt * scale_to_skip(scale)) # force one gradient step
         # p = plot!(coarsen(t, scale_to_skip(scale)), x_s)
         x_s = interpolate_solution(x_s)
     end
 
     # Finest scale solve
-    x_1, n_iterations = solve_problem(A, y; L, ∇L, t, Δt, x_init=x_s, max_itr, loss_tol)
+    x_1, n_iterations = solve_problem(A, y; L, ∇L, t, Δt, λ, x_init=x_s, max_itr, loss_tol)
     # p = plot!(t, x_1)
     # display(p)
     return x_1, n_iterations
 end
+
+using Profile
+
+profile = true
+if profile
+    n_scales = 11
+
+    fine_scale_size = 2^n_scales + 1
+    t = range(-1, 1, length=fine_scale_size+1)[begin:end-1]
+    Δt = Float64(t.step)
+
+    A, x, y = make_problem(; grid=t, σ)
+
+    """Loss Function"""
+    L(x; Δt, λ=λ, A=A, y=y) = 0.5 * norm(A*x .- y)^2 .+ λ .* GL(x;Δt)
+    ∇L(x; Δt, λ=λ, A=A, y=y) = A'*(A*x .- y) .+ λ .* ∇GL(x;Δt)
+
+    loss_tol = 0.015 # L(x; Δt) * (1 + percent_loss_tol)
+
+    # Compile
+    xhat, _ = solve_problem(A, y; L, ∇L, loss_tol, Δt, t, λ)
+    xhat_multi, _ = solve_problem_multiscale(A, y; L, ∇L, loss_tol, Δt, t, λ)
+
+    # Plot a typical solution
+    p = plot(; xlabel="t at scale $n_scales", ylabel="density")
+    plot!(t, x; label="true distribution")
+    plot!(t, xhat;label="single scale")
+    plot!(t, xhat_multi; label="multi-scale")
+    display(p)
+
+    # profile
+
+    #@profview solve_problem(A, y; L, ∇L, loss_tol, Δt, t, λ)
+    #@profview solve_problem_multiscale(A, y; L, ∇L, loss_tol, Δt, t, λ)
+end
+
+norm(∇L(xhat; Δt))
+
+norm(∇L(xhat_multi; Δt))
+L(xhat; Δt)
+L(xhat_multi; Δt)
+L(x; Δt)
+@profview solve_problem(A, y; L, ∇L, loss_tol, Δt, t, λ)
+# @profview solve_problem_multiscale(A, y; L, ∇L, loss_tol, Δt, t, λ)
+
+@benchmark solve_problem(A, y; L, ∇L, loss_tol, Δt, t, λ)
+
+@benchmark solve_problem_multiscale(A, y; L, ∇L, loss_tol, Δt, t, λ)
 
 #######################
 # Start of Benchmarks #
@@ -199,8 +275,8 @@ for n_scales in scales
     A, x, y = make_problem(; grid=t, σ)
 
     """Loss Function"""
-    L(x; Δt, λ=λ, A=A, y=y) = 0.5 * norm(A*x - y)^2 + λ*GL(x;Δt)
-    ∇L(x; Δt, λ=λ, A=A, y=y) = A'*(A*x - y) + λ*∇GL(x;Δt)
+    L(x; Δt, λ=λ, A=A, y=y) = 0.5 * norm(A*x .- y)^2 .+ λ .* GL(x;Δt)
+    ∇L(x; Δt, λ=λ, A=A, y=y) = A'*(A*x .- y) .+ λ .* ∇GL(x;Δt)
 
     loss_tol = L(x; Δt) * (1 + percent_loss_tol)
 
@@ -221,7 +297,7 @@ for n_scales in scales
 
 end
 
-run_benchmarks = false
+run_benchmarks = true
 
 if run_benchmarks
 
@@ -233,19 +309,21 @@ if run_benchmarks
 tune!(suite) # tunes the parameters of all the benchmarks
 
 results = run(suite, verbose=true)
-
+end
 ################
 # Plot Results #
 ################
 
-single_median_times = [(x[2]).time for x in median(results["single"])] # in ns
-multi_median_times = [(x[2]).time for x in median(results["multi"])] # in ns
+plot_results = true
+if run_benchmarks && plot_results
+single_median_times = [median(results["single"][S]).time * 1e-6 for S in scales] # in ns
+multi_median_times = [median(results["multi"][S]).time * 1e-6 for S in scales] # in ms
 
-single_mean_times = [(x[2]).time for x in mean(results["single"])] # in ns
-multi_mean_times = [(x[2]).time for x in mean(results["multi"])] # in ns
+single_mean_times = [mean(results["single"][S]).time * 1e-6 for S in scales] # in ms
+multi_mean_times = [mean(results["multi"][S]).time * 1e-6 for S in scales] # in ms
 
-single_median_times .*= 1e-6 # in ms
-multi_median_times .*= 1e-6 # in ms
+#single_median_times .*= 1e-6 # in ms
+#multi_median_times .*= 1e-6 # in ms
 
 problem_sizes = @. 2^scales + 1
 
@@ -260,6 +338,7 @@ p = plot(;
     )
 scatter!(problem_sizes, single_median_times; label="single scale")
 scatter!(problem_sizes, multi_median_times; label="multi-scale")
+plot!(;legend=:topleft)
 display(p)
 
 end
