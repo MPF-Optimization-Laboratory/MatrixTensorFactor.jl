@@ -158,20 +158,23 @@ function projsplx(y)
     end
 
     y_sorted = sort(y[:]) # Vectorize/extract input and sort all entries
+    total = y_sorted[n]
     i = n - 1
     t = 0 # need to ensure t has scope outside the while loop
     while true
-        t = (sum(@view y_sorted[i+1:end]) - 1) / (n-i)
-        if t >= y_sorted[i]
+        t = (total - S) / (n-i)
+        y_i = y_sorted[i]
+        if t >= y_i
             break
         else
+            total += y_i
             i -= 1
         end
 
         if i >= 1
             continue
         else # i == 0
-            t = (sum(y_sorted) - 1) / n
+            t = (total - S) / n
             break
         end
     end
