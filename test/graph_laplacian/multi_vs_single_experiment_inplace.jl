@@ -63,7 +63,7 @@ end
 
 """step size"""
 # Inverse of Smoothness of L(x)
-make_step_size(; A, y, Δt, λ, n) = 1 / opnorm(Symmetric(A'*A+(λ/Δt^2)laplacian_matrix(n)))#1 / (opnorm(Symmetric(A*A'))+4λ*Δt^(-2)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1.45e-6 at scale 12
+make_step_size(; A, y, Δt, λ, n) = 1 / opnorm(Symmetric(A'*A+(λ/Δt^(3))*laplacian_matrix(n)))#1 / (opnorm(Symmetric(A*A'))+4λ*Δt^(-2)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1.45e-6 at scale 12
 # make_step_size(; A, y, Δt, λ, n) = 1 / (opnorm(Symmetric(A*A'))+4λ*Δt^(-3))
 # Using the fact that the opnorm satisfied triangle inequality,
 # We get an upper bound by splitting up the opnorm for the two matrices
@@ -274,7 +274,7 @@ function initialize_x(size; sum_constraint=1)
     return x
 end
 
-function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_x(size(A, 2); sum_constraint), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=7000,λ=λ, ignore_warnings=false)
+function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_x(size(A, 2); sum_constraint), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=7000,λ=λ, ignore_warnings=false, α=make_step_size(; A, y, Δt, λ, n=length(x_init)))
     n = length(x_init)
     g = zeros(n)
     @show sum_constraint
@@ -285,7 +285,6 @@ function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_
     end
 
     x = x_init
-    α = make_step_size(; A, y, Δt, λ, n)
     i = 1
     #norm_grad_init = norm(∇L(x; Δt, A, y, λ))
     ∇L!(g, x; Δt, A, y)
@@ -318,13 +317,15 @@ function solve_problem_multiscale(A, y; L, ∇L!, Δt, λ, sum_constraint=1,  n_
 
     all_iterations = zeros(Int, n_scales)
 
+    α = make_step_size(;A,y,λ,Δt,n=size(A,2)) # Finest scale stepsize, use at every scale
+
     y_copy = copy(y)
 
     # Coarsest scale solve
     A_S, y_copy = scale_problem!(y_copy, A, y; grid=t, scale=n_scales)
 
     x_S, i_S,_ = solve_problem(A_S, y; L, ∇L!, λ, sum_constraint = sum_constraint / scale_to_skip(n_scales),
-        x_init, ignore_warnings=true, max_itr=1, loss_tol=0, Δt=Δt * scale_to_skip(n_scales)) # force one gradient step
+        x_init, ignore_warnings=true, max_itr=1, loss_tol=0, Δt=Δt * scale_to_skip(n_scales), α) # force one gradient step
     # p = plot(coarsen(t, scale_to_skip(n_scales)), x_S)
 
     p = plot(range(-1,1,length=length(x_S))[begin:end], x_S)
@@ -338,7 +339,7 @@ function solve_problem_multiscale(A, y; L, ∇L!, Δt, λ, sum_constraint=1,  n_
     for scale in (n_scales-1):-1:2 # Count down from larger to smaller scales
         A_s, y_copy = scale_problem!(y_copy, A, y; grid=t, scale)
         x_s, i_s,_ = solve_problem(A_s, y; L, ∇L!, λ, sum_constraint = sum_constraint / scale_to_skip(scale),
-            x_init=x_s, ignore_warnings=true, max_itr=1, loss_tol=0, Δt=Δt * scale_to_skip(scale)) # force one gradient step
+            x_init=x_s, ignore_warnings=true, max_itr=1, loss_tol=0, Δt=Δt * scale_to_skip(scale), α) # force one gradient step
         # p = plot!(coarsen(t, scale_to_skip(scale)), x_s)
 
         plot!(range(-1,1,length=length(x_s))[begin:end], x_s)
@@ -350,7 +351,7 @@ function solve_problem_multiscale(A, y; L, ∇L!, Δt, λ, sum_constraint=1,  n_
     end
 
     # Finest scale solve
-    x_1, i_1, loss_per_itr = solve_problem(A, y; L, ∇L!, Δt, λ, sum_constraint, x_init=x_s, max_itr, loss_tol)
+    x_1, i_1, loss_per_itr = solve_problem(A, y; L, ∇L!, Δt, λ, sum_constraint, x_init=x_s, max_itr, loss_tol, α)
     # p = plot!(t, x_1)
     # display(p)
 
@@ -366,7 +367,7 @@ using Profile
 
 profile = true
 if profile
-    n_scales = 6
+    n_scales = 12
 
     fine_scale_size = 2^n_scales + 1
     t = range(-1, 1, length=fine_scale_size)#[begin:end-1]
