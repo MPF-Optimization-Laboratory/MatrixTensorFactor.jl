@@ -18,7 +18,7 @@ n_measurements = 5
 # h(t) = -84t^4 + 146.4t^3 - 74.4t^2 + 12t
 f(t) = -2.625t^4 - 1.35t^3 + 2.4t^2 + 1.35t + 0.225 #h((t+1)/2) / 2
 
-λ = 2e-5 #0.0001 # Total variation regularization parameter 0.1, 1e-4
+λ = 2e-5 #0.0001 # Total variation regularization parameter 0.1, 1e-4, 2e-5
 σ = 0.01 # percent Gaussian noise in measurement y
 percent_loss_tol = 0.0001 # iterate until the loss is within 0.01% of the optimal loss
 
@@ -47,11 +47,13 @@ laplacian_matrix(n) = Tridiagonal(-ones(n-1), [1;2*ones(n-2);1],-ones(n-1))
 
 # Although the following implementations are clean, they are slow because of generating the laplacian matrix
 # GL_old(x; Δt) =  0.5*x'*laplacian_matrix(length(x))*x/Δt^2
-∇GL(x; Δt) =  laplacian_matrix(length(x))*x/Δt^3
 
-GL(x; Δt) =  0.5*norm2(diff(x))/Δt^3
-function ∇GL!(z, x; Δt)
-    dt3 = Δt^(-3)
+t_power = 3
+∇GL(x; Δt, scale=1) =  laplacian_matrix(length(x))*x/Δt^t_power / scale
+
+GL(x; Δt, scale=1) =  0.5*norm2(diff(x))/Δt^t_power / scale
+function ∇GL!(z, x; Δt, scale=1)
+    dt3 = Δt^(-t_power) / scale
     n=length(x)
     z[1] = (x[1] - x[2]) * dt3
     for i in 2:(n-1)
@@ -63,7 +65,7 @@ end
 
 """step size"""
 # Inverse of Smoothness of L(x)
-make_step_size(; A, y, Δt, λ, n) = 1 / opnorm(Symmetric(A'*A+(λ/Δt^(3))*laplacian_matrix(n)))#1 / (opnorm(Symmetric(A*A'))+4λ*Δt^(-2)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1.45e-6 at scale 12
+make_step_size(; A, y, Δt, λ, n, scale=1) = 1 / opnorm(Symmetric(A'*A+(λ/Δt^(t_power)/scale)*laplacian_matrix(n)))#1 / (opnorm(Symmetric(A*A'))+4λ*Δt^(-2)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1 / (Δt^(-1) + 4λ*Δt^(-3)) #1.45e-6 at scale 12
 # make_step_size(; A, y, Δt, λ, n) = 1 / (opnorm(Symmetric(A*A'))+4λ*Δt^(-3))
 # Using the fact that the opnorm satisfied triangle inequality,
 # We get an upper bound by splitting up the opnorm for the two matrices
@@ -188,7 +190,7 @@ function scale_problem!(y_out, A, y; grid, scale=1)
     is_valid_scale(scale; grid)
     skip = scale_to_skip(scale)
     A = coarsen(A, skip; dims=2)
-    @. y_out .= y / skip
+    @. y_out = y / skip
     return A, y_out
 end
 
@@ -267,6 +269,7 @@ relative_error(a, b) = norm(a - b) / norm(b)
 
 function initialize_x(size; sum_constraint=1)
     x = ones(size)
+    #x = rand(size) .+ 1
     #x = abs.(randn(size))
     #x = randn(size)
     normalization = sum_constraint / sum(x)
@@ -274,7 +277,7 @@ function initialize_x(size; sum_constraint=1)
     return x
 end
 
-function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_x(size(A, 2); sum_constraint), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=7000,λ=λ, ignore_warnings=false, α=make_step_size(; A, y, Δt, λ, n=length(x_init)))
+function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_x(size(A, 2); sum_constraint), loss_tol=0.01, grad_tol=0.0001, rel_tol=0.002, max_itr=7000,λ=λ, ignore_warnings=false,scale=1, α=make_step_size(; A, y, Δt, λ, n=length(x_init),scale))
     n = length(x_init)
     g = zeros(n)
     @show sum_constraint
@@ -287,18 +290,18 @@ function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_
     x = x_init
     i = 1
     #norm_grad_init = norm(∇L(x; Δt, A, y, λ))
-    ∇L!(g, x; Δt, A, y)
+    ∇L!(g, x; Δt, A, y,scale)
 
     loss_per_itr = Float64[]
-    push!(loss_per_itr, L(x; Δt, A, y, λ))
+    push!(loss_per_itr, L(x; Δt, A, y, λ, scale))
 
     #loss_tol *= sqrt(n) # scale by problem size
 
-    while L(x; Δt, A, y, λ) > loss_tol #norm(grad)/norm_grad_init > grad_tol #relative_error(A*x, y) > rel_tol # norm(g) > loss_tol
+    while L(x; Δt, A, y, λ,scale) > loss_tol #norm(grad)/norm_grad_init > grad_tol #relative_error(A*x, y) > rel_tol # norm(g) > loss_tol
         @. x -= α * g
         proj!(x; sum_constraint)
         sum(x) ≈ sum_constraint || @error "Sum is not $sum_constraint, is $(sum(x))"
-        ∇L!(g, x; Δt, A, y, λ) # next iteration's gradient (so it can be used in while loop condition)
+        ∇L!(g, x; Δt, A, y, λ,scale) # next iteration's gradient (so it can be used in while loop condition)
         if i == max_itr
             ignore_warnings || @warn "Reached maximum number of iterations $max_itr"
             break
@@ -306,9 +309,7 @@ function solve_problem(A, y; L, ∇L!, Δt, sum_constraint=1, x_init=initialize_
 
         i += 1
 
-
-
-        push!(loss_per_itr, L(x; Δt, A, y, λ))
+        push!(loss_per_itr, L(x; Δt, A, y, λ,scale))
     end
     return x, i, loss_per_itr
 end
@@ -324,11 +325,12 @@ function solve_problem_multiscale(A, y; L, ∇L!, Δt, λ, sum_constraint=1,  n_
     # Coarsest scale solve
     A_S, y_copy = scale_problem!(y_copy, A, y; grid=t, scale=n_scales)
 
-    x_S, i_S,_ = solve_problem(A_S, y; L, ∇L!, λ, sum_constraint = sum_constraint / scale_to_skip(n_scales),
-        x_init, ignore_warnings=true, max_itr=1, loss_tol=0, Δt=Δt * scale_to_skip(n_scales), α) # force one gradient step
+    x_S, i_S,_ = solve_problem(A_S, y_copy; L, ∇L!, λ, sum_constraint = sum_constraint / scale_to_skip(n_scales),
+        x_init, ignore_warnings=true, max_itr=1, loss_tol=0, Δt, scale=n_scales) # force one gradient step
     # p = plot(coarsen(t, scale_to_skip(n_scales)), x_S)
+    # Δt * scale_to_skip(n_scales)
 
-    p = plot(range(-1,1,length=length(x_S))[begin:end], x_S)
+    p = plot(range(-1,1,length=length(x_S)), x_S)
     @show sum(x_S)
     x_s = interpolate_solution(x_S)
     @show sum(x_s)
@@ -338,11 +340,12 @@ function solve_problem_multiscale(A, y; L, ∇L!, Δt, λ, sum_constraint=1,  n_
     # Middle scale solves
     for scale in (n_scales-1):-1:2 # Count down from larger to smaller scales
         A_s, y_copy = scale_problem!(y_copy, A, y; grid=t, scale)
-        x_s, i_s,_ = solve_problem(A_s, y; L, ∇L!, λ, sum_constraint = sum_constraint / scale_to_skip(scale),
-            x_init=x_s, ignore_warnings=true, max_itr=1, loss_tol=0, Δt=Δt * scale_to_skip(scale), α) # force one gradient step
+        x_s, i_s,_ = solve_problem(A_s, y_copy; L, ∇L!, λ, sum_constraint = sum_constraint / scale_to_skip(scale),
+            x_init=x_s, ignore_warnings=true, max_itr=1, loss_tol=0, Δt, scale) # force one gradient step
         # p = plot!(coarsen(t, scale_to_skip(scale)), x_s)
+        # Δt = Δt * scale_to_skip(scale) # don't need if we use `scale`
 
-        plot!(range(-1,1,length=length(x_s))[begin:end], x_s)
+        plot!(range(-1,1,length=length(x_s)), x_s)
         x_s = interpolate_solution(x_s)
 
         all_iterations[scale] = i_s
@@ -351,7 +354,7 @@ function solve_problem_multiscale(A, y; L, ∇L!, Δt, λ, sum_constraint=1,  n_
     end
 
     # Finest scale solve
-    x_1, i_1, loss_per_itr = solve_problem(A, y; L, ∇L!, Δt, λ, sum_constraint, x_init=x_s, max_itr, loss_tol, α)
+    x_1, i_1, loss_per_itr = solve_problem(A, y; L, ∇L!, Δt, λ, sum_constraint, x_init=x_s, max_itr, loss_tol)
     # p = plot!(t, x_1)
     # display(p)
 
@@ -367,7 +370,7 @@ using Profile
 
 profile = true
 if profile
-    n_scales = 12
+    n_scales = 10
 
     fine_scale_size = 2^n_scales + 1
     t = range(-1, 1, length=fine_scale_size)#[begin:end-1]
@@ -376,10 +379,10 @@ if profile
     A, x, y = make_problem(; grid=t, σ)
 
     """Loss Function"""
-    L(x; Δt, λ=λ, A=A, y=y) = 0.5 * norm(A*x .- y)^2 .+ λ .* GL(x;Δt)
-    ∇L(x; Δt, λ=λ, A=A, y=y) = A'*(A*x .- y) .+ λ .* ∇GL(x;Δt)
-    function ∇L!(z, x; Δt, λ=λ, A=A, y=y)
-        ∇GL!(z, x; Δt)
+    L(x; Δt, λ=λ, A=A, y=y,scale=1) = 0.5 * norm(A*x .- y)^2 .+ λ .* GL(x;Δt,scale)
+    ∇L(x; Δt, λ=λ, A=A, y=y,scale=1) = A'*(A*x .- y) .+ λ .* ∇GL(x;Δt,scale)
+    function ∇L!(z, x; Δt, λ=λ, A=A, y=y,scale=1)
+        ∇GL!(z, x; Δt,scale)
         #z .*= λ
         #z .+= A' * (A * x .- y)
         # mul!(C, A, B, α, β) == ABα+Cβ
@@ -425,7 +428,7 @@ xhat_multi, n_itr_multi = solve_problem_multiscale(A, y; L, ∇L!, loss_tol, Δt
 # @profview solve_problem(A, y; L, ∇L!, loss_tol, Δt, t, λ)
 # @profview solve_problem_multiscale(A, y; L, ∇L!, loss_tol, Δt, t, λ)
 
-#@benchmark solve_problem(A, y; L, ∇L!, loss_tol, Δt, t, λ)
+@benchmark solve_problem(A, y; L, ∇L!, loss_tol, Δt, λ)
 
 @benchmark solve_problem_multiscale(A, y; L, ∇L!, loss_tol, Δt, λ)
 
