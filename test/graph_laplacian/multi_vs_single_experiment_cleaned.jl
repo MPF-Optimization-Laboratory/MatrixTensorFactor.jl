@@ -18,6 +18,12 @@ using Plots
 using Statistics
 using BenchmarkTools
 
+########################
+# Function Definitions #
+########################
+
+### Helpers ###
+
 """Converts the scale number s to the number of points to skip over in a coarsening of the problem"""
 scale_to_skip(s) = 2^(s-1)
 
@@ -26,6 +32,26 @@ points_to_scale(n) = Int(log2(n-1))
 
 """Efficient calculation of ‖x‖₂²"""
 norm2(x) = sum(x -> x^2, x)
+
+"""Rectified Linear Unit"""
+ReLU(x) = max(0, x)
+
+"""Linearly interpolates a vector x.
+If J=length(x), interpolate(x) will have length 2J-1."""
+function interpolate(x)
+    I = 2length(x)-1
+    x̲ = zeros(I)
+    for i in 1:I
+        if iseven(i)
+            x̲[i] = 0.5*(x[i÷2] + x[i÷2 + 1])
+        else # i is odd
+            x̲[i] = x[(i+1) ÷ 2]
+        end
+    end
+    return x̲
+end
+
+### Regularizer ###
 
 """Graph Laplacian Matrix"""
 laplacian_matrix(n) = SymTridiagonal([1;2*ones(n-2);1],-ones(n-1))
@@ -64,18 +90,7 @@ function ∇GL!(z, x; Δt, scale=1)
     return z
 end
 
-"""
-    make_step_size(; A, Δt, λ, scale=1)
-
-Calculates the inverse approximate smoothness of the loss function to use as the step size.
-
-The exact smoothness is
-opnorm(A'*A + (λ/Δt^3/scale_to_skip(scale))*laplacian_matrix(size(A, 2)))
-which is upper bounded by
-opnorm(A'*A) + (λ/Δt^3/scale_to_skip(scale)) * opnorm(laplacian_matrix(size(A, 2)))
-with triangle inequality. We rewrite opnorm(A'*A) == opnorm(A*A'), because A*A' is a much smaller m×m matrix that is faster to compute and take its operator norm. And the Laplacian Matrix's opnorm is upper bounded by 4.
-"""
-make_step_size(; A, Δt, λ, scale=1) = 1 / (opnorm(Symmetric(A*A')) + 4λ/Δt^3/scale_to_skip(scale))
+### Problem Creation ###
 
 """Legendre Polynomial Measurement Basis Functions"""
 g(t, m) = sum(binomial(m, k)*binomial(m+k, k)*((t - 1)/2)^k for k in 0:m) * sqrt((2m+1)/2)
@@ -106,34 +121,18 @@ function make_problem(; t, f, σ=0, n_measurements)
     return A, x, y
 end
 
-"""Linearly interpolates a vector x.
-If J=length(x), interpolate(x) will have length 2J-1."""
-function interpolate(x)
-    I = 2length(x)-1
-    x̲ = zeros(I)
-    for i in 1:I
-        if iseven(i)
-            x̲[i] = 0.5*(x[i÷2] + x[i÷2 + 1])
-        else # i is odd
-            x̲[i] = x[(i+1) ÷ 2]
-        end
-    end
-    return x̲
-end
-
-"""Rectified Linear Unit"""
-ReLU(x) = max(0, x)
+### Problem Solving Functions ###
 
 """
     proj_scaled_simplex(y; S=1)
 
 Projects (in Euclidian distance) the vector y into the scaled simplex:
 
-    {y | y[i] ≥ 0 and sum(y) = S}
+    {y | y[i] ≥ 0 and sum(y) = sum_constraint}
 
 [1] Yunmei Chen and Xiaojing Ye, "Projection Onto A Simplex", 2011
 """
-function proj!(y; S=1)
+function proj!(y; sum_constraint=1)
     n = length(y)
 
     y_sorted = sort(y) # Vectorize/extract input and sort all entries, will make a copy
@@ -141,7 +140,7 @@ function proj!(y; S=1)
     i = n - 1
     t = 0 # need to ensure t has scope outside the while loop
     while true
-        t = (total - S) / (n-i)
+        t = (total - sum_constraint) / (n-i)
         y_i = y_sorted[i]
         if t >= y_i
             break
@@ -153,7 +152,7 @@ function proj!(y; S=1)
         if i >= 1
             continue
         else # i == 0
-            t = (total - S) / n
+            t = (total - sum_constraint) / n
             break
         end
     end
@@ -171,6 +170,19 @@ function initialize_x(size; sum_constraint=1)
     x .*= normalization
     return x
 end
+
+"""
+    make_step_size(; A, Δt, λ, scale=1)
+
+Calculates the inverse approximate smoothness of the loss function to use as the step size.
+
+The exact smoothness is
+opnorm(A'*A + (λ/Δt^3/scale_to_skip(scale))*laplacian_matrix(size(A, 2)))
+which is upper bounded by
+opnorm(A'*A) + (λ/Δt^3/scale_to_skip(scale)) * opnorm(laplacian_matrix(size(A, 2)))
+with triangle inequality. We rewrite opnorm(A'*A) == opnorm(A*A'), because A*A' is a much smaller m×m matrix that is faster to compute and take its operator norm. And the Laplacian Matrix's opnorm is upper bounded by 4.
+"""
+make_step_size(; A, Δt, λ, scale=1) = 1 / (opnorm(Symmetric(A*A')) + 4λ/Δt^3/scale_to_skip(scale))
 
 """
     solve_problem(A, y;
@@ -194,7 +206,7 @@ function solve_problem(A, y; L, ∇L!, Δt, λ, sum_constraint=1, scale=1, n=(si
     x = x_init # relabel
     i = 1 # iteration counter
 
-    ∇L!(g, x; Δt, A, y, scale) # obtain the first gradient, save it in g
+    ∇L!(g, x; Δt, A, y, λ, scale) # obtain the first gradient, save it in g
 
     loss_per_itr = Float64[] # record the loss at each iteration
     push!(loss_per_itr, L(x; Δt, A, y, λ, scale))
@@ -261,7 +273,10 @@ end
 # Start of Benchmarks #
 #######################
 
+Random.seed!(3141592653)
+
 n_measurements = 5 # Number of Legendre polynomial measurements
+scales = 3:12 # What maximum scales S to run the benchmark
 λ = 1e-4 # Graph Laplacian regularization parameter
 σ = 0.05 # Percent Gaussian noise in measurement y
 percent_loss_tol = 0.05 # Iterate until the loss is within 5% of the ground truth
@@ -269,14 +284,12 @@ percent_loss_tol = 0.05 # Iterate until the loss is within 5% of the ground trut
 # Ground truth function
 f(t) = -2.625t^4 - 1.35t^3 + 2.4t^2 + 1.35t + 0.225
 
-scales = 3:12 # What maximum scales S to run the benchmark
-
 loss_tol_per_scale = zeros(length(scales)) # record loss tolerance used at each scale
 # these value should stabilize as the number of points grow
 
 # need to extend the default amount of time to run single scale benchmarks
 seconds_single_benchmarks = [5.0 for _ in scales]
-seconds_single_benchmarks[scales .== 12] .= 80.0
+seconds_single_benchmarks[scales .== 12] .= 85.0
 seconds_single_benchmarks[scales .== 11] .= 25.0
 seconds_single_benchmarks[scales .== 10] .= 10.0
 
@@ -378,6 +391,7 @@ p = plot(;
     yticks=[10. ^n for n in -2:3],
     xaxis=:log2,
     yaxis=:log10,
+    size=(450,250),
     )
 plot!(problem_sizes, single_median_times;
     ribbon=(single_median_times - single_bot_times, single_top_times - single_median_times),
