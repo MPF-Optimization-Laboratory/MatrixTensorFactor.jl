@@ -64,6 +64,7 @@ export l1scale_average12slices!, l2scale_average12slices!, linftyscale_average12
 export Entrywise, IntervalConstraint
 export nonnegative!, binary!, binaryproject
 export l1norm, l2norm, linftynorm
+export isnonnegative_sumtoone
 
 export LinearConstraint
 

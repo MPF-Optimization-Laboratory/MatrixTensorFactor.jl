@@ -213,7 +213,7 @@ end
 
 abstract type AbstractUpdate <: Function end
 
-function Base.show(io::IO, x::AbstractUpdate)
+function Base.show(io::IO, ::MIME"text/plain", x::AbstractUpdate)
     print(io, typeof(x))
     print(io, "(")
     data = Any[]
@@ -228,6 +228,17 @@ function Base.show(io::IO, x::AbstractUpdate)
     end
     join(io, data, ", ")
     print(io, ")")
+end
+
+function Base.show(io::IO, x::AbstractUpdate)
+    print(io, typeof(x))
+    print(io, "(")
+    data = Any[]
+    for p in propertynames(x)
+        push!(data, getproperty(x, p)) # always most verbose
+    end
+    out = join(data, ", ")
+    print(io, out, ")")
 end
 
 struct GenericUpdate <: AbstractUpdate
@@ -745,7 +756,7 @@ Base.filter(f, U::BlockedUpdate) = BlockedUpdate(filter(f, updates(U)))
 # for blocked update of ConstraintUpdate
 check(U::BlockedUpdate, D::AbstractDecomposition) = all(u -> check(u, D), U)
 
-function Base.show(io::IO, x::BlockedUpdate)
+function Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate)
     println(io, typeof(x), "(")
     out = join(split(join(string.(updates(x)), "\n"), "\n"), "\n    ")
 
@@ -753,7 +764,10 @@ function Base.show(io::IO, x::BlockedUpdate)
     print(io, ")")
 end
 
-Base.show(io::IO, ::MIME"text/plain", x::BlockedUpdate) = show(io, x)
+function Base.show(io::IO, x::BlockedUpdate)
+    out = join(split(join(string.(updates(x)), ", "), ","), ",")
+    print(io, typeof(x), "([", out, "])")
+end
 
 function (U::BlockedUpdate)(x::T; recursive_random_order::Bool=false, random_order::Bool=recursive_random_order, kwargs...) where T
     U_updates = updates(U)

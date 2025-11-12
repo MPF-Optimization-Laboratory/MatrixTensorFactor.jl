@@ -442,79 +442,157 @@ end
 end
 
 @testset "BlockUpdatedDecomposition" begin
-    G = Tucker1((10,11,12), 5);
-    Y = Tucker1((10,11,12), 5);
-    Y = array(Y);
+    @testset "Initialization Functions" begin
+        N = 100
+        R = 5
+        D = 2
 
-    fact = BlockTensorFactorization.factorize
+        BTFCore = BlockTensorFactorization.Core
 
-    # check hitting maximum number of iterations
-    decomposition, stats_data = fact(Y; rank=5, momentum=false, maxiter=2);
-    # check convergence on first iteration
-    decomposition, stats_data = fact(Y; rank=5, momentum=false, tolerance=Inf);
-    # check momentum
-    decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerance=Inf);
-    # check constraints
-    ## a single constraint, to be applied on every block
-    decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerance=Inf);
-    ## a collection of constraints
-    decomposition, stats_data = fact(Y; rank=5, tolerance=Inf,
-        constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
-    );
-    ## check if you can constrain the initialization
-    decomposition, stats_data = fact(Y; rank=5, tolerance=Inf, constrain_init=true,
-        constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
-    );
+        matrices = [abs_randn(N, R) for _ in 1:D]
+        l1scale_cols!.(matrices)
+        Ydecomp = CPDecomposition(Tuple(matrices))#abs_randn
+        @assert all(check.(l1scale_cols!, factors(Ydecomp)))
+        Y = array(Ydecomp)
 
-    fact(Y; rank=5, tolerance=Inf, constrain_init=true,
-        constraints=[l1scale_12slices! ∘ nonnegative!, nonnegative!],
-    ); # constraints are ok since l1scale_12slices! can be applied to the core (the 0th factor)
+        X = CPDecomposition(ntuple(_ -> N, D), R)
 
-    @test_broken fact(Y; rank=5, tolerance=Inf, constrain_init=true,
-        constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!],
-    ); # the constraint l1scale_12slices! cannot be applied to a matrix (the 1st factor)
+        options = (
+            tolerance=.01,
+            decomposition=X,
+            maxiter=1000,
+            converged=RelativeError,
+            constraints=[l1scale_cols! ∘ nonnegative!, simplex_cols!],
+            constrain_init=true,
+            constrain_output=true,
+            final_constraints = l1scale_cols!,
+            stats=[
+                Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms, EuclidianLipschitz
+            ],
+        )
 
-    # Quick test to make sure Tucker works
-    Y = Tucker((10,11,12), (2,3,4))
-    Y = array(Y)
-    decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2)
+        # Test initialization functions of factorize
+        kwargs = BTFCore.default_kwargs(Y; options...)
 
-    # Quick test to make sure CP works
-    Y = CPDecomposition((10,11,12), 3)
-    Y = array(Y)
-    decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
+        decomposition, kwargs = BTFCore.initialize_decomposition(Y; kwargs...)
+        previous, updateprevious! = BTFCore.initialize_previous(decomposition, Y; kwargs...)
+        parameters, updateparameters! = BTFCore.initialize_parameters(decomposition, Y, previous; kwargs...)
+        update!, kwargs = BTFCore.make_update!(decomposition, Y; kwargs...)
 
-    # Quick test for Sub Block Updates Tucker1
-    Y = Tucker1((10,10,10), 3)
-    Y = array(Y)
-    decomposition, stats_data = fact(Y; model=Tucker1, rank=3, maxiter=2, do_subblock_updates=true)
+        @test haskey(kwargs, :gradients)
+        @test haskey(kwargs, :decomposition)
+        @test haskey(kwargs, :steps)
+        @test haskey(kwargs, :update)
 
-    # Quick test for Sub Block Updates Tucker
-    Y = Tucker((10,11,12), (2,3,4))
-    Y = array(Y)
-    decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2, do_subblock_updates=true)
+        @test length(kwargs[:constraints]) == 2
+        @test length(kwargs[:constraints][1]) == 2
+        @test_broken length(kwargs[:constraints][2])
 
-    # Quick test for Sub Block Updates CPDecomposition
-    Y = CPDecomposition((10,11,12), 3)
-    Y = array(Y)
-    decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2, do_subblock_updates=true)
+        delete!(kwargs, :gradients)
+        delete!(kwargs, :decomposition)
+        delete!(kwargs, :steps)
+        delete!(kwargs, :update)
+        delete!(kwargs, :constraints)
 
-    # Regular run of Tucker1
-    C = abs_randn(5, 11, 12)
-    A = abs_randn(10, 5)
-    Y = Tucker1((C, A))
-    Y = array(Y)
+        # Test all these keywords match
+        true_kwargs = Dict{Symbol, Any}(
+            :converged => RelativeError,
+            :stats => Type[Iteration, ObjectiveValue, GradientNNCone, RelativeError, FactorNorms, EuclidianLipschitz],
+            :recursive_random_order => false,
+            :maxiter => 1000,
+            :norm => l2norm,
+            :rank => 5,
+            :model => CPDecomposition{Float64, 2},
+            :tolerance => 0.01,
+            :previous_iterates => 1,
+            :constrain_init => true,
+            :final_constraints => ScaledNormalization{Int64}(l1norm, eachcol, 1),
+            :init => abs_randn,
+            :objective => L2(),
+            :random_order => false,
+            :group_updates_by_factor => false,
+            :constrain_output => true,
+            :δ => 0.9999,
+            :momentum => true,
+        )
 
-    decomposition, stats_data = fact(Y;
-        rank=5,
-        tolerance=(2, 0.05),
-        converged=(GradientNNCone, RelativeError),
-        constrain_init=true,
-        constraints=nonnegative!,
-        stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError]
-    );
+        @test kwargs == true_kwargs
+    end
 
+    @testset "Factorization" begin
+        G = Tucker1((10,11,12), 5);
+        Y = Tucker1((10,11,12), 5);
+        Y = array(Y);
 
+        fact = BlockTensorFactorization.factorize
+
+        # check hitting maximum number of iterations
+        decomposition, stats_data = fact(Y; rank=5, momentum=false, maxiter=2);
+        # check convergence on first iteration
+        decomposition, stats_data = fact(Y; rank=5, momentum=false, tolerance=Inf);
+        # check momentum
+        decomposition, stats_data = fact(Y; rank=5, momentum=true, tolerance=Inf);
+        # check constraints
+        ## a single constraint, to be applied on every block
+        decomposition, stats_data = fact(Y; rank=5, constraints=nonnegative!, tolerance=Inf);
+        ## a collection of constraints
+        decomposition, stats_data = fact(Y; rank=5, tolerance=Inf,
+            constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
+        );
+        ## check if you can constrain the initialization
+        decomposition, stats_data = fact(Y; rank=5, tolerance=Inf, constrain_init=true,
+            constraints=[ConstraintUpdate(0, nonnegative!), ConstraintUpdate(0, l1scale_12slices!), ConstraintUpdate(1, nonnegative!)],
+        );
+
+        fact(Y; rank=5, tolerance=Inf, constrain_init=true,
+            constraints=[l1scale_12slices! ∘ nonnegative!, nonnegative!],
+        ); # constraints are ok since l1scale_12slices! can be applied to the core (the 0th factor)
+
+        @test_broken fact(Y; rank=5, tolerance=Inf, constrain_init=true,
+            constraints=[nonnegative!, l1scale_12slices! ∘ nonnegative!],
+        ); # the constraint l1scale_12slices! cannot be applied to a matrix (the 1st factor)
+
+        # Quick test to make sure Tucker works
+        Y = Tucker((10,11,12), (2,3,4))
+        Y = array(Y)
+        decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2)
+
+        # Quick test to make sure CP works
+        Y = CPDecomposition((10,11,12), 3)
+        Y = array(Y)
+        decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2)
+
+        # Quick test for Sub Block Updates Tucker1
+        Y = Tucker1((10,10,10), 3)
+        Y = array(Y)
+        decomposition, stats_data = fact(Y; model=Tucker1, rank=3, maxiter=2, do_subblock_updates=true)
+
+        # Quick test for Sub Block Updates Tucker
+        Y = Tucker((10,11,12), (2,3,4))
+        Y = array(Y)
+        decomposition, stats_data = fact(Y; model=Tucker, rank=(2,3,4), maxiter=2, do_subblock_updates=true)
+
+        # Quick test for Sub Block Updates CPDecomposition
+        Y = CPDecomposition((10,11,12), 3)
+        Y = array(Y)
+        decomposition, stats_data = fact(Y; model=CPDecomposition, rank=3, maxiter=2, do_subblock_updates=true)
+
+        # Regular run of Tucker1
+        C = abs_randn(5, 11, 12)
+        A = abs_randn(10, 5)
+        Y = Tucker1((C, A))
+        Y = array(Y)
+
+        decomposition, stats_data = fact(Y;
+            rank=5,
+            tolerance=(2, 0.05),
+            converged=(GradientNNCone, RelativeError),
+            constrain_init=true,
+            constraints=nonnegative!,
+            stats=[Iteration, ObjectiveValue, GradientNNCone, RelativeError]
+        );
+
+    end
 end
 
 @testset "nnmtf" begin
