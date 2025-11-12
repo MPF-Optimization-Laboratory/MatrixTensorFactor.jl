@@ -4,6 +4,10 @@
 
 using BlockTensorFactorization
 using Random
+
+using Pkg
+Pkg.add("Plots")
+Pkg.add("UnicodePlots")
 using UnicodePlots
 using Plots
 

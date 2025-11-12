@@ -2,10 +2,10 @@
 
 using Random
 using KernelDensity
-#using Pkg
-#Pkg.add("Distributions")
-#Pkg.add("Plots")
-#Pkg.add("PlotlyJS")
+using Pkg
+Pkg.add("Distributions")
+Pkg.add("Plots")
+Pkg.add("PlotlyJS")
 
 using Distributions
 using BlockTensorFactorization

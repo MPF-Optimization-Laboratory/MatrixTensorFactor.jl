@@ -2,10 +2,10 @@
 
 using Random
 using KernelDensity
-#using Pkg
-#Pkg.add("Distributions")
-#Pkg.add("Plots")
-#Pkg.add("PlotlyJS")
+using Pkg
+Pkg.add("Distributions")
+Pkg.add("Plots")
+Pkg.add("PlotlyJS")
 
 using Distributions
 using BlockTensorFactorization
@@ -168,6 +168,9 @@ options = (
 
 # Second pass to time
 
+using Pkg
+Pkg.add("BenchmarkTools")
+Pkg.add("BenchmarkPlots")
 using BenchmarkTools
 using BenchmarkPlots
 BenchmarkTools.DEFAULT_PARAMETERS.seconds = 20 # default 5

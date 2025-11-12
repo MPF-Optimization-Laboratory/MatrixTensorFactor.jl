@@ -1,3 +1,5 @@
+using Pkg
+Pkg.add("BenchmarkTools")
 using BenchmarkTools
 using Random
 

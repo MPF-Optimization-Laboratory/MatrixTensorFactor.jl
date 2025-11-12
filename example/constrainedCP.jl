@@ -1,5 +1,7 @@
 using BlockTensorFactorization
 using Random
+using Pkg
+Pkg.add("UnicodePlots")
 using UnicodePlots
 
 N = 100

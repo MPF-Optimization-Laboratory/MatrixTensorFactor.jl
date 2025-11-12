@@ -1,6 +1,9 @@
 # Test of multiscale
 
 using BlockTensorFactorization
+using Pkg
+Pkg.add("HDF5")
+Pkg.add("BenchmarkTools")
 using HDF5
 using BenchmarkTools
 using Logging
