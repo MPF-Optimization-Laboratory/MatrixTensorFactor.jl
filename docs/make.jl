@@ -12,7 +12,7 @@ DocMeta.setdocmeta!(
 )
 
 makedocs(
-    sitename="Block Tensor Decomposition",
+    sitename="Block Tensor Factorization",
     modules = [BlockTensorFactorization,],
     checkdocs=:exports,
 )
