@@ -142,27 +142,28 @@ end
 false_tuple(n::Integer) = Tuple(fill(false, n))
 
 """
-    projsplx(y::AbstractVector{<:Real})
+    projsplx!(y; sum=one(eltype(y)))
 
-Projects (in Euclidian distance) the vector y into the simplex.
+Projects (in Euclidian distance) the array y into the simplex.
 
-See `projsplx!` for a mutating version.
+See `projsplx` for a non-mutating version.
 
 [1] Yunmei Chen and Xiaojing Ye, "Projection Onto A Simplex", 2011
 """
-function projsplx(y)
+function projsplx!(y; sum=one(eltype(y)))
     n = length(y)
 
-    if n==1 # quick exit for trivial length-1 "vectors" (i.e. scalars)
-        return [one(eltype(y))]
+    if n == 1 # quick exit for trivial length-1 "vectors" (i.e. scalars)
+        y .= one(eltype(y))
+        return y
     end
 
     y_sorted = sort(y[:]) # Vectorize/extract input and sort all entries
     total = y_sorted[n]
     i = n - 1
-    t = 0 # need to ensure t has scope outside the while loop
+    t = zero(eltype(y)) # need to ensure t has scope outside the while loop
     while true
-        t = (total - S) / (n-i)
+        t = (total - sum) / (n-i)
         y_i = y_sorted[i]
         if t >= y_i
             break
@@ -174,15 +175,23 @@ function projsplx(y)
         if i >= 1
             continue
         else # i == 0
-            t = (total - S) / n
+            t = (total - sum) / n
             break
         end
     end
-    return ReLU.(y .- t)
+
+    @. y = ReLU(y - t)
+    return y
 end
 
-function projsplx!(y)
-    y .= projsplx(y)
+"""
+    projsplx(y; sum=one(eltype(y)))
+
+Non-mutating version of `projsplx!`.
+"""
+function projsplx(y; kwargs...)
+    y_copy = copy(y)
+    return projsplx!(y_copy; kwargs...)
 end
 
 """
