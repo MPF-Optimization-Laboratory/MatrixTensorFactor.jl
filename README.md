@@ -1,18 +1,6 @@
 # MatrixTensorFactor.jl
 
-Overhauled code comming soon! See here for prerelease: https://github.com/MPF-Optimization-Laboratory/MatrixTensorFactor.jl/tree/general-block-decomposition 
-
-New features in testing now:
-- More tensor decomposition models like Tucker, Tucker-N, CP and custom factorizations
-- More constraints and along any dimentions (ex. columns sum to 1, second order slices are L2 normalized)
-- Cyclically or randomly update blocks
-- selectively use momentum gradient steps on some blocks
-- More convergence criteria (ex. objective value, stationary)
-- Record any number of stats every iteration
-- Pass in custom initilization 
-
-Planned features:
-- More loss functions to optimize (ex. L1 norm, custom objective with auto diff)
+This package has been deprecated. Please use the newer and more robust BlockTensorFactorization.jl package: https://github.com/MPF-Optimization-Laboratory/BlockTensorFactorization.jl.
 
 ## About
 
@@ -38,3 +26,4 @@ https://friedlander.io/publications/2024-sediment-source-analysis/
   journal = {Preprint},
 }
 ```
+
